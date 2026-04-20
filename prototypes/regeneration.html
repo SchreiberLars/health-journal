@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Regeneration · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;--text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;--accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;--safe:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;--text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;--accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:40px}
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid #8bc4a0}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+.sublabel{font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:8px}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.regen-chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;border-radius:12px;padding:6px 11px;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);transition:all .12s;user-select:none}
+.regen-chip:active{transform:scale(0.95)}
+.regen-chip.done{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 15%,var(--surface2))}
+.regen-chip.done .ck{color:var(--accent2)}
+.chip-sub{font-size:9px;color:var(--muted)}
+.entry-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;margin-bottom:6px;cursor:default}
+.entry-header{display:flex;align-items:center;gap:6px}
+.entry-time{font-size:10px;color:var(--gold)}
+.entry-del{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:0;margin-left:4px}
+.chip-add{background:none;border:1px dashed var(--border);color:var(--muted);font-size:16px;padding:4px 10px;line-height:1;border-radius:20px;cursor:pointer}
+.chip-del-btn{background:none;border:1px solid var(--delete);border-radius:12px;padding:2px 8px;font-size:10px;color:var(--delete);cursor:pointer;font-family:'JetBrains Mono',monospace}
+.chip-edit-btn{background:none;border:1px solid var(--accent3);border-radius:12px;padding:2px 8px;font-size:10px;color:var(--accent3);cursor:pointer;font-family:'JetBrains Mono',monospace}
+.dq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.db{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text);cursor:pointer}
+.db.sel{background:var(--accent);border-color:var(--accent);color:#f5f0e8}
+.btn-ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-del{background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-del.on{border-color:var(--delete);color:var(--delete);background:color-mix(in srgb,var(--delete) 10%,transparent)}
+.btn-edit-mode{background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-edit-mode.on{border-color:var(--accent3);color:var(--accent3);background:color-mix(in srgb,var(--accent3) 10%,transparent)}
+.icon-opt{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:6px 8px;font-size:18px;cursor:pointer;line-height:1;transition:all .12s}
+.icon-opt:active,.icon-opt.sel{background:var(--accent2);border-color:var(--accent2)}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:4px}
+.mt-sub{font-size:10px;color:var(--muted);margin-bottom:14px}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:6px;display:block;margin-top:12px}
+.ml:first-of-type{margin-top:0}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);outline:none}
+.mi:focus{border-color:var(--accent)}
+.mbr{display:flex;gap:8px;margin-top:16px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;transition:all .2s;pointer-events:none;z-index:999}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="page-header"><h1>Lars · <em>Health</em></h1><p>Regeneration · Prototyp</p></div>
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">🔋 Regeneration</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn-del" id="btn-del" onclick="toggleDelMode()">🗑 Löschen</button>
+      <button class="btn-edit-mode" id="btn-edit" onclick="toggleEditMode()">✎ Bearbeiten</button>
+    </div>
+  </div>
+  <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px">Heute erfasst</div>
+  <div id="regen-entries" style="margin-bottom:12px"></div>
+  <div style="border-top:1px solid var(--border);padding-top:12px">
+    <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px">Schnell erfassen</div>
+    <div class="chip-row" id="regen-chips"></div>
+  </div>
+</div>
+<div class="debug"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div><pre id="dbg"></pre></div>
+
+<!-- MODAL: Dauer (langer Tap) -->
+<div class="modal-overlay" id="m-dauer">
+  <div class="modal-sheet">
+    <div class="mt" id="m-dauer-title">Dauer anpassen</div>
+    <div class="mt-sub">Dauer angeben</div>
+    <label class="ml">Dauer (Minuten) <span style="color:var(--accent)">*</span></label>
+    <div class="dq" id="m-dauer-quick"></div>
+    <input class="mi" id="m-dauer-val" type="number" min="1" placeholder="Dauer in Minuten...">
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="m-dauer-time" type="time" style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="cancelDauer()">Abbrechen</button>
+      <button class="bp" onclick="confirmDauer()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Bearbeiten -->
+<div class="modal-overlay" id="m-edit">
+  <div class="modal-sheet">
+    <div class="mt" id="m-edit-title">Bearbeiten</div>
+    <label class="ml">Name</label>
+    <input class="mi" id="m-edit-name" placeholder="z.B. Kalt duschen">
+    <label class="ml">Icon wählen</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px" id="regen-icon-picker">
+      <button class="icon-opt" onclick="selectRegenIcon('🧊',this)">🧊</button>
+      <button class="icon-opt" onclick="selectRegenIcon('🔴',this)">🔴</button>
+      <button class="icon-opt" onclick="selectRegenIcon('🧘',this)">🧘</button>
+      <button class="icon-opt" onclick="selectRegenIcon('🙏',this)">🙏</button>
+      <button class="icon-opt" onclick="selectRegenIcon('⚡',this)">⚡</button>
+      <button class="icon-opt" onclick="selectRegenIcon('💨',this)">💨</button>
+      <button class="icon-opt" onclick="selectRegenIcon('🌊',this)">🌊</button>
+      <button class="icon-opt" onclick="selectRegenIcon('🌿',this)">🌿</button>
+      <button class="icon-opt" onclick="selectRegenIcon('🕯',this)">🕯</button>
+      <button class="icon-opt" onclick="selectRegenIcon('🔋',this)">🔋</button>
+      <button class="icon-opt" onclick="selectRegenIcon('💆',this)">💆</button>
+      <button class="icon-opt" onclick="selectRegenIcon('🌙',this)">🌙</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div id="regen-icon-preview" style="font-size:24px;line-height:1">🔋</div>
+      <input class="mi" id="m-edit-icon" placeholder="oder eigenes Emoji..." maxlength="2"
+        oninput="updateRegenIconPreview()" style="flex:1">
+    </div>
+    <label class="ml">Standard-Dauer (Minuten, optional)</label>
+    <div class="dq" id="m-edit-quick"></div>
+    <input class="mi" id="m-edit-dauer" type="number" min="1" placeholder="Dauer...">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-edit')">Abbrechen</button>
+      <button class="bp" onclick="saveEdit()">Speichern</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const DAUER_QUICK=[5,10,15,20,30,45,60];
+let regenItems=[
+  {id:'kalt', name:'Kalt duschen', icon:'🧊'},
+  {id:'rlt',  name:'RLT',          icon:'🔴'},
+  {id:'nsdr', name:'NSDR',         icon:'🧘'},
+  {id:'medi', name:'Meditation',   icon:'🙏'},
+  {id:'neur', name:'Nurosym',      icon:'⚡'},
+  {id:'atem', name:'Atemübungen',  icon:'💨'},
+];
+regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+let entries=[];
+let delMode=false,editMode=false,addCtx=null,editCtx=null;
+function uid(){return Math.random().toString(36).slice(2,9)}
+function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+
+function render(){
+  // entries list
+  const el=document.getElementById('regen-entries');
+  if(el){
+    if(!entries.length){
+      el.innerHTML='<div style="font-size:11px;color:var(--muted);font-style:italic;margin-bottom:10px">Noch nichts erfasst</div>';
+    } else {
+      el.innerHTML=[...entries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
+        <div class="entry-card" data-eid="${e.id}">
+          <div class="entry-header">
+            <span style="font-size:14px">${e.icon}</span>
+            <span style="font-size:11px;font-weight:500;flex:1;margin-left:6px">${e.name}</span>
+            <span style="font-size:10px;color:var(--gold)">${e.dauer} min</span>
+            <span class="entry-time" style="margin-left:8px">${e.time}</span>
+            <span style="font-size:9px;color:var(--muted);margin-left:4px">⋯</span>
+            <button class="entry-del" onclick="deleteEntry('${e.id}')">✕</button>
+          </div>
+        </div>`).join('');
+    }
+  }
+  renderDbg();
+  // chips
+  const cc=document.getElementById('regen-chips');
+  cc.innerHTML=regenItems.map(item=>{
+    if(delMode) return `<div class="regen-chip" style="border-color:var(--delete);flex-direction:row;align-items:center;gap:6px">
+      <div style="flex:1">${item.icon} ${item.name}</div>
+      <button class="chip-del-btn" onclick="deleteItem('${item.id}')">✕</button>
+    </div>`;
+    if(editMode) return `<div class="regen-chip" style="border-color:var(--accent3);flex-direction:row;align-items:center;gap:6px">
+      <div style="flex:1">${item.icon} ${item.name}</div>
+      <button class="chip-edit-btn" onclick="openEdit('${item.id}')">✎</button>
+    </div>`;
+    return `<button class="regen-chip" onclick="openAddModal('${item.id}')">${item.icon} ${item.name}</button>`;
+  }).join('')+(!delMode&&!editMode?`<button class="chip-add" onclick="openNewItem()" style="display:inline-flex;align-items:center;border-radius:20px;padding:4px 10px;font-size:16px;border:1px dashed var(--border);color:var(--muted);cursor:pointer;background:none">+</button>`:'');
+}
+
+function renderDbg(){
+  document.getElementById('dbg').textContent=JSON.stringify({regeneration:entries.sort((a,b)=>a.time.localeCompare(b.time)).map(e=>({name:e.name,dauer_min:e.dauer,uhrzeit:e.time}))},null,2);
+}
+
+// ── ADD MODAL ─────────────────────────────
+function openAddModal(rid){
+  const item=regenItems.find(x=>x.id===rid);if(!item)return;
+  addCtx={rid};
+  document.getElementById('m-dauer-title').textContent=`${item.icon} ${item.name}`;
+  document.getElementById('m-dauer-val').value='';
+  document.getElementById('m-dauer-quick').innerHTML=[5,10,15,20,30,45,60].map(v=>
+    `<button class="db" onclick="pickDauer(${v},this)">${v} min</button>`).join('');
+  document.getElementById('m-dauer-time').value=nowTime();
+  openModal('m-dauer');
+  setTimeout(()=>document.getElementById('m-dauer-val').focus(),100);
+}
+function pickDauer(v,btn){
+  document.getElementById('m-dauer-val').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function confirmDauer(){
+  const dauer=parseInt(document.getElementById('m-dauer-val').value)||null;
+  if(!dauer){showToast('Bitte Dauer eingeben');document.getElementById('m-dauer-val').focus();return;}
+  const time=document.getElementById('m-dauer-time').value||nowTime();
+  if(addCtx?.editId){
+    const idx=entries.findIndex(x=>x.id===addCtx.editId);
+    if(idx!==-1){entries[idx].dauer=dauer;entries[idx].time=time;}
+    closeModal('m-dauer');addCtx=null;render();showToast('Eintrag aktualisiert ✓');
+  } else {
+    const item=regenItems.find(x=>x.id===addCtx.rid);
+    entries.push({id:uid(),rid:item.id,name:item.name,icon:item.icon,dauer,time});
+    closeModal('m-dauer');addCtx=null;render();
+    showToast(`${item.icon} ${item.name} · ${dauer} min ✓`);
+  }
+}
+function cancelDauer(){closeModal('m-dauer');addCtx=null;}
+function deleteEntry(id){entries=entries.filter(e=>e.id!==id);render();}
+
+// ── LONG PRESS ON ENTRY ──────────────────
+let entryLpTimer=null,entryLpFired=false;
+document.addEventListener('pointerdown',e=>{
+  const card=e.target.closest('[data-eid]');
+  if(!card||e.target.closest('.entry-del'))return;
+  entryLpFired=false;
+  entryLpTimer=setTimeout(()=>{
+    entryLpFired=true;
+    const entry=entries.find(x=>x.id===card.dataset.eid);if(!entry)return;
+    addCtx={rid:entry.rid,editId:entry.id};
+    const item=regenItems.find(x=>x.id===entry.rid)||{icon:entry.icon,name:entry.name};
+    document.getElementById('m-dauer-title').textContent=`✎ ${item.icon} ${item.name} bearbeiten`;
+    document.getElementById('m-dauer-val').value=entry.dauer||'';
+    document.getElementById('m-dauer-time').value=entry.time;
+    document.getElementById('m-dauer-quick').innerHTML=[5,10,15,20,30,45,60].map(v=>
+      `<button class="db${entry.dauer===v?' sel':''}" onclick="pickDauer(${v},this)">${v} min</button>`).join('');
+    openModal('m-dauer');
+  },500);
+});
+document.addEventListener('pointerup',()=>clearTimeout(entryLpTimer));
+document.addEventListener('pointercancel',()=>clearTimeout(entryLpTimer));
+document.addEventListener('click',e=>{if(entryLpFired){entryLpFired=false;e.stopImmediatePropagation();e.preventDefault();}},true);
+
+function toggleDelMode(){delMode=!delMode;if(delMode)editMode=false;updateBtns();render();}
+function toggleEditMode(){editMode=!editMode;if(editMode)delMode=false;updateBtns();render();}
+function updateBtns(){
+  const d=document.getElementById('btn-del');d.classList.toggle('on',delMode);d.textContent=delMode?'✓ Fertig':'🗑 Löschen';
+  const e=document.getElementById('btn-edit');e.classList.toggle('on',editMode);e.textContent=editMode?'✓ Fertig':'✎ Bearbeiten';
+}
+function deleteItem(id){regenItems=regenItems.filter(x=>x.id!==id);render();}
+
+function openNewItem(){openEditModal(null);}
+function openEdit(id){openEditModal(id);}
+function openEditModal(id){
+  editCtx={id};
+  const item=id?regenItems.find(x=>x.id===id):null;
+  document.getElementById('m-edit-title').textContent=item?'Bearbeiten':'Neu anlegen';
+  document.getElementById('m-edit-name').value=item?.name||'';
+  document.getElementById('m-edit-icon').value='';
+  const icon=item?.icon||'🔋';
+  document.getElementById('regen-icon-preview').textContent=icon;
+  document.querySelectorAll('#regen-icon-picker .icon-opt').forEach(b=>b.classList.toggle('sel',b.textContent===icon));
+  document.getElementById('m-edit-dauer').value=item?.defaultDauer||'';
+  document.getElementById('m-edit-quick').innerHTML=DAUER_QUICK.map(v=>`<button class="db${(item?.defaultDauer||0)===v?' sel':''}" onclick="pickEditDauer(${v},this)">${v} min</button>`).join('');
+  openModal('m-edit');setTimeout(()=>document.getElementById('m-edit-name').focus(),50);
+}
+function selectRegenIcon(icon,btn){
+  document.getElementById('regen-icon-preview').textContent=icon;
+  document.getElementById('m-edit-icon').value='';
+  document.querySelectorAll('#regen-icon-picker .icon-opt').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function updateRegenIconPreview(){
+  const v=document.getElementById('m-edit-icon').value.trim();
+  if(v){
+    document.getElementById('regen-icon-preview').textContent=v;
+    document.querySelectorAll('#regen-icon-picker .icon-opt').forEach(b=>b.classList.remove('sel'));
+  }
+}
+function pickEditDauer(v,btn){document.getElementById('m-edit-dauer').value=v;btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');}
+function saveEdit(){
+  const name=document.getElementById('m-edit-name').value.trim();
+  const icon=document.getElementById('regen-icon-preview')?.textContent||document.getElementById('m-edit-icon').value.trim()||'🔋';
+  const dauer=parseInt(document.getElementById('m-edit-dauer').value)||null;
+  if(!name){showToast('Name fehlt');return;}
+  if(editCtx.id){
+    const item=regenItems.find(x=>x.id===editCtx.id);
+    if(item){item.name=name;item.icon=icon;item.defaultDauer=dauer;}
+  } else {
+    regenItems.push({id:uid(),name,icon,defaultDauer:dauer,doneToday:false,dauer:null});
+    regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  }
+  editCtx=null;
+  closeModal('m-edit');render();showToast(`${icon} ${name} gespeichert ✓`);
+}
+
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeModal(o.id)}));
+let tt;function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);}
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Supplements · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;
+  --text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;
+  --accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;
+  --safe:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;
+  --text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;
+  --accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555;
+}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;
+  font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;
+  padding-bottom:40px}
+
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid #8bc4a0}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+
+.stack-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.stack-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none}
+.stack-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em}
+.stack-badge{border-radius:10px;padding:1px 7px;font-size:9px;font-weight:600;background:var(--border);color:var(--muted)}
+.stack-badge.ok{background:var(--accent2);color:#f5f0e8}
+.stack-badge.partial{background:var(--gold);color:#f5f0e8}
+.stack-body{padding:6px 14px 14px;border-top:1px solid var(--border)}
+
+/* COMMENT */
+.comment-btn{background:none;border:none;font-size:13px;cursor:pointer;
+  padding:2px 4px;border-radius:6px;transition:opacity .15s;opacity:0.4;line-height:1}
+.comment-btn.has-comment{opacity:1;color:var(--gold)}
+.comment-area{margin-top:10px;border-top:1px solid var(--border);padding-top:10px}
+.comment-textarea{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text);outline:none;resize:none;height:64px;
+  line-height:1.5}
+.comment-textarea:focus{border-color:var(--accent)}
+.comment-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.comment-save{background:var(--accent);color:#f5f0e8;border:none;border-radius:8px;
+  padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer}
+.comment-clear{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted);cursor:pointer}
+.comment-preview{font-size:10px;color:var(--gold);font-style:italic;
+  padding:4px 2px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+
+.btn-alle{font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:20px;
+  padding:4px 12px;border:1px solid var(--border);background:none;color:var(--muted);
+  cursor:pointer;margin-bottom:10px;display:inline-flex;align-items:center;gap:5px}
+.btn-alle.all-taken{background:var(--accent2);border-color:var(--accent2);color:#f5f0e8}
+
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:5px 11px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);
+  transition:all 0.12s;user-select:none;-webkit-user-select:none}
+.chip.taken{background:color-mix(in srgb,var(--accent2) 15%,var(--surface2));
+  border-color:var(--accent2);color:var(--text)}
+.chip.taken .ck{color:var(--accent2)}
+.chip.del{border-color:var(--delete)!important;color:var(--text)}
+.chip-edit-btn{background:none;border:1px solid var(--accent3);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--accent3);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;margin-left:2px;line-height:1.4}
+.chip-del-btn{background:none;border:1px solid var(--delete);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--delete);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;margin-left:2px;line-height:1.4}
+.chip-add{background:none;border:1px dashed var(--border);color:var(--muted);
+  font-size:16px;padding:4px 10px;line-height:1;border-radius:20px}
+.chip-dose{color:var(--gold);font-size:10px}
+.chip-hint{color:var(--muted);font-size:9px;margin-left:1px}
+.chip.dose-changed{border-style:dashed}
+.chip.dose-changed .chip-dose{color:var(--accent)}
+
+.btn-del{background:none;border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted);cursor:pointer}
+.btn-del.on{border-color:var(--delete);color:var(--delete);
+  background:color-mix(in srgb,var(--delete) 10%,transparent)}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;
+  padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;
+  animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:16px}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);
+  margin-bottom:6px;display:block}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;
+  color:var(--text);outline:none;margin-bottom:12px}
+.mi:focus{border-color:var(--accent)}
+.ms{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;
+  color:var(--text);outline:none;margin-bottom:12px;-webkit-appearance:none}
+.mbr{display:flex;gap:8px;margin-top:4px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;
+  padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+
+.dq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.db{background:var(--surface2);border:1px solid var(--border);border-radius:20px;
+  padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--text);cursor:pointer}
+.db.sel{background:var(--accent);border-color:var(--accent);color:#f5f0e8}
+
+.stk-sel{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.stk-btn{font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:20px;
+  padding:5px 10px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer}
+.stk-btn.sel{background:var(--accent3);border-color:var(--accent3);color:#f5f0e8}
+
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;
+  transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
+  padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;
+  transition:all .2s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Lars · <em>Health</em></h1>
+  <p>Supplements · Prototyp</p>
+</div>
+
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">Supplements</div>
+    <button class="btn-del" id="btn-del" onclick="toggleDelMode()">🗑 Löschen</button>
+  </div>
+  <div id="stacks"></div>
+</div>
+
+<div class="debug">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div>
+  <pre id="dbg"></pre>
+</div>
+
+<!-- Dosis-Override Modal -->
+<div class="modal-overlay" id="m-dose">
+  <div class="modal-sheet">
+    <div class="mt" id="m-dose-title">Dosis heute</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:14px">
+      Nur für heute — Standard bleibt unverändert.<br>
+      <strong>Kurz tippen = ab/anwählen · Lang halten = Dosis ändern</strong>
+    </div>
+    <label class="ml">Dosis heute</label>
+    <div class="dq" id="m-dose-quick"></div>
+    <input class="mi" id="m-dose-val" type="number" min="0" step="any" placeholder="Andere Dosis...">
+    <div class="mbr">
+      <button class="bs" onclick="cancelDose()">Abwählen</button>
+      <button class="bp" onclick="confirmDose()">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Neues Supplement Modal -->
+<div class="modal-overlay" id="m-new">
+  <div class="modal-sheet">
+    <div class="mt">Supplement anlegen</div>
+    <label class="ml">Name</label>
+    <input class="mi" id="m-new-name" placeholder="z.B. Quercetin Liposomal">
+    <label class="ml">Einheit</label>
+    <select class="ms" id="m-new-unit" onchange="updateNewQuick()">
+      <option>Kps.</option><option>mg</option><option>g</option>
+      <option>ml</option><option>Tropfen</option><option>Hübe</option><option>Stk</option>
+    </select>
+    <label class="ml">Standard-Dosis</label>
+    <div class="dq" id="m-new-quick"></div>
+    <input class="mi" id="m-new-dose" type="number" min="0" step="any" placeholder="Dosis...">
+    <label class="ml">Stack(s)</label>
+    <div class="stk-sel" id="m-new-stacks">
+      <button class="stk-btn" data-s="morgen" onclick="this.classList.toggle('sel')">🌅 Morgen</button>
+      <button class="stk-btn" data-s="mittag" onclick="this.classList.toggle('sel')">☀️ Mittag</button>
+      <button class="stk-btn" data-s="abend"  onclick="this.classList.toggle('sel')">🌆 Abend</button>
+      <button class="stk-btn" data-s="schlaf" onclick="this.classList.toggle('sel')">🌙 Schlaf</button>
+    </div>
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-new')">Abbrechen</button>
+      <button class="bp" onclick="saveNew()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Edit Supplement Modal -->
+<div class="modal-overlay" id="m-edit">
+  <div class="modal-sheet">
+    <div class="mt">Supplement bearbeiten</div>
+
+    <label class="ml">Name</label>
+    <input class="mi" id="m-edit-name" placeholder="z.B. Quercetin Liposomal">
+
+    <label class="ml">Einheit</label>
+    <select class="ms" id="m-edit-unit" onchange="updateEditQuick()">
+      <option>Kps.</option><option>mg</option><option>g</option>
+      <option>ml</option><option>Tropfen</option><option>Hübe</option><option>Stk</option>
+    </select>
+
+    <label class="ml">Standard-Dosis</label>
+    <div class="dq" id="m-edit-quick"></div>
+    <input class="mi" id="m-edit-dose" type="number" min="0" step="any" placeholder="Dosis...">
+
+    <label class="ml">Stack(s)</label>
+    <div class="stk-sel" id="m-edit-stacks">
+      <button class="stk-btn" data-s="morgen" onclick="this.classList.toggle('sel')">🌅 Morgen</button>
+      <button class="stk-btn" data-s="mittag" onclick="this.classList.toggle('sel')">☀️ Mittag</button>
+      <button class="stk-btn" data-s="abend"  onclick="this.classList.toggle('sel')">🌆 Abend</button>
+      <button class="stk-btn" data-s="schlaf" onclick="this.classList.toggle('sel')">🌙 Schlaf</button>
+    </div>
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-edit')">Abbrechen</button>
+      <button class="bp" onclick="saveEdit()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── EINHEITEN PRESETS ─────────────────────
+const PRESETS = {
+  'Kps.':[0.5,1,2,3],'mg':[50,100,200,400,500,1000],
+  'g':[1,2,3,5,10],'ml':[2.5,5,10,20],
+  'Tropfen':[1,2,3,5,10],'Hübe':[1,2,3],'Stk':[0.5,1,2]
+};
+
+const STACKS = [
+  {id:'morgen',label:'🌅 Morgen'},
+  {id:'mittag',label:'☀️ Mittag'},
+  {id:'abend', label:'🌆 Abend'},
+  {id:'schlaf',label:'🌙 Schlaf'},
+];
+
+// ── STATE (in-memory only) ─────────────────
+let suppList = [
+  {id:'coq10', name:'CoQ10',              unit:'Kps.',    dose:1, stacks:['morgen']},
+  {id:'d3k2',  name:'D3+K2',              unit:'Tropfen', dose:1, stacks:['morgen']},
+  {id:'glycin',name:'Glycin',             unit:'g',       dose:5, stacks:['schlaf']},
+  {id:'mag',   name:'Magnesium Komplex',  unit:'Kps.',    dose:1, stacks:['abend']},
+  {id:'omega3',name:'Omega-3 Complete',   unit:'Kps.',    dose:1, stacks:['morgen']},
+  {id:'querc', name:'Quercetin Liposomal',unit:'Kps.',    dose:1, stacks:['morgen']},
+  {id:'vitc',  name:'Vitamin-C Komplex',  unit:'Kps.',    dose:1, stacks:['morgen']},
+];
+suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+
+// takenMap: { 'suppId__stackId': { taken:bool, overrideDose:number|null } }
+let takenMap = {};
+let delMode = false;
+let openStacks = {morgen:true,mittag:false,abend:false,schlaf:false};
+
+// comments: { stackId: string }
+let comments = {};
+// which stacks have comment area open
+let commentOpen = {};
+let doseCtx = null;
+let lpTimer = null, lpFired = false;
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+function isTaken(sid,stk){return !!(takenMap[sid+'__'+stk]?.taken)}
+function getODose(sid,stk){return takenMap[sid+'__'+stk]?.overrideDose??null}
+function setTaken(sid,stk,val,od=null){
+  const k=sid+'__'+stk;
+  if(!val){delete takenMap[k];return}
+  takenMap[k]={taken:true,overrideDose:od};
+}
+function stackSupps(stk){return suppList.filter(s=>s.stacks.includes(stk))}
+function takenCount(stk){return stackSupps(stk).filter(s=>isTaken(s.id,stk)).length}
+
+// ── RENDER ────────────────────────────────
+function render(){
+  document.getElementById('stacks').innerHTML=STACKS.map(renderStack).join('');
+  renderDbg();
+}
+
+function renderStack(stk){
+  const supps=stackSupps(stk.id);
+  const tc=takenCount(stk.id), total=supps.length;
+  const isOpen=openStacks[stk.id];
+  let bc='',bt='—';
+  if(total>0){
+    if(tc===total){bc='ok';bt=`✓ ${tc}/${total}`}
+    else if(tc>0){bc='partial';bt=`${tc}/${total}`}
+    else{bt=`0/${total}`}
+  }
+  const allTaken=total>0&&tc===total;
+  const chips=supps.map(s=>{
+    const taken=isTaken(s.id,stk.id);
+    const od=getODose(s.id,stk.id);
+    const d=od!==null?od:s.dose;
+    const ds=d?`${d}${s.unit}`:s.unit;
+    const changed=od!==null&&od!==s.dose;
+    if(delMode) return `<div class="chip del" style="flex-direction:row;align-items:center;justify-content:space-between;gap:6px">
+      <div style="flex:1;display:flex;align-items:center;gap:5px">${s.name} <span class="chip-dose">${ds}</span></div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="chip-edit-btn" onclick="openEdit('${s.id}')">✎</button>
+        <button class="chip-del-btn" onclick="delSupp('${s.id}','${stk.id}')">✕</button>
+      </div>
+    </div>`;
+    return `<button class="chip${taken?' taken':''}${changed?' dose-changed':''}"
+      data-sid="${s.id}" data-stk="${stk.id}"
+      onclick="tapChip('${s.id}','${stk.id}')">
+      ${taken?'<span class="ck">✓</span>':''} ${s.name} <span class="chip-dose">${ds}</span>${taken?'<span class="chip-hint">⋯</span>':''}${changed?'<span style="color:var(--accent);font-size:9px"> ✎</span>':''}
+    </button>`;
+  }).join('');
+  const addBtn=delMode?'':`<button class="chip chip-add" onclick="openNew('${stk.id}')">+</button>`;
+  const hasComment=!!(comments[stk.id]&&comments[stk.id].trim());
+  const commentIsOpen=!!commentOpen[stk.id];
+  return `<div class="stack-card">
+    <div class="stack-header" onclick="toggleStk('${stk.id}')">
+      <span class="stack-label">${stk.label}</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="stack-badge ${bc}">${bt}</span>
+        <button class="comment-btn${hasComment?' has-comment':''}"
+          onclick="event.stopPropagation();toggleComment('${stk.id}')"
+          title="${hasComment?'Kommentar bearbeiten':'Kommentar hinzufügen'}">💬</button>
+        <span style="color:var(--muted);font-size:12px">${isOpen?'▲':'▼'}</span>
+      </span>
+    </div>
+    ${isOpen?`<div class="stack-body">
+      ${total>0?`<button class="btn-alle${allTaken?' all-taken':''}" onclick="toggleAll('${stk.id}')">${allTaken?'✓ Alle genommen':'◎ Alle markieren'}</button>`:''}
+      <div class="chip-row">${chips}${addBtn}</div>
+      ${commentIsOpen?`
+      <div class="comment-area">
+        <textarea class="comment-textarea" id="comment-${stk.id}"
+          placeholder="Kommentar zum ${stk.label}-Stack..."
+          oninput="previewComment('${stk.id}')"
+        >${comments[stk.id]||''}</textarea>
+        <div class="comment-actions">
+          <button class="comment-clear" onclick="clearComment('${stk.id}')">Leeren</button>
+          <button class="comment-save" onclick="saveComment('${stk.id}')">Speichern</button>
+        </div>
+      </div>`:
+      hasComment?`<div class="comment-preview" onclick="toggleComment('${stk.id}')">${escHtml(comments[stk.id])}</div>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+function renderDbg(){
+  const out={supplements:{}};
+  STACKS.forEach(stk=>{
+    const supps=stackSupps(stk.id);
+    if(!supps.length)return;
+    out.supplements[stk.id]={
+      genommen:supps.filter(s=>isTaken(s.id,stk.id)).map(s=>{
+        const od=getODose(s.id,stk.id);
+        const menge=od!==null?od:s.dose;
+        return { supplement: s.name, ...(menge?{menge, einheit:s.unit}:{}) };
+      }),
+      nicht_genommen:supps.filter(s=>!isTaken(s.id,stk.id)).map(s=>s.name),
+      ...(comments[stk.id]?{kommentar:comments[stk.id]}:{})
+    };
+  });
+  document.getElementById('dbg').textContent=JSON.stringify(out,null,2);
+}
+
+function toggleStk(id){openStacks[id]=!openStacks[id];render()}
+
+// ── COMMENTS ─────────────────────────────
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function toggleComment(stackId){
+  commentOpen[stackId]=!commentOpen[stackId];
+  // Make sure stack is open
+  if(commentOpen[stackId]) openStacks[stackId]=true;
+  render();
+  if(commentOpen[stackId]){
+    setTimeout(()=>{
+      const ta=document.getElementById('comment-'+stackId);
+      if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+    },50);
+  }
+}
+
+function saveComment(stackId){
+  const ta=document.getElementById('comment-'+stackId);
+  const val=ta?ta.value.trim():'';
+  if(val){
+    comments[stackId]=val;
+    showToast('Kommentar gespeichert ✓');
+  } else {
+    delete comments[stackId];
+    showToast('Kommentar entfernt');
+  }
+  commentOpen[stackId]=false;
+  render();
+}
+
+function clearComment(stackId){
+  const ta=document.getElementById('comment-'+stackId);
+  if(ta) ta.value='';
+}
+
+function previewComment(stackId){
+  // live — nothing needed, textarea handles itself
+}
+
+// ── TAP + LONG PRESS ──────────────────────
+function tapChip(sid,stk){
+  // short tap: toggle taken
+  const cur=isTaken(sid,stk);
+  if(cur){
+    setTaken(sid,stk,false);
+    render();
+  } else {
+    setTaken(sid,stk,true,null);
+    const s=suppList.find(x=>x.id===sid);
+    showToast(`${s?.name} ✓`);
+    render();
+  }
+}
+
+// Long press setup
+document.addEventListener('pointerdown',e=>{
+  const btn=e.target.closest('[data-sid]');
+  if(!btn||delMode)return;
+  const sid=btn.dataset.sid, stk=btn.dataset.stk;
+  lpFired=false;
+  lpTimer=setTimeout(()=>{
+    if(!isTaken(sid,stk))return; // only if taken
+    lpFired=true;
+    openDoseModal(sid,stk);
+  },500);
+});
+document.addEventListener('pointerup',()=>clearTimeout(lpTimer));
+document.addEventListener('pointercancel',()=>clearTimeout(lpTimer));
+document.addEventListener('click',e=>{
+  if(lpFired){lpFired=false;e.stopImmediatePropagation();e.preventDefault();}
+},true);
+
+// ── ALLE ──────────────────────────────────
+function toggleAll(stk){
+  const supps=stackSupps(stk);
+  const all=supps.every(s=>isTaken(s.id,stk));
+  supps.forEach(s=>setTaken(s.id,stk,!all,null));
+  showToast(all?'Alle abgewählt':`Alle ${supps.length} ✓`);
+  render();
+}
+
+// ── DELETE MODE ───────────────────────────
+function toggleDelMode(){
+  delMode=!delMode;
+  const btn=document.getElementById('btn-del');
+  btn.classList.toggle('on',delMode);
+  btn.textContent=delMode?'✓ Fertig':'🗑 Löschen';
+  if(delMode)STACKS.forEach(s=>openStacks[s.id]=true);
+  render();
+}
+function delSupp(sid,stk){
+  const s=suppList.find(x=>x.id===sid);
+  if(!s)return;
+  s.stacks=s.stacks.filter(x=>x!==stk);
+  if(!s.stacks.length){suppList=suppList.filter(x=>x.id!==sid);showToast(`${s.name} entfernt`)}
+  else showToast(`${s.name} aus Stack entfernt`);
+  render();
+}
+
+// ── DOSE MODAL ────────────────────────────
+function openDoseModal(sid,stk){
+  const s=suppList.find(x=>x.id===sid);
+  if(!s)return;
+  doseCtx={sid,stk,s};
+  document.getElementById('m-dose-title').textContent=`✎ ${s.name} — Dosis heute`;
+  const cur=getODose(sid,stk)??s.dose;
+  document.getElementById('m-dose-val').value=cur||'';
+  const ps=PRESETS[s.unit]||[];
+  document.getElementById('m-dose-quick').innerHTML=ps.map(v=>
+    `<button class="db${parseFloat(cur)===v?' sel':''}" onclick="pickDose(${v},this)">${v}${s.unit}</button>`
+  ).join('');
+  openModal('m-dose');
+}
+function pickDose(v,btn){
+  document.getElementById('m-dose-val').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function confirmDose(){
+  if(!doseCtx)return;
+  const {sid,stk,s}=doseCtx;
+  const d=parseFloat(document.getElementById('m-dose-val').value)||null;
+  setTaken(sid,stk,true,d);
+  closeModal('m-dose');doseCtx=null;
+  showToast(`${s.name}${d?` · ${d}${s.unit}`:''} ✓`);
+  render();
+}
+function cancelDose(){
+  if(!doseCtx)return;
+  const {sid,stk,s}=doseCtx;
+  setTaken(sid,stk,false);
+  closeModal('m-dose');doseCtx=null;
+  showToast(`${s.name} abgewählt`);
+  render();
+}
+
+// ── NEW SUPP MODAL ────────────────────────
+function openNew(preStk){
+  document.getElementById('m-new-name').value='';
+  document.getElementById('m-new-dose').value='';
+  document.getElementById('m-new-unit').value='Kps.';
+  document.querySelectorAll('#m-new-stacks .stk-btn').forEach(b=>
+    b.classList.toggle('sel',b.dataset.s===preStk));
+  updateNewQuick();
+  openModal('m-new');
+  setTimeout(()=>document.getElementById('m-new-name').focus(),100);
+}
+function updateNewQuick(){
+  const u=document.getElementById('m-new-unit').value;
+  const cur=parseFloat(document.getElementById('m-new-dose').value);
+  document.getElementById('m-new-quick').innerHTML=(PRESETS[u]||[]).map(v=>
+    `<button class="db${cur===v?' sel':''}" onclick="pickNew(${v},this)">${v}${u}</button>`
+  ).join('');
+}
+function pickNew(v,btn){
+  document.getElementById('m-new-dose').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function saveNew(){
+  const name=document.getElementById('m-new-name').value.trim();
+  const unit=document.getElementById('m-new-unit').value;
+  const dose=parseFloat(document.getElementById('m-new-dose').value)||null;
+  const stacks=[...document.querySelectorAll('#m-new-stacks .stk-btn.sel')].map(b=>b.dataset.s);
+  if(!name){showToast('Name fehlt');return}
+  if(!stacks.length){showToast('Stack wählen');return}
+  const ex=suppList.find(s=>s.name.toLowerCase()===name.toLowerCase());
+  if(ex){stacks.forEach(st=>{if(!ex.stacks.includes(st))ex.stacks.push(st)});showToast(`${name} aktualisiert`)}
+  else{suppList.push({id:uid(),name,unit,dose,stacks});suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));showToast(`${name} hinzugefügt`)}
+  closeModal('m-new');render();
+}
+
+// ── EDIT ─────────────────────────────────
+let editCtx=null;
+function openEdit(sid){
+  const s=suppList.find(x=>x.id===sid);
+  if(!s)return;
+  editCtx={sid};
+  document.getElementById('m-edit-name').value=s.name;
+  document.getElementById('m-edit-unit').value=s.unit||'Kps.';
+  document.getElementById('m-edit-dose').value=s.dose||'';
+  document.querySelectorAll('#m-edit-stacks .stk-btn').forEach(b=>
+    b.classList.toggle('sel',s.stacks.includes(b.dataset.s)));
+  updateEditQuick();
+  openModal('m-edit');
+  setTimeout(()=>document.getElementById('m-edit-name').focus(),100);
+}
+function updateEditQuick(){
+  const u=document.getElementById('m-edit-unit').value;
+  const cur=parseFloat(document.getElementById('m-edit-dose').value);
+  document.getElementById('m-edit-quick').innerHTML=(PRESETS[u]||[]).map(v=>
+    `<button class="db${cur===v?' sel':''}" onclick="pickEdit(${v},this)">${v}${u}</button>`
+  ).join('');
+}
+function pickEdit(v,btn){
+  document.getElementById('m-edit-dose').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function saveEdit(){
+  if(!editCtx)return;
+  const s=suppList.find(x=>x.id===editCtx.sid);
+  if(!s)return;
+  const name=document.getElementById('m-edit-name').value.trim();
+  const unit=document.getElementById('m-edit-unit').value;
+  const dose=parseFloat(document.getElementById('m-edit-dose').value)||null;
+  const stacks=[...document.querySelectorAll('#m-edit-stacks .stk-btn.sel')].map(b=>b.dataset.s);
+  if(!name){showToast('Name fehlt');return}
+  if(!stacks.length){showToast('Stack wählen');return}
+  s.name=name;s.unit=unit;s.dose=dose;s.stacks=stacks;
+  suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  editCtx=null;
+  closeModal('m-edit');
+  showToast(`${name} gespeichert ✓`);
+  render();
+}
+
+// ── MODALS ────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>
+  o.addEventListener('click',e=>{if(e.target===o){doseCtx=null;closeModal(o.id)}}));
+
+// ── TOAST ─────────────────────────────────
+let tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+// ── INIT ──────────────────────────────────
+render();
+</script>
+</body>
+</html>

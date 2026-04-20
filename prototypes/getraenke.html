@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Getränke · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;
+  --text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;
+  --accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;
+  --c-getraenke:#8bb8d8;
+  --safe:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;
+  --text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;
+  --accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555;
+}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;
+  font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:40px}
+
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid var(--c-getraenke)}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+
+/* CHIPS */
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}
+.chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:3px;
+  border-radius:12px;padding:7px 11px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;cursor:pointer;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);
+  transition:all .12s;user-select:none;-webkit-user-select:none}
+.chip:active{transform:scale(0.95)}
+.chip-top{display:flex;align-items:center;gap:4px}
+.chip-name{font-size:11px}
+.chip-ml{font-size:9px;color:var(--gold)}
+.chip-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:1px}
+.tag-badge{font-size:8px;border-radius:8px;padding:1px 5px;border:1px solid;line-height:1.4}
+
+/* tag colors */
+.tag-tee        {color:#4a7a5a;border-color:#4a7a5a;background:color-mix(in srgb,#4a7a5a 12%,transparent)}
+.tag-koffein    {color:#8b6914;border-color:#b8860b;background:color-mix(in srgb,#b8860b 12%,transparent)}
+.tag-alkohol    {color:#c0392b;border-color:#c0392b;background:color-mix(in srgb,#c0392b 12%,transparent)}
+.tag-zucker     {color:#8b4a9a;border-color:#a05ab0;background:color-mix(in srgb,#a05ab0 12%,transparent)}
+.tag-fermentiert{color:#4a5a7a;border-color:#4a5a7a;background:color-mix(in srgb,#4a5a7a 12%,transparent)}
+
+.chip-add{background:none;border:1px dashed var(--border);color:var(--muted);
+  font-size:16px;padding:5px 11px;line-height:1;border-radius:12px;
+  flex-direction:row;align-items:center}
+.chip-hint{font-size:9px;color:var(--muted)}
+
+/* del mode chip */
+.chip.del-chip{border-color:var(--delete)!important}
+.chip-edit-btn{background:none;border:1px solid var(--accent3);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--accent3);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;line-height:1.4}
+.chip-del-btn{background:none;border:1px solid var(--delete);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--delete);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;line-height:1.4}
+
+/* ENTRIES TODAY */
+.entry-chip{display:inline-flex;align-items:center;gap:5px;border-radius:20px;
+  padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  border:2px solid var(--border);background:var(--surface2);color:var(--text)}
+.entry-chip.bew-gut     {border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 10%,var(--surface2))}
+.entry-chip.bew-neutral {border-color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,var(--surface2))}
+.entry-chip.bew-schlecht{border-color:var(--delete);background:color-mix(in srgb,var(--delete) 10%,var(--surface2))}
+.entry-ml{font-size:10px;color:var(--muted)}
+.entry-time{color:var(--gold);font-size:10px;border-left:1px solid var(--border);padding-left:6px;margin-left:2px}
+.entry-del{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:0;margin-left:2px}
+
+/* DOSE QUICK */
+.dq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.db{background:var(--surface2);border:1px solid var(--border);border-radius:20px;
+  padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--text);cursor:pointer;transition:all .12s}
+.db.sel{background:var(--accent);border-color:var(--accent);color:#f5f0e8}
+
+/* TAG SELECTOR */
+.tag-sel{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tag-sel-btn{font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:20px;
+  padding:5px 12px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer}
+.tag-sel-btn.sel{border-color:var(--accent3);background:color-mix(in srgb,var(--accent3) 15%,transparent);color:var(--text)}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;
+  padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:4px}
+.mt-sub{font-size:10px;color:var(--muted);margin-bottom:14px}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);
+  margin-bottom:6px;display:block;margin-top:12px}
+.ml:first-of-type{margin-top:0}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);outline:none}
+.mi:focus{border-color:var(--accent)}
+.mbr{display:flex;gap:8px;margin-top:16px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;
+  padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+
+.btn-ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-ghost:active{border-color:var(--accent);color:var(--accent)}
+.btn-del{background:none;border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-del.on{border-color:var(--delete);color:var(--delete);
+  background:color-mix(in srgb,var(--delete) 10%,transparent)}
+
+/* TAG MANAGER */
+.tag-mgr-chip{display:inline-flex;align-items:center;gap:6px;border-radius:20px;
+  padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  border:1px solid var(--border);background:var(--surface2)}
+
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;
+  transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
+  padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;transition:all .2s;
+  pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.empty-hint{font-size:11px;color:var(--muted);font-style:italic;padding:4px 0}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Lars · <em>Health</em></h1>
+  <p>Getränke · Prototyp</p>
+</div>
+
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">Getränke</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn-del" id="btn-del" onclick="toggleDelMode()">🗑 Löschen</button>
+      <button class="btn-ghost" onclick="openTagMgr()">⚙ Tags</button>
+    </div>
+  </div>
+
+  <!-- HEUTE GETRUNKEN -->
+  <div style="margin-bottom:16px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:8px">Heute getrunken</div>
+    <div id="entries-today" class="chip-row">
+      <span class="empty-hint">Noch nichts erfasst</span>
+    </div>
+  </div>
+
+  <!-- GETRÄNKE LISTE -->
+  <div style="border-top:1px solid var(--border);padding-top:14px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:10px">Schnell erfassen</div>
+    <div id="getraenke-list" class="chip-row"></div>
+  </div>
+</div>
+
+<div class="debug">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div>
+  <pre id="dbg"></pre>
+</div>
+
+<!-- MODAL: Menge anpassen (langer Tap) -->
+<div class="modal-overlay" id="m-drink">
+  <div class="modal-sheet">
+    <div class="mt" id="m-drink-title">Menge anpassen</div>
+    <div class="mt-sub">Kurz tippen = Standard · Lang halten = Menge ändern</div>
+    <label class="ml">Menge</label>
+    <div class="dq" id="m-drink-quick"></div>
+    <input class="mi" id="m-drink-ml" type="number" min="1" step="1" placeholder="Andere Menge in ml...">
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="m-drink-time" type="time" style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-drink')">Abbrechen</button>
+      <button class="bp" onclick="confirmDrink()">Erfassen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Getränk anlegen / bearbeiten -->
+<div class="modal-overlay" id="m-new">
+  <div class="modal-sheet">
+    <div class="mt" id="m-new-title">Getränk anlegen</div>
+    <div class="mt-sub">Name, Volumen und optionale Tags</div>
+
+    <label class="ml">Name</label>
+    <input class="mi" id="m-new-name" placeholder="z.B. Oolong, Red Bull, Kombucha...">
+
+    <label class="ml">Standard-Volumen (ml)</label>
+    <div class="dq" id="m-new-quick"></div>
+    <input class="mi" id="m-new-ml" type="number" min="1" step="1" placeholder="ml eingeben...">
+
+    <label class="ml">Tags <span style="color:var(--muted);font-size:9px">(mehrere möglich · keiner = neutral)</span></label>
+    <div class="tag-sel" id="m-new-tags"></div>
+
+    <label class="ml">Bewertung</label>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="bew-btn" data-bew="gut"      onclick="selectBew('gut')"      style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:none;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer">🟢 Gut</button>
+      <button class="bew-btn" data-bew="neutral"  onclick="selectBew('neutral')"  style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:none;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer">🟡 Neutral</button>
+      <button class="bew-btn" data-bew="schlecht" onclick="selectBew('schlecht')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:none;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer">🔴 Schlecht</button>
+    </div>
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-new')">Abbrechen</button>
+      <button class="bp" onclick="saveGetraenk()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Tags verwalten -->
+<div class="modal-overlay" id="m-tags">
+  <div class="modal-sheet">
+    <div class="mt">Tags verwalten</div>
+    <div class="mt-sub">Tags kategorisieren Getränke für die spätere Analyse</div>
+    <div id="tags-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:12px">
+      <label class="ml" style="margin-top:0">Neuer Tag</label>
+      <div style="display:flex;gap:8px">
+        <input class="mi" id="new-tag-icon" placeholder="🍋" style="width:60px;text-align:center">
+        <input class="mi" id="new-tag-name" placeholder="Name des Tags...">
+      </div>
+    </div>
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-tags')">Fertig</button>
+      <button class="bp" onclick="addTag()">+ Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ML_QUICK = [100,150,200,250,300,350,400,500];
+
+// ── TAGS (konfigurierbar) ─────────────────
+let tags = [
+  {id:'tee',         icon:'🍵', name:'Tee'},
+  {id:'koffein',     icon:'☕', name:'Koffein'},
+  {id:'alkohol',     icon:'🍺', name:'Alkohol'},
+  {id:'zucker',      icon:'🍬', name:'Zucker'},
+  {id:'fermentiert', icon:'🧫', name:'Fermentiert'},
+];
+
+// ── GETRÄNKE ──────────────────────────────
+let getraenke = [
+  {id:'wasser',   name:'Wasser',    ml:300, tags:[], bewertung:'gut'},
+  {id:'kaffee',   name:'Kaffee',    ml:250, tags:['koffein'], bewertung:'neutral'},
+  {id:'oolong',   name:'Oolong',    ml:120, tags:['tee'], bewertung:'gut'},
+  {id:'gruentee', name:'Grüntee',   ml:250, tags:['tee'], bewertung:'gut'},
+  {id:'bier',     name:'Bier',      ml:500, tags:['alkohol'], bewertung:'schlecht'},
+  {id:'wein',     name:'Wein',      ml:150, tags:['alkohol'], bewertung:'schlecht'},
+  {id:'redbull',  name:'Red Bull',  ml:250, tags:['koffein','zucker'], bewertung:'schlecht'},
+  {id:'kombucha', name:'Kombucha',  ml:250, tags:['fermentiert'], bewertung:'gut'},
+  {id:'limo',     name:'Limo',      ml:300, tags:['zucker'], bewertung:'schlecht'},
+];
+getraenke.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+
+// entries: [{id, getraenkId, name, ml, tags:[], time}]
+let entries = [];
+let delMode = false;
+let drinkCtx = null;
+let editCtx = null;
+let lpTimer = null, lpFired = false;
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+function nowTime(){
+  const n=new Date();
+  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+}
+function getTag(id){return tags.find(t=>t.id===id)}
+
+// ── RENDER ────────────────────────────────
+function render(){
+  renderList();
+  renderEntries();
+  renderDbg();
+}
+
+function tagBadgesHtml(tagIds){
+  return tagIds.map(tid=>{
+    const t=getTag(tid);
+    if(!t)return '';
+    return `<span class="tag-badge tag-${tid}">${t.icon} ${t.name}</span>`;
+  }).join('');
+}
+
+function renderList(){
+  const container=document.getElementById('getraenke-list');
+  const chips = getraenke.map(g=>{
+    if(delMode){
+      return `<div class="chip del-chip" style="flex-direction:row;align-items:center;gap:6px">
+        <div style="flex:1">
+          <div class="chip-top"><span class="chip-name">${g.name}</span></div>
+          <div style="font-size:9px;color:var(--gold)">${g.ml} ml</div>
+          ${g.tags.length?`<div class="chip-tags">${tagBadgesHtml(g.tags)}</div>`:''}
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="chip-edit-btn" onclick="openEditGetraenk('${g.id}')">✎</button>
+          <button class="chip-del-btn" onclick="deleteGetraenk('${g.id}')">✕</button>
+        </div>
+      </div>`;
+    }
+    return `<button class="chip" data-gid="${g.id}" onclick="quickDrink('${g.id}')">
+      <div class="chip-top">
+        <span class="chip-name">${g.name}</span>
+        <span class="chip-ml">${g.ml} ml</span>
+        <span class="chip-hint" title="Lang halten = bearbeiten">⋯</span>
+      </div>
+      ${g.tags.length?`<div class="chip-tags">${tagBadgesHtml(g.tags)}</div>`:''}
+    </button>`;
+  }).join('');
+
+  const addBtn = delMode?'':
+    `<button class="chip chip-add" onclick="openNewGetraenk()">+</button>`;
+  container.innerHTML = chips + addBtn;
+}
+
+function renderEntries(){
+  const el=document.getElementById('entries-today');
+  if(!entries.length){
+    el.innerHTML='<span class="empty-hint">Noch nichts erfasst</span>';
+    return;
+  }
+  const sorted=[...entries].sort((a,b)=>a.time.localeCompare(b.time));
+  el.innerHTML=sorted.map(e=>{
+    const g=getraenke.find(x=>x.id===e.getraenkId);
+    const bew=g?.bewertung||'neutral';
+    return `<div class="entry-chip bew-${bew}" style="cursor:pointer" onclick="openEntryEdit('${e.id}')">
+      ${e.name}
+      <span class="entry-ml">${e.ml}ml</span>
+      <span class="entry-time">${e.time}</span>
+      <button class="entry-del" onclick="event.stopPropagation();deleteEntry('${e.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function renderDbg(){
+  const out={ getraenke: entries
+    .sort((a,b)=>a.time.localeCompare(b.time))
+    .map(e=>({
+      getraenk: e.name,
+      menge: e.ml,
+      einheit: 'ml',
+      tags: e.tags,
+      uhrzeit: e.time
+    }))
+  };
+  document.getElementById('dbg').textContent=JSON.stringify(out,null,2);
+}
+
+// ── QUICK DRINK (kurzer Tap) ──────────────
+function quickDrink(gid){
+  const g=getraenke.find(x=>x.id===gid);
+  if(!g)return;
+  entries.push({id:uid(),getraenkId:g.id,name:g.name,ml:g.ml,tags:[...g.tags],time:nowTime()});
+  render();
+  showToast(`${g.name} · ${g.ml}ml ✓`);
+}
+
+// ── LONG PRESS ────────────────────────────
+document.addEventListener('pointerdown',e=>{
+  const listBtn=e.target.closest('[data-gid]');
+  if(!listBtn)return;
+  if(delMode)return;
+  lpFired=false;
+  lpTimer=setTimeout(()=>{
+    lpFired=true;
+    openEditGetraenk(listBtn.dataset.gid);
+  },500);
+});
+document.addEventListener('pointerup',()=>clearTimeout(lpTimer));
+document.addEventListener('pointercancel',()=>clearTimeout(lpTimer));
+document.addEventListener('click',e=>{
+  if(lpFired && e.target.closest('[data-gid]')){
+    lpFired=false;e.stopImmediatePropagation();e.preventDefault();
+  } else {
+    lpFired=false;
+  }
+},true);
+
+function openDrinkModal(gid){
+  const g=getraenke.find(x=>x.id===gid);
+  if(!g)return;
+  drinkCtx={gid};
+  document.getElementById('m-drink-title').textContent=`${g.name}`;
+  document.getElementById('m-drink-ml').value=g.ml;
+  document.getElementById('m-drink-time').value=nowTime();
+  document.getElementById('m-drink-quick').innerHTML=
+    ML_QUICK.map(v=>`<button class="db${g.ml===v?' sel':''}" onclick="pickMl(${v},this)">${v} ml</button>`).join('')+
+    (!ML_QUICK.includes(g.ml)?`<button class="db sel" onclick="pickMl(${g.ml},this)">${g.ml} ml ★</button>`:'');
+  openModal('m-drink');
+}
+
+function openEntryEdit(eid){
+  const e=entries.find(x=>x.id===eid);
+  if(!e)return;
+  drinkCtx={eid};
+  document.getElementById('m-drink-title').textContent=`✎ ${e.name}`;
+  document.getElementById('m-drink-ml').value=e.ml;
+  document.getElementById('m-drink-time').value=e.time;
+  document.getElementById('m-drink-quick').innerHTML=
+    ML_QUICK.map(v=>`<button class="db${e.ml===v?' sel':''}" onclick="pickMl(${v},this)">${v} ml</button>`).join('')+
+    (!ML_QUICK.includes(e.ml)?`<button class="db sel" onclick="pickMl(${e.ml},this)">${e.ml} ml ★</button>`:'');
+  openModal('m-drink');
+}
+
+function pickMl(v,btn){
+  document.getElementById('m-drink-ml').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function confirmDrink(){
+  if(!drinkCtx)return;
+  const ml=parseInt(document.getElementById('m-drink-ml').value);
+  const time=document.getElementById('m-drink-time').value||nowTime();
+  if(drinkCtx.eid){
+    // Edit existing entry
+    const e=entries.find(x=>x.id===drinkCtx.eid);
+    if(e){e.ml=ml||e.ml;e.time=time;}
+    showToast('Eintrag aktualisiert ✓');
+  } else {
+    const g=getraenke.find(x=>x.id===drinkCtx.gid);
+    if(!g)return;
+    entries.push({id:uid(),getraenkId:g.id,name:g.name,ml:ml||g.ml,tags:[...g.tags],time});
+    showToast(`${g.name} · ${ml||g.ml}ml ✓`);
+  }
+  closeModal('m-drink');
+  drinkCtx=null;
+  render();
+}
+
+function deleteEntry(id){
+  entries=entries.filter(e=>e.id!==id);
+  render();
+}
+
+// ── DELETE MODE ───────────────────────────
+function toggleDelMode(){
+  delMode=!delMode;
+  const btn=document.getElementById('btn-del');
+  btn.classList.toggle('on',delMode);
+  btn.textContent=delMode?'✓ Fertig':'🗑 Löschen';
+  render();
+}
+
+function deleteGetraenk(gid){
+  const g=getraenke.find(x=>x.id===gid);
+  getraenke=getraenke.filter(x=>x.id!==gid);
+  entries=entries.filter(e=>e.getraenkId!==gid);
+  showToast(`${g?.name} entfernt`);
+  render();
+}
+
+// ── NEW / EDIT GETRAENK ───────────────────
+let currentBew = 'neutral';
+
+function selectBew(val){
+  currentBew = val;
+  const colors={gut:'var(--accent2)',neutral:'var(--gold)',schlecht:'var(--delete)'};
+  document.querySelectorAll('.bew-btn').forEach(b=>{
+    const isSelected = b.dataset.bew === val;
+    b.style.background = isSelected ? `color-mix(in srgb,${colors[val]} 15%,transparent)` : 'none';
+    b.style.borderColor = isSelected ? colors[b.dataset.bew] : 'var(--border)';
+    b.style.color = isSelected ? 'var(--text)' : 'var(--muted)';
+    b.style.fontWeight = isSelected ? '600' : 'normal';
+  });
+}
+
+function getSelectedBew(){ return currentBew; }
+
+function openNewGetraenk(){
+  editCtx=null;
+  document.getElementById('m-new-title').textContent='Getränk anlegen';
+  document.getElementById('m-new-name').value='';
+  document.getElementById('m-new-ml').value='';
+  renderNewTagSel([]);
+  updateNewQuick();
+  openModal('m-new');
+  setTimeout(()=>{
+    selectBew('neutral');
+    document.getElementById('m-new-name').focus();
+  },50);
+}
+
+function openEditGetraenk(gid){
+  const g=getraenke.find(x=>x.id===gid);
+  if(!g)return;
+  editCtx={gid};
+  document.getElementById('m-new-title').textContent='Getränk bearbeiten';
+  document.getElementById('m-new-name').value=g.name;
+  document.getElementById('m-new-ml').value=g.ml;
+  renderNewTagSel(g.tags);
+  updateNewQuick();
+  openModal('m-new');
+  setTimeout(()=>{
+    selectBew(g.bewertung||'neutral');
+    document.getElementById('m-new-name').focus();
+  },50);
+}
+
+function renderNewTagSel(selectedIds){
+  document.getElementById('m-new-tags').innerHTML=tags.map(t=>`
+    <button class="tag-sel-btn${selectedIds.includes(t.id)?' sel':''}"
+      data-tid="${t.id}"
+      onclick="this.classList.toggle('sel')">
+      ${t.icon} ${t.name}
+    </button>`).join('');
+}
+
+function updateNewQuick(){
+  const cur=parseInt(document.getElementById('m-new-ml').value);
+  document.getElementById('m-new-quick').innerHTML=ML_QUICK.map(v=>
+    `<button class="db${cur===v?' sel':''}" onclick="pickNewMl(${v},this)">${v} ml</button>`
+  ).join('');
+}
+
+function pickNewMl(v,btn){
+  document.getElementById('m-new-ml').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function saveGetraenk(){
+  const name=document.getElementById('m-new-name').value.trim();
+  const ml=parseInt(document.getElementById('m-new-ml').value)||0;
+  const selTags=[...document.querySelectorAll('#m-new-tags .tag-sel-btn.sel')].map(b=>b.dataset.tid);
+  const bewertung=getSelectedBew();
+  if(!name){showToast('Name fehlt');return}
+  if(ml<=0){showToast('Volumen eingeben');return}
+  if(editCtx){
+    const g=getraenke.find(x=>x.id===editCtx.gid);
+    if(g){g.name=name;g.ml=ml;g.tags=selTags;g.bewertung=bewertung;}
+    showToast(`${name} gespeichert ✓`);
+  } else {
+    if(getraenke.find(g=>g.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
+    getraenke.push({id:uid(),name,ml,tags:selTags,bewertung});
+    showToast(`${name} hinzugefügt`);
+  }
+  getraenke.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  editCtx=null;
+  closeModal('m-new');
+  render();
+}
+
+// ── TAG MANAGER ───────────────────────────
+function openTagMgr(){
+  renderTagsList();
+  openModal('m-tags');
+}
+
+function renderTagsList(){
+  document.getElementById('tags-list').innerHTML=tags.map(t=>`
+    <div class="tag-mgr-chip">
+      ${t.icon} ${t.name}
+      <button onclick="deleteTag('${t.id}')"
+        style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:0">✕</button>
+    </div>`).join('');
+}
+
+function addTag(){
+  const icon=document.getElementById('new-tag-icon').value.trim()||'🏷';
+  const name=document.getElementById('new-tag-name').value.trim();
+  if(!name){showToast('Name fehlt');return}
+  const id=name.toLowerCase().replace(/\s+/g,'_');
+  if(tags.find(t=>t.id===id)){showToast('Bereits vorhanden');return}
+  tags.push({id,icon,name});
+  document.getElementById('new-tag-icon').value='';
+  document.getElementById('new-tag-name').value='';
+  renderTagsList();
+  showToast(`${icon} ${name} hinzugefügt`);
+}
+
+function deleteTag(tid){
+  // Remove from all drinks too
+  tags=tags.filter(t=>t.id!==tid);
+  getraenke.forEach(g=>g.tags=g.tags.filter(t=>t!==tid));
+  entries.forEach(e=>e.tags=e.tags.filter(t=>t!==tid));
+  renderTagsList();
+  render();
+  showToast('Tag entfernt');
+}
+
+// ── MODALS ────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>
+  o.addEventListener('click',e=>{if(e.target===o){drinkCtx=null;closeModal(o.id)}}));
+
+// ── TOAST ─────────────────────────────────
+let tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+render();
+</script>
+</body>
+</html>

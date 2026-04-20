@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ernährung · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;
+  --text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;
+  --accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;
+  --c-ern:#d4a96a;
+  --safe:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;
+  --text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;
+  --accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555;
+}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;
+  font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:40px}
+
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid var(--c-ern)}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+.sublabel{font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:8px}
+
+/* MAHLZEIT CARDS */
+.meal-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.meal-header{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;cursor:pointer;user-select:none}
+.meal-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em}
+.meal-badge{border-radius:10px;padding:1px 7px;font-size:9px;font-weight:600;
+  background:var(--border);color:var(--muted)}
+.meal-badge.has-entries{background:var(--accent2);color:#f5f0e8}
+.meal-body{padding:10px 14px 14px;border-top:1px solid var(--border)}
+
+/* ENTRY LIST in meal */
+.meal-entries{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.meal-entry{display:flex;align-items:center;gap:6px;padding:5px 8px;
+  border-radius:8px;background:var(--surface);border:1px solid var(--border);font-size:11px}
+.me-icon{font-size:11px;flex-shrink:0}
+.me-name{flex:1;color:var(--text)}
+.me-menge{font-size:9px;color:var(--gold);flex-shrink:0}
+.me-del{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:0 2px;flex-shrink:0}
+.meal-entry.gut    {border-color:color-mix(in srgb,var(--accent2) 40%,var(--border))}
+.meal-entry.unklar {border-color:color-mix(in srgb,var(--gold) 40%,var(--border))}
+.meal-entry.schlecht{border-color:color-mix(in srgb,var(--delete) 40%,var(--border))}
+
+/* ITEM CHIPS (bibliothek) */
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.item-chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;
+  border-radius:12px;padding:5px 10px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;cursor:pointer;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);
+  transition:all .12s;user-select:none;-webkit-user-select:none}
+.item-chip:active{transform:scale(0.95);opacity:0.8}
+.ic-name{display:flex;align-items:center;gap:4px}
+.ic-type{font-size:9px;color:var(--muted)}
+
+/* Bewertung border on chip */
+.item-chip.gut    {border-color:color-mix(in srgb,var(--accent2) 50%,var(--border))}
+.item-chip.unklar {border-color:color-mix(in srgb,var(--gold) 50%,var(--border))}
+.item-chip.schlecht{border-color:color-mix(in srgb,var(--delete) 50%,var(--border))}
+
+.chip-add{background:none;border:1px dashed var(--border);color:var(--muted);
+  font-size:16px;padding:4px 10px;line-height:1;border-radius:20px;cursor:pointer}
+
+/* DELETE / EDIT mode */
+.chip-edit-btn{background:none;border:1px solid var(--accent3);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--accent3);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;line-height:1.4}
+.chip-del-btn{background:none;border:1px solid var(--delete);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--delete);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;line-height:1.4}
+
+/* BEWERTUNG BUTTON */
+.bw-btn{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--surface2);font-family:'JetBrains Mono',monospace;font-size:12px;
+  color:var(--text);cursor:pointer;text-align:left;transition:all .15s}
+.bw-btn.gut    {border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 12%,var(--surface2));color:var(--accent2)}
+.bw-btn.unklar {border-color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,var(--surface2));color:var(--gold)}
+.bw-btn.schlecht{border-color:var(--delete);background:color-mix(in srgb,var(--delete) 10%,var(--surface2));color:var(--delete)}
+
+/* ML / MENGE QUICK */
+.dq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.db{background:var(--surface2);border:1px solid var(--border);border-radius:20px;
+  padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--text);cursor:pointer;transition:all .12s}
+.db.sel{background:var(--accent);border-color:var(--accent);color:#f5f0e8}
+
+/* COMMENT */
+.comment-btn{background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px;opacity:0.4;line-height:1}
+.comment-btn.has-comment{opacity:1;color:var(--gold)}
+.comment-textarea{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text);outline:none;resize:none;height:56px;line-height:1.5;margin-top:8px}
+.comment-textarea:focus{border-color:var(--accent)}
+.comment-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.comment-save{background:var(--accent);color:#f5f0e8;border:none;border-radius:8px;
+  padding:4px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer}
+.comment-clear{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.comment-preview{font-size:10px;color:var(--gold);font-style:italic;
+  padding:4px 2px;line-height:1.4;white-space:pre-wrap;cursor:pointer;margin-top:6px}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;
+  padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:4px}
+.mt-sub{font-size:10px;color:var(--muted);margin-bottom:16px}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);
+  margin-bottom:6px;display:block;margin-top:12px}
+.ml:first-of-type{margin-top:0}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);outline:none}
+.mi:focus{border-color:var(--accent)}
+.ms{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;
+  color:var(--text);outline:none;-webkit-appearance:none}
+.mbr{display:flex;gap:8px;margin-top:16px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;
+  padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+.btn-ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-ghost:active{border-color:var(--accent);color:var(--accent)}
+.btn-del{background:none;border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-del.on{border-color:var(--delete);color:var(--delete);
+  background:color-mix(in srgb,var(--delete) 10%,transparent)}
+.btn-edit-mode{background:none;border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-edit-mode.on{border-color:var(--accent3);color:var(--accent3);
+  background:color-mix(in srgb,var(--accent3) 10%,transparent)}
+
+.empty-hint{font-size:11px;color:var(--muted);font-style:italic}
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;
+  transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
+  padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;transition:all .2s;
+  pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Lars · <em>Health</em></h1>
+  <p>Ernährung · Prototyp</p>
+</div>
+
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">Ernährung</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn-del" id="btn-del" onclick="toggleDelMode()">🗑 Löschen</button>
+      <button class="btn-edit-mode" id="btn-edit" onclick="toggleEditMode()">✎ Bearbeiten</button>
+      <button class="btn-ghost" onclick="openNewItem()">+ Neu</button>
+    </div>
+  </div>
+
+  <!-- MAHLZEIT CARDS -->
+  <div id="meals-container"></div>
+
+  <!-- SPONTAN ENTRIES -->
+  <div id="spontan-section" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="sublabel" style="margin-bottom:0">Snacks & Spontan</div>
+      <button class="btn-ghost" onclick="openSpontanModal()">+ Jetzt essen</button>
+    </div>
+    <div id="spontan-list"></div>
+  </div>
+
+  <!-- BIBLIOTHEK -->
+  <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="sublabel" style="margin-bottom:0">Bibliothek — Schnell hinzufügen</div>
+    <div id="target-indicator" style="font-size:9px;color:var(--accent3);border:1px solid var(--accent3);
+      border-radius:10px;padding:1px 8px"></div>
+  </div>
+    <div id="bibliothek-list" class="chip-row"></div>
+  </div>
+</div>
+
+<div class="debug">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div>
+  <pre id="dbg"></pre>
+</div>
+
+<!-- MODAL: Menge (langer Tap) -->
+<div class="modal-overlay" id="m-add">
+  <div class="modal-sheet">
+    <div class="mt" id="m-add-title">Hinzufügen</div>
+    <div class="mt-sub">Kurz tippen = direkt hinzufügen · Lang halten = Menge angeben</div>
+
+    <label class="ml">Mahlzeit</label>
+    <select class="ms" id="m-add-meal"></select>
+
+    <label class="ml">Menge <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <div class="dq" id="m-add-quick"></div>
+    <input class="mi" id="m-add-menge" type="text" placeholder="z.B. 150g, 1 Stk, 2 EL...">
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-add')">Abbrechen</button>
+      <button class="bp" onclick="confirmAdd()">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Verschieben -->
+<div class="modal-overlay" id="m-move">
+  <div class="modal-sheet">
+    <div class="mt">Verschieben nach</div>
+    <div class="mt-sub" id="m-move-sub">Eintrag in andere Mahlzeit verschieben</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px" id="m-move-btns"></div>
+    <div class="mbr" style="margin-top:12px">
+      <button class="bs" onclick="closeModal('m-move')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Spontan essen -->
+<div class="modal-overlay" id="m-spontan">
+  <div class="modal-sheet">
+    <div class="mt">Jetzt essen</div>
+    <div class="mt-sub">Snack oder spontane Mahlzeit erfassen</div>
+
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="sp-time" type="time">
+
+    <label class="ml">Label <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <input class="mi" id="sp-label" placeholder="z.B. Nachmittagssnack, nach Sport..." style="margin-top:4px">
+
+    <label class="ml">Was gegessen? <span style="color:var(--muted);font-size:9px">(tippen zum Auswählen)</span></label>
+    <div id="sp-item-chips" class="chip-row" style="margin-top:4px;margin-bottom:8px"></div>
+    <input class="mi" id="sp-custom" placeholder="Oder freitext eingeben..." style="margin-top:4px">
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-spontan')">Abbrechen</button>
+      <button class="bp" onclick="saveSpontan()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Neues Item / Gericht anlegen -->
+<div class="modal-overlay" id="m-new">
+  <div class="modal-sheet">
+    <div class="mt" id="m-new-title">Lebensmittel anlegen</div>
+
+    <label class="ml">Name</label>
+    <input class="mi" id="m-new-name" placeholder="z.B. Haferflocken, Wiener Schnitzel...">
+
+    <label class="ml">Typ</label>
+    <select class="ms" id="m-new-type" onchange="toggleZutatenSection()">
+      <option value="lebensmittel">🥦 Lebensmittel / Zutat</option>
+      <option value="gericht">🍽 Gericht (zusammengesetzt)</option>
+    </select>
+
+    <div id="zutaten-section" style="display:none">
+      <label class="ml">Zutaten <span style="color:var(--muted);font-size:9px">(aus Bibliothek wählen)</span></label>
+      <div id="m-new-zutaten-chips" class="chip-row" style="margin-top:4px;margin-bottom:6px"></div>
+      <div style="font-size:9px;color:var(--muted)">Nicht dabei? Erst anlegen, dann hier auswählen.</div>
+    </div>
+
+    <label class="ml">Bewertung <span style="color:var(--muted);font-size:9px">(tippen zum Wechseln)</span></label>
+    <button class="bw-btn gut" id="bw-btn" onclick="cycleBewertung()">✅ Gut für mich</button>
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-new')">Abbrechen</button>
+      <button class="bp" onclick="saveItem()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BW_CYCLE = ['gut','unklar','schlecht'];
+const BW_LABEL = { gut:'✅ Gut für mich', unklar:'❓ Unklar / noch beobachten', schlecht:'❌ Schlecht für mich' };
+const BW_ICON  = { gut:'✅', unklar:'❓', schlecht:'❌' };
+const MENGE_QUICK = ['50g','100g','150g','200g','1 Stk','2 Stk','1 EL','2 EL','1 Portion'];
+
+const MEALS = [
+  {id:'fruehstueck', label:'🌅 Frühstück'},
+  {id:'mittagessen', label:'☀️ Mittagessen'},
+  {id:'abendessen',  label:'🌆 Abendessen'},
+  {id:'snack',       label:'🍎 Snack'},
+];
+
+// ── BIBLIOTHEK ────────────────────────────
+let bibliothek = [
+  {id:'haferflocken', name:'Haferflocken',  type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'apfel',        name:'Apfel',         type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'blaubeeren',   name:'Blaubeeren',    type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'eier',         name:'Eier',          type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'lachs',        name:'Lachs',         type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'brokkoli',     name:'Brokkoli',      type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'suessk',       name:'Süßkartoffel',  type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'joghurt',      name:'Joghurt',       type:'lebensmittel', zutaten:[], bewertung:'unklar'},
+  {id:'brot',         name:'Brot (Weizen)', type:'lebensmittel', zutaten:[], bewertung:'unklar'},
+  {id:'bonbon',       name:'Bonbon',        type:'lebensmittel', zutaten:[], bewertung:'schlecht'},
+  {id:'schwein',      name:'Schweinefleisch',  type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'paniermehl',    name:'Paniermehl',       type:'lebensmittel', zutaten:[], bewertung:'unklar'},
+  {id:'zitrone',       name:'Zitrone',          type:'lebensmittel', zutaten:[], bewertung:'gut'},
+  {id:'schnitzel',     name:'Wiener Schnitzel', type:'gericht',      zutaten:['schwein','paniermehl','eier','zitrone'], bewertung:'unklar'},
+];
+bibliothek.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+
+// mealEntries: { mahlzeitId: [{id, itemId, name, menge, bewertung}] }
+let mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[], snack:[] };
+let mealOpen    = { fruehstueck:false, mittagessen:true, abendessen:false, snack:false };
+let mealComments = { fruehstueck:'', mittagessen:'', abendessen:'', snack:'' };
+let mealCommentOpen = { fruehstueck:false, mittagessen:false, abendessen:false, snack:false };
+
+let delMode = false, editMode = false;
+let moveCtx = null;
+let entryLpTimer = null, entryLpFired = false;
+let spontanEntries = [];
+let spontanSelected = new Set();
+let addCtx = null, editCtx = null;
+let currentBewertung = 'gut';
+let lpTimer = null, lpFired = false;
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function nowTime(){
+  const n=new Date();
+  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+}
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function itemById(id){ return bibliothek.find(x=>x.id===id); }
+
+// ── BEWERTUNG ─────────────────────────────
+function toggleZutatenSection(){
+  const type = document.getElementById('m-new-type').value;
+  const sec = document.getElementById('zutaten-section');
+  if(sec) sec.style.display = type==='gericht' ? 'block' : 'none';
+  if(type==='gericht') renderZutatenChips();
+}
+
+let selectedZutaten = new Set();
+
+function renderZutatenChips(){
+  const container = document.getElementById('m-new-zutaten-chips');
+  if(!container) return;
+  // only lebensmittel items
+  const lm = bibliothek.filter(x=>x.type==='lebensmittel');
+  container.innerHTML = lm.map(item=>`
+    <button class="item-chip ${item.bewertung}${selectedZutaten.has(item.id)?' sel':''}"
+      style="${selectedZutaten.has(item.id)?'background:color-mix(in srgb,var(--accent2) 15%,var(--surface2));border-color:var(--accent2)':''}"
+      onclick="toggleZutat('${item.id}')">
+      <div class="ic-name">${BW_ICON[item.bewertung]} ${item.name}</div>
+    </button>`).join('');
+}
+
+function toggleZutat(id){
+  if(selectedZutaten.has(id)) selectedZutaten.delete(id);
+  else selectedZutaten.add(id);
+  renderZutatenChips();
+}
+
+function cycleBewertung(){
+  const idx = BW_CYCLE.indexOf(currentBewertung);
+  currentBewertung = BW_CYCLE[(idx+1) % BW_CYCLE.length];
+  const btn = document.getElementById('bw-btn');
+  btn.textContent = BW_LABEL[currentBewertung];
+  btn.className = `bw-btn ${currentBewertung}`;
+}
+function setBewertung(val){
+  currentBewertung = val || 'gut';
+  const btn = document.getElementById('bw-btn');
+  if(btn){ btn.textContent = BW_LABEL[currentBewertung]; btn.className = `bw-btn ${currentBewertung}`; }
+}
+
+// ── RENDER ────────────────────────────────
+function render(){
+  renderMeals();
+  renderBibliothek();
+  renderSpontan();
+  renderDbg();
+}
+
+function renderSpontan(){
+  const el = document.getElementById('spontan-list');
+  if(!spontanEntries.length){ el.innerHTML=''; return; }
+  el.innerHTML = spontanEntries.sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
+    <div class="meal-entry" style="margin-bottom:5px">
+      <span class="me-icon">🕐</span>
+      <div style="flex:1">
+        <div style="font-size:10px;color:var(--gold)">${e.time}${e.label?' · '+e.label:''}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">
+          ${e.items.map(i=>`<span style="font-size:11px">${BW_ICON[i.bewertung||'gut']} ${escHtml(i.name)}${i.menge?' ('+i.menge+')':''}</span>`).join(' · ')}
+        </div>
+      </div>
+      <button class="me-del" onclick="deleteSpontan('${e.id}')">✕</button>
+    </div>`).join('');
+}
+
+function openSpontanModal(){
+  spontanSelected = new Set();
+  document.getElementById('sp-time').value = nowTime();
+  document.getElementById('sp-label').value = '';
+  document.getElementById('sp-custom').value = '';
+  renderSpItemChips();
+  openModal('m-spontan');
+}
+
+function renderSpItemChips(){
+  document.getElementById('sp-item-chips').innerHTML = bibliothek.map(item=>`
+    <button class="item-chip${spontanSelected.has(item.id)?' sel':''}  ${item.bewertung}"
+      style="${spontanSelected.has(item.id)?'background:color-mix(in srgb,var(--accent2) 15%,var(--surface2));border-color:var(--accent2)':''}"
+      onclick="toggleSpItem('${item.id}')">
+      <div class="ic-name">${BW_ICON[item.bewertung]} ${item.name}</div>
+    </button>`).join('');
+}
+
+function toggleSpItem(itemId){
+  if(spontanSelected.has(itemId)) spontanSelected.delete(itemId);
+  else spontanSelected.add(itemId);
+  renderSpItemChips();
+}
+
+function saveSpontan(){
+  const time  = document.getElementById('sp-time').value || nowTime();
+  const label = document.getElementById('sp-label').value.trim();
+  const custom = document.getElementById('sp-custom').value.trim();
+  const items = [...spontanSelected].map(id=>{
+    const item = itemById(id);
+    return { name:item.name, bewertung:item.bewertung||'gut' };
+  });
+  if(custom) items.push({ name:custom, bewertung:'unklar' });
+  if(!items.length){ showToast('Bitte etwas auswählen oder eingeben'); return; }
+  spontanEntries.push({ id:uid(), time, label, items });
+  closeModal('m-spontan');
+  render();
+  showToast(`${items.length} Item${items.length>1?'s':''} um ${time} ✓`);
+}
+
+function deleteSpontan(id){
+  spontanEntries = spontanEntries.filter(e=>e.id!==id);
+  render();
+}
+
+function renderMeals(){
+  document.getElementById('meals-container').innerHTML = MEALS.map(m=>{
+    const entries = mealEntries[m.id];
+    const isOpen  = mealOpen[m.id];
+    const hasComment = !!mealComments[m.id];
+    const commentIsOpen = mealCommentOpen[m.id];
+    const badge = entries.length ? `<span class="meal-badge has-entries">✓ ${entries.length}</span>` : `<span class="meal-badge">—</span>`;
+
+    const entryList = entries.length ? `
+      <div class="meal-entries">
+        ${entries.map(e=>{
+          const live = itemById(e.itemId);
+          const bw = live?.bewertung || e.bewertung || 'gut';
+          // Is this a Gericht? Render header + indented zutaten
+          if(live?.type==='gericht' && live.zutaten?.length){
+            const zutatItems = live.zutaten.map(zid=>itemById(zid)).filter(Boolean);
+            const zutatRows = zutatItems.map(z=>`
+              <div class="meal-entry ${z.bewertung||'gut'}" style="margin-left:16px;margin-top:3px;border-style:dashed">
+                <span class="me-icon">${BW_ICON[z.bewertung||'gut']}</span>
+                <span class="me-name" style="color:var(--muted)">${escHtml(z.name)}</span>
+              </div>`).join('');
+            return `<div>
+              <div class="meal-entry ${bw}" style="border-left:3px solid var(--c-ern)"
+                data-meal="${m.id}" data-entry="${e.id}" data-name="${escHtml(e.name)}">
+                <span class="me-icon">🍽</span>
+                <span class="me-name"><strong>${escHtml(e.name)}</strong></span>
+                ${e.menge?`<span class="me-menge">${escHtml(e.menge)}</span>`:''}
+                <button class="me-del" onclick="deleteEntry('${m.id}','${e.id}')">✕</button>
+              </div>
+              ${zutatRows}
+            </div>`;
+          }
+          return `<div class="meal-entry ${bw}"
+            data-meal="${m.id}" data-entry="${e.id}" data-name="${escHtml(e.name)}">
+            <span class="me-icon">${BW_ICON[bw]}</span>
+            <span class="me-name">${escHtml(e.name)}</span>
+            ${e.menge?`<span class="me-menge">${escHtml(e.menge)}</span>`:''}
+            <button class="me-del" onclick="deleteEntry('${m.id}','${e.id}')">✕</button>
+          </div>`;
+        }).join('')}
+      </div>` : '';
+
+    const commentHtml = isOpen ? (commentIsOpen ? `
+      <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+        <textarea class="comment-textarea" id="ta-${m.id}"
+          placeholder="Notiz zu ${m.label}...">${mealComments[m.id]}</textarea>
+        <div class="comment-actions">
+          <button class="comment-clear" onclick="document.getElementById('ta-${m.id}').value=''">Leeren</button>
+          <button class="comment-save" onclick="saveComment('${m.id}')">Speichern</button>
+        </div>
+      </div>` :
+      mealComments[m.id] ? `<div class="comment-preview" onclick="toggleComment('${m.id}')">${escHtml(mealComments[m.id])}</div>` : ''
+    ) : '';
+
+    return `<div class="meal-card">
+      <div class="meal-header" onclick="toggleMeal('${m.id}')">
+        <span class="meal-label">${m.label}</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${badge}
+          <button class="comment-btn${hasComment?' has-comment':''}"
+            onclick="event.stopPropagation();toggleComment('${m.id}')">💬</button>
+          <span style="color:var(--muted);font-size:12px">${isOpen?'▲':'▼'}</span>
+        </span>
+      </div>
+      ${isOpen?`<div class="meal-body">
+        ${entryList}
+        ${commentHtml}
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderBibliothek(){
+  // Update target indicator
+  const openMeal = MEALS.find(m=>mealOpen[m.id]);
+  const ind = document.getElementById('target-indicator');
+  if(ind){
+    if(openMeal){ ind.textContent='→ '+openMeal.label; ind.style.display=''; }
+    else { ind.textContent='Mahlzeit öffnen'; ind.style.borderColor='var(--muted)'; ind.style.color='var(--muted)'; }
+  }
+  const container = document.getElementById('bibliothek-list');
+  container.innerHTML = bibliothek.map(item=>{
+    if(delMode){
+      return `<div class="item-chip ${item.bewertung}" style="flex-direction:row;align-items:center;gap:6px">
+        <div style="flex:1">
+          <div class="ic-name">${item.name}</div>
+          <div class="ic-type">${item.type==='gericht'?'🍽 Gericht':'🥦 Lebensmittel'}</div>
+        </div>
+        <button class="chip-del-btn" onclick="deleteItem('${item.id}')">✕</button>
+      </div>`;
+    }
+    if(editMode){
+      return `<div class="item-chip ${item.bewertung}" style="flex-direction:row;align-items:center;gap:6px">
+        <div style="flex:1">
+          <div class="ic-name">${BW_ICON[item.bewertung]} ${item.name}</div>
+          <div class="ic-type">${item.type==='gericht'?'🍽 Gericht':'🥦 Lebensmittel'}</div>
+        </div>
+        <button class="chip-edit-btn" onclick="openEditItem('${item.id}')">✎</button>
+      </div>`;
+    }
+    return `<button class="item-chip ${item.bewertung}" data-iid="${item.id}"
+      onclick="quickAdd('${item.id}')">
+      <div class="ic-name">${BW_ICON[item.bewertung]} ${item.name} <span style="font-size:9px;color:var(--muted)">⋯</span></div>
+      <div class="ic-type">${item.type==='gericht'?'🍽':'🥦'} ${item.type==='gericht'&&item.zutaten?`<span style="color:var(--muted)">${item.zutaten.slice(0,30)}${item.zutaten.length>30?'…':''}</span>`:''}</div>
+    </button>`;
+  }).join('') + (!delMode&&!editMode?`<button class="chip-add" onclick="openNewItem()">+</button>`:'');
+}
+
+function renderDbg(){
+  const out = { ernaehrung:{} };
+  MEALS.forEach(m=>{
+    const entries = mealEntries[m.id];
+    if(!entries.length && !mealComments[m.id]) return;
+    out.ernaehrung[m.id] = {
+      items: entries.map(e=>{
+        const live = itemById(e.itemId);
+        const bw = live?.bewertung || e.bewertung || 'gut';
+        if(live?.type==='gericht' && live.zutaten?.length){
+          return { gericht:e.name, ...(e.menge?{menge:e.menge}:{}),
+            zutaten: live.zutaten.map(zid=>{ const z=itemById(zid); return z?{name:z.name,bewertung:z.bewertung||'gut'}:null; }).filter(Boolean)
+          };
+        }
+        return { name:e.name, ...(e.menge?{menge:e.menge}:{}), bewertung:bw };
+      }),
+      ...(mealComments[m.id]?{kommentar:mealComments[m.id]}:{})
+    };
+  });
+  if(spontanEntries.length){
+    out.ernaehrung.spontan = spontanEntries.sort((a,b)=>a.time.localeCompare(b.time)).map(e=>({
+      uhrzeit:e.time, ...(e.label?{label:e.label}:{}), items:e.items
+    }));
+  }
+  document.getElementById('dbg').textContent = JSON.stringify(out, null, 2);
+}
+
+// ── MEAL INTERACTIONS ─────────────────────
+function toggleMeal(id){
+  const wasOpen = mealOpen[id];
+  // close all
+  Object.keys(mealOpen).forEach(k=>mealOpen[k]=false);
+  // open clicked one only if it was closed
+  if(!wasOpen) mealOpen[id]=true;
+  render();
+}
+
+function deleteEntry(mealId, entryId){
+  mealEntries[mealId] = mealEntries[mealId].filter(e=>e.id!==entryId);
+  render();
+}
+
+// ── COMMENTS ─────────────────────────────
+function toggleComment(mealId){
+  mealCommentOpen[mealId]=!mealCommentOpen[mealId];
+  if(mealCommentOpen[mealId]) mealOpen[mealId]=true;
+  render();
+  if(mealCommentOpen[mealId]){
+    setTimeout(()=>{const ta=document.getElementById('ta-'+mealId);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}},50);
+  }
+}
+function saveComment(mealId){
+  const ta=document.getElementById('ta-'+mealId);
+  mealComments[mealId]=ta?ta.value.trim():'';
+  mealCommentOpen[mealId]=false;
+  showToast(mealComments[mealId]?'Kommentar gespeichert ✓':'Kommentar entfernt');
+  render();
+}
+
+// ── QUICK ADD (kurzer Tap) ─────────────────
+function quickAdd(itemId){
+  const targetMeal = MEALS.find(m=>mealOpen[m.id])?.id;
+  if(!targetMeal){
+    showToast('Bitte zuerst eine Mahlzeit öffnen');
+    return;
+  }
+  const item = itemById(itemId);
+  if(!item) return;
+  mealEntries[targetMeal].push({ id:uid(), itemId, name:item.name, menge:'', bewertung:item.bewertung });
+  render();
+  showToast(`${BW_ICON[item.bewertung]} ${item.name} → ${MEALS.find(m=>m.id===targetMeal)?.label}`);
+}
+
+// ── LONG PRESS → modal ────────────────────
+document.addEventListener('pointerdown',e=>{
+  const btn=e.target.closest('[data-iid]');
+  if(!btn||delMode||editMode) return;
+  lpFired=false;
+  lpTimer=setTimeout(()=>{
+    lpFired=true;
+    openAddModal(btn.dataset.iid);
+  },500);
+});
+document.addEventListener('pointerup',()=>clearTimeout(lpTimer));
+document.addEventListener('pointercancel',()=>clearTimeout(lpTimer));
+document.addEventListener('click',e=>{
+  if(lpFired){lpFired=false;e.stopImmediatePropagation();e.preventDefault();}
+},true);
+
+function openAddModal(itemId){
+  const item = itemById(itemId);
+  if(!item) return;
+  addCtx = {itemId};
+  document.getElementById('m-add-title').textContent = `${BW_ICON[item.bewertung]} ${item.name}`;
+  document.getElementById('m-add-menge').value = '';
+  // Populate meal select
+  const openMeal = MEALS.find(m=>mealOpen[m.id]);
+  document.getElementById('m-add-meal').innerHTML = MEALS.map(m=>
+    `<option value="${m.id}"${m.id===(openMeal?.id||'fruehstueck')?' selected':''}>${m.label}</option>`
+  ).join('');
+  // Quick presets
+  document.getElementById('m-add-quick').innerHTML = MENGE_QUICK.map(v=>
+    `<button class="db" onclick="pickMenge('${v}',this)">${v}</button>`
+  ).join('');
+  openModal('m-add');
+}
+
+function pickMenge(v,btn){
+  document.getElementById('m-add-menge').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function confirmAdd(){
+  if(!addCtx) return;
+  const item = itemById(addCtx.itemId);
+  if(!item) return;
+  const mealId = document.getElementById('m-add-meal').value;
+  const menge  = document.getElementById('m-add-menge').value.trim();
+  mealEntries[mealId].push({ id:uid(), itemId:item.id, name:item.name, menge, bewertung:item.bewertung });
+  closeModal('m-add'); addCtx=null;
+  render();
+  showToast(`${BW_ICON[item.bewertung]} ${item.name}${menge?' · '+menge:''} ✓`);
+}
+
+// ── BIBLIOTHEK CRUD ───────────────────────
+function openNewItem(){
+  editCtx=null;
+  selectedZutaten = new Set();
+  document.getElementById('m-new-title').textContent='Lebensmittel anlegen';
+  document.getElementById('m-new-name').value='';
+  document.getElementById('m-new-type').value='lebensmittel';
+  const sec=document.getElementById('zutaten-section');
+  if(sec) sec.style.display='none';
+  openModal('m-new');
+  setTimeout(()=>{setBewertung('gut');document.getElementById('m-new-name').focus();},50);
+}
+
+function openEditItem(itemId){
+  const item=itemById(itemId);
+  if(!item) return;
+  editCtx={itemId};
+  selectedZutaten = new Set(Array.isArray(item.zutaten)?item.zutaten:[]);
+  document.getElementById('m-new-title').textContent='Lebensmittel bearbeiten';
+  document.getElementById('m-new-name').value=item.name;
+  document.getElementById('m-new-type').value=item.type;
+  const sec=document.getElementById('zutaten-section');
+  if(sec){ sec.style.display=item.type==='gericht'?'block':'none'; }
+  if(item.type==='gericht') renderZutatenChips();
+  openModal('m-new');
+  setTimeout(()=>{setBewertung(item.bewertung);document.getElementById('m-new-name').focus();},50);
+}
+
+function saveItem(){
+  const name    = document.getElementById('m-new-name').value.trim();
+  const type    = document.getElementById('m-new-type').value;
+  const zutaten = type==='gericht' ? [...selectedZutaten] : [];
+  if(!name){showToast('Name fehlt');return}
+  if(editCtx){
+    const item=itemById(editCtx.itemId);
+    if(item){item.name=name;item.type=type;item.zutaten=zutaten;item.bewertung=currentBewertung;}
+    showToast(`${name} gespeichert ✓`);
+  } else {
+    bibliothek.push({id:uid(),name,type,zutaten,bewertung:currentBewertung});
+    showToast(`${name} hinzugefügt`);
+  }
+  bibliothek.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  editCtx=null; closeModal('m-new'); render();
+}
+
+function deleteItem(itemId){
+  const item=itemById(itemId);
+  bibliothek=bibliothek.filter(x=>x.id!==itemId);
+  showToast(`${item?.name} entfernt`);
+  render();
+}
+
+// ── MOVE ENTRY ───────────────────────────
+document.addEventListener('pointerdown', e=>{
+  const entry = e.target.closest('[data-entry]');
+  if(!entry || e.target.closest('.me-del')) return;
+  entryLpFired = false;
+  entryLpTimer = setTimeout(()=>{
+    entryLpFired = true;
+    openMoveModal(entry.dataset.meal, entry.dataset.entry, entry.dataset.name);
+  }, 500);
+});
+document.addEventListener('pointerup', ()=>clearTimeout(entryLpTimer));
+document.addEventListener('pointercancel', ()=>clearTimeout(entryLpTimer));
+
+function openMoveModal(fromMealId, entryId, name){
+  moveCtx = {fromMealId, entryId};
+  document.getElementById('m-move-sub').textContent = `"${name}"`;
+  document.getElementById('m-move-btns').innerHTML = MEALS
+    .filter(m=>m.id !== fromMealId)
+    .map(m=>`<button onclick="confirmMove('${m.id}')"
+      style="width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--border);
+        background:var(--surface2);font-family:'JetBrains Mono',monospace;font-size:12px;
+        color:var(--text);cursor:pointer;text-align:left;transition:all .15s"
+      onmouseover="this.style.borderColor='var(--accent)'" 
+      onmouseout="this.style.borderColor='var(--border)'">
+      ${m.label}
+    </button>`).join('');
+  openModal('m-move');
+}
+
+function confirmMove(toMealId){
+  if(!moveCtx) return;
+  const {fromMealId, entryId} = moveCtx;
+  const idx = mealEntries[fromMealId].findIndex(e=>e.id===entryId);
+  if(idx === -1) return;
+  const [entry] = mealEntries[fromMealId].splice(idx, 1);
+  mealEntries[toMealId].push(entry);
+  // open destination meal
+  Object.keys(mealOpen).forEach(k=>mealOpen[k]=false);
+  mealOpen[toMealId] = true;
+  moveCtx = null;
+  closeModal('m-move');
+  render();
+  const destLabel = MEALS.find(m=>m.id===toMealId)?.label;
+  showToast(`${entry.name} → ${destLabel} ✓`);
+}
+
+// ── DELETE / EDIT MODE ────────────────────
+function toggleDelMode(){
+  delMode=!delMode;
+  if(delMode){editMode=false;updateEditBtn();}
+  const btn=document.getElementById('btn-del');
+  btn.classList.toggle('on',delMode);
+  btn.textContent=delMode?'✓ Fertig':'🗑 Löschen';
+  render();
+}
+function toggleEditMode(){
+  editMode=!editMode;
+  if(editMode){delMode=false;document.getElementById('btn-del').classList.remove('on');document.getElementById('btn-del').textContent='🗑 Löschen';}
+  updateEditBtn();render();
+}
+function updateEditBtn(){
+  const btn=document.getElementById('btn-edit');
+  btn.classList.toggle('on',editMode);
+  btn.textContent=editMode?'✓ Fertig':'✎ Bearbeiten';
+}
+
+// ── MODALS ────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>
+  o.addEventListener('click',e=>{if(e.target===o){addCtx=null;closeModal(o.id)}}));
+
+// ── TOAST ─────────────────────────────────
+let tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+render();
+</script>
+</body>
+</html>

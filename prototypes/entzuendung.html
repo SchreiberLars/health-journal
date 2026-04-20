@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Entzündung & Haut · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;
+  --text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;
+  --accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;--warn:#c0761a;
+  --c-entz:#d4907e;
+  --safe:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;
+  --text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;
+  --accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555;--warn:#e09040;
+}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;
+  font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:40px}
+
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid var(--c-entz)}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+
+/* ANKER CARD */
+.anker-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.anker-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none}
+.anker-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em}
+.anker-badge{border-radius:10px;padding:1px 7px;font-size:9px;font-weight:600;background:var(--border);color:var(--muted)}
+.anker-badge.done{background:var(--accent2);color:#f5f0e8}
+.anker-badge.active{background:var(--warn);color:#f5f0e8}
+.anker-body{padding:12px 14px 14px;border-top:1px solid var(--border)}
+
+/* REGION CHIPS — tap to select, scale 0-5 inline */
+.region-row{margin-bottom:14px}
+.region-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.region-name{font-size:10px;font-weight:500;color:var(--text)}
+.region-val{font-size:11px;font-weight:600}
+.region-val.v0{color:var(--accent2)}
+.region-val.v1,.region-val.v2{color:var(--gold)}
+.region-val.v3,.region-val.v4,.region-val.v5{color:var(--delete)}
+
+.scale-row{display:flex;gap:4px}
+.sv{flex:1;display:flex;align-items:center;justify-content:center;
+  padding:8px 2px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);cursor:pointer;transition:all .12s;
+  font-family:'JetBrains Mono',monospace;user-select:none;-webkit-user-select:none}
+.sv:active{transform:scale(0.94)}
+.sv .sv-n{font-size:13px;font-weight:500;color:var(--muted)}
+.sv[onclick*=",0)"],.sv[onclick*=",0,"]  { background:color-mix(in srgb,#4a7a5a 12%,var(--surface)); border-color:color-mix(in srgb,#4a7a5a 28%,var(--border)) }
+.sv[onclick*=",1)"]  { background:color-mix(in srgb,#a0a020 10%,var(--surface)); border-color:color-mix(in srgb,#a0a020 22%,var(--border)) }
+.sv[onclick*=",2)"]  { background:color-mix(in srgb,var(--gold) 12%,var(--surface)); border-color:color-mix(in srgb,var(--gold) 25%,var(--border)) }
+.sv[onclick*=",3)"]  { background:color-mix(in srgb,var(--warn) 12%,var(--surface)); border-color:color-mix(in srgb,var(--warn) 25%,var(--border)) }
+.sv[onclick*=",4)"]  { background:color-mix(in srgb,var(--delete) 10%,var(--surface)); border-color:color-mix(in srgb,var(--delete) 22%,var(--border)) }
+.sv[onclick*=",5)"]  { background:color-mix(in srgb,var(--delete) 18%,var(--surface)); border-color:color-mix(in srgb,var(--delete) 35%,var(--border)) }
+.sv.sel-0{background:color-mix(in srgb,#4a7a5a 35%,var(--surface2));border-color:#4a7a5a}
+.sv.sel-0 .sv-n{color:#4a7a5a;font-weight:700}
+.sv.sel-1{background:color-mix(in srgb,#a0a020 28%,var(--surface2));border-color:#808010}
+.sv.sel-1 .sv-n{color:#808010;font-weight:700}
+.sv.sel-2{background:color-mix(in srgb,var(--gold) 28%,var(--surface2));border-color:var(--gold)}
+.sv.sel-2 .sv-n{color:var(--gold);font-weight:700}
+.sv.sel-3{background:color-mix(in srgb,var(--warn) 28%,var(--surface2));border-color:var(--warn)}
+.sv.sel-3 .sv-n{color:var(--warn);font-weight:700}
+.sv.sel-4{background:color-mix(in srgb,var(--delete) 25%,var(--surface2));border-color:var(--delete)}
+.sv.sel-4 .sv-n{color:var(--delete);font-weight:700}
+.sv.sel-5{background:color-mix(in srgb,var(--delete) 38%,var(--surface2));border-color:var(--delete)}
+.sv.sel-5 .sv-n{color:var(--delete);font-weight:700}
+
+/* REGION CHIPS (in list) */
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:5px 11px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);
+  transition:all .12s;user-select:none;-webkit-user-select:none}
+.chip.del{border-color:var(--delete)!important}
+.chip-edit-btn{background:none;border:1px solid var(--accent3);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--accent3);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;line-height:1.4}
+.chip-del-btn{background:none;border:1px solid var(--delete);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--delete);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;line-height:1.4}
+.chip-add{background:none;border:1px dashed var(--border);color:var(--muted);
+  font-size:16px;padding:4px 10px;line-height:1;border-radius:20px}
+
+/* SPONTAN */
+.spontan-entry{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;margin-bottom:8px;position:relative}
+.spontan-time{font-size:9px;color:var(--gold);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px}
+.spontan-del{position:absolute;top:8px;right:10px;background:none;border:none;
+  font-size:12px;color:var(--muted);cursor:pointer}
+.region-pill{display:inline-flex;align-items:center;gap:3px;border-radius:10px;
+  padding:2px 8px;font-size:10px;margin:2px;border:1px solid var(--border)}
+.rp-0{background:color-mix(in srgb,var(--accent2) 15%,transparent);border-color:var(--accent2);color:var(--accent2)}
+.rp-12{background:color-mix(in srgb,var(--gold) 15%,transparent);border-color:var(--gold);color:var(--gold)}
+.rp-345{background:color-mix(in srgb,var(--delete) 15%,transparent);border-color:var(--delete);color:var(--delete)}
+
+/* COMMENT */
+.comment-btn{background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px;opacity:0.4;line-height:1}
+.comment-btn.has-comment{opacity:1;color:var(--gold)}
+.comment-textarea{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text);outline:none;resize:none;height:56px;line-height:1.5;margin-top:8px}
+.comment-textarea:focus{border-color:var(--accent)}
+.comment-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.comment-save{background:var(--accent);color:#f5f0e8;border:none;border-radius:8px;
+  padding:4px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer}
+.comment-clear{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.comment-preview{font-size:10px;color:var(--gold);font-style:italic;
+  padding:4px 2px;line-height:1.4;white-space:pre-wrap;cursor:pointer;margin-top:6px}
+
+/* BUTTONS */
+.btn-ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-ghost:active{border-color:var(--accent);color:var(--accent)}
+
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;
+  padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:4px}
+.mt-sub{font-size:10px;color:var(--muted);margin-bottom:16px}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);
+  margin-bottom:6px;display:block;margin-top:12px}
+.ml:first-of-type{margin-top:0}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);outline:none}
+.mi:focus{border-color:var(--accent)}
+.mbr{display:flex;gap:8px;margin-top:16px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;
+  padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+
+/* GROUP SELECTOR in modal */
+.grp-sel{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.grp-btn{font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:20px;
+  padding:5px 10px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer}
+.grp-btn.sel{background:var(--accent3);border-color:var(--accent3);color:#f5f0e8}
+
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;
+  transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
+  padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;transition:all .2s;
+  pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Lars · <em>Health</em></h1>
+  <p>Entzündung & Haut · Prototyp</p>
+</div>
+
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">Entzündung & Haut</div>
+    <button class="btn-ghost" onclick="openRegionMgr()">⚙ Regionen</button>
+  </div>
+
+  <!-- ANKER MORGEN -->
+  <div class="anker-card">
+    <div class="anker-header" onclick="toggleAnker('morgen')">
+      <span class="anker-label">🌅 Morgen</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="anker-badge" id="badge-morgen">—</span>
+        <button class="comment-btn" id="cbtn-morgen"
+          onclick="event.stopPropagation();toggleComment('morgen')">💬</button>
+        <span style="color:var(--muted);font-size:12px" id="arr-morgen">▼</span>
+      </span>
+    </div>
+    <div id="body-morgen" style="display:none">
+      <div class="anker-body">
+        <div id="regions-morgen"></div>
+        <div id="comment-area-morgen"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANKER ABEND -->
+  <div class="anker-card">
+    <div class="anker-header" onclick="toggleAnker('abend')">
+      <span class="anker-label">🌆 Abend</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="anker-badge" id="badge-abend">—</span>
+        <button class="comment-btn" id="cbtn-abend"
+          onclick="event.stopPropagation();toggleComment('abend')">💬</button>
+        <span style="color:var(--muted);font-size:12px" id="arr-abend">▼</span>
+      </span>
+    </div>
+    <div id="body-abend" style="display:none">
+      <div class="anker-body">
+        <div id="regions-abend"></div>
+        <div id="comment-area-abend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPONTAN -->
+  <div style="margin-top:6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)">Spontan</div>
+      <button class="btn-ghost" onclick="openSpontan()">+ Jetzt erfassen</button>
+    </div>
+    <div id="spontan-list"></div>
+  </div>
+</div>
+
+<div class="debug">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div>
+  <pre id="dbg"></pre>
+</div>
+
+<!-- MODAL: Region anlegen / bearbeiten -->
+<div class="modal-overlay" id="m-region">
+  <div class="modal-sheet">
+    <div class="mt" id="m-region-title">Region anlegen</div>
+    <div class="mt-sub">Körperstelle die du tracken möchtest</div>
+    <label class="ml">Name</label>
+    <input class="mi" id="m-region-name" placeholder="z.B. Hals, Linke Achsel, Kopfhaut...">
+    <label class="ml">Anker-Blöcke</label>
+    <div class="grp-sel" id="m-region-grps">
+      <button class="grp-btn" data-g="morgen" onclick="this.classList.toggle('sel')">🌅 Morgen</button>
+      <button class="grp-btn" data-g="abend"  onclick="this.classList.toggle('sel')">🌆 Abend</button>
+    </div>
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-region')">Abbrechen</button>
+      <button class="bp" onclick="saveRegion()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Regionen verwalten -->
+<div class="modal-overlay" id="m-mgr">
+  <div class="modal-sheet">
+    <div class="mt">Regionen verwalten</div>
+    <div class="mt-sub">Alle konfigurierten Körperstellen</div>
+    <div id="mgr-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
+    <button class="bp" onclick="closeModal('m-mgr');openNewRegion()">+ Neue Region</button>
+    <div class="mbr" style="margin-top:8px">
+      <button class="bs" onclick="closeModal('m-mgr')">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Spontan erfassen -->
+<div class="modal-overlay" id="m-spontan">
+  <div class="modal-sheet">
+    <div class="mt">Befund erfassen</div>
+    <div class="mt-sub">Spontaner Eintrag — wähle betroffene Regionen</div>
+    <div id="m-spontan-regions"></div>
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="m-spontan-time" type="time">
+    <label class="ml">Notiz <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <input class="mi" id="m-spontan-note" placeholder="z.B. nach dem Sport, nach Mahlzeit..." style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-spontan')">Abbrechen</button>
+      <button class="bp" onclick="saveSpontan()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── SKALA ─────────────────────────────────
+const SCALE = [
+  {v:0,label:'0'},{v:1,label:'1'},{v:2,label:'2'},
+  {v:3,label:'3'},{v:4,label:'4'},{v:5,label:'5'}
+];
+
+const ANKER = ['morgen','abend'];
+
+// ── STATE ─────────────────────────────────
+// regions: [{id, name, groups:[]}]
+let regions = [
+  {id:'hals',    name:'Hals',              groups:['morgen','abend']},
+  {id:'brust',   name:'Brust',             groups:['morgen','abend']},
+  {id:'achsel',  name:'Linke Achsel',      groups:['morgen','abend']},
+  {id:'ruecken', name:'Oberer Rücken',     groups:['morgen','abend']},
+  {id:'kopfh',   name:'Kopfhaut',          groups:['morgen','abend']},
+  {id:'gesicht', name:'Gesicht',           groups:['morgen','abend']},
+  {id:'oberarm', name:'Oberarme',          groups:['morgen','abend']},
+];
+regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+
+// ankerData: { morgen: { regionId: 0-5|null }, abend: {...} }
+let ankerData = { morgen:{}, abend:{} };
+let ankerOpen = { morgen:true, abend:false };
+let ankerComments = { morgen:'', abend:'' };
+let ankerCommentOpen = { morgen:false, abend:false };
+let spontanList = [];
+let editRegionCtx = null;
+
+// spontan temp values
+let spontanVals = {};
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// ── RENDER ────────────────────────────────
+function render(){
+  ANKER.forEach(a=>{
+    const body=document.getElementById('body-'+a);
+    const arr=document.getElementById('arr-'+a);
+    if(ankerOpen[a]){
+      body.style.display='block';
+      arr.textContent='▲';
+      renderRegions(a);
+      renderCommentArea(a);
+    } else {
+      body.style.display='none';
+      arr.textContent='▼';
+    }
+    renderBadge(a);
+  });
+  renderSpontan();
+  renderDbg();
+}
+
+function renderBadge(anker){
+  const badge=document.getElementById('badge-'+anker);
+  const cbtn=document.getElementById('cbtn-'+anker);
+  const regs=regions.filter(r=>r.groups.includes(anker));
+  const filled=regs.filter(r=>ankerData[anker][r.id]!=null).length;
+  const hasHigh=regs.some(r=>(ankerData[anker][r.id]||0)>=3);
+  if(filled===0){badge.textContent='—';badge.className='anker-badge'}
+  else if(hasHigh){badge.textContent=`${filled}/${regs.length}`;badge.className='anker-badge active'}
+  else{badge.textContent=`✓ ${filled}/${regs.length}`;badge.className='anker-badge done'}
+  cbtn.classList.toggle('has-comment',!!ankerComments[anker]);
+}
+
+function renderRegions(anker){
+  const container=document.getElementById('regions-'+anker);
+  const regs=regions.filter(r=>r.groups.includes(anker));
+  if(!regs.length){
+    container.innerHTML=`<div style="font-size:11px;color:var(--muted);padding:8px 0">Keine Regionen konfiguriert</div>`;
+    return;
+  }
+  container.innerHTML=regs.map(r=>{
+    const val=ankerData[anker][r.id];
+    const chips=SCALE.map(s=>`
+      <button class="sv${val===s.v?' sel-'+s.v:''}"
+        onclick="setRegion('${anker}','${r.id}',${s.v})">
+        <span class="sv-n">${s.label}</span>
+      </button>`).join('');
+
+    const valClass=val==null?'':val===0?'v0':val<=2?'v1':'v3';
+    return `
+      <div class="region-row">
+        <div class="region-header">
+          <span class="region-name">${r.name}</span>
+          ${val!=null?`<span class="region-val ${valClass}">${SCALE[val]?.emoji} ${val}</span>`:''}
+        </div>
+        <div class="scale-row">${chips}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderCommentArea(anker){
+  const container=document.getElementById('comment-area-'+anker);
+  const isOpen=ankerCommentOpen[anker];
+  const comment=ankerComments[anker];
+  if(isOpen){
+    container.innerHTML=`
+      <textarea class="comment-textarea" id="ta-${anker}"
+        placeholder="Kommentar zum ${anker==='morgen'?'Morgen':'Abend'}...">${comment}</textarea>
+      <div class="comment-actions">
+        <button class="comment-clear" onclick="document.getElementById('ta-${anker}').value=''">Leeren</button>
+        <button class="comment-save" onclick="saveComment('${anker}')">Speichern</button>
+      </div>`;
+    setTimeout(()=>{const ta=document.getElementById('ta-'+anker);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}},50);
+  } else if(comment){
+    container.innerHTML=`<div class="comment-preview" onclick="toggleComment('${anker}')">${escHtml(comment)}</div>`;
+  } else {
+    container.innerHTML='';
+  }
+}
+
+function renderSpontan(){
+  const el=document.getElementById('spontan-list');
+  if(!spontanList.length){el.innerHTML='';return}
+  el.innerHTML=spontanList.map(e=>`
+    <div class="spontan-entry">
+      <div class="spontan-time">${e.time}${e.note?' · '+e.note:''}</div>
+      <div style="display:flex;flex-wrap:wrap">
+        ${Object.entries(e.values).map(([rid,val])=>{
+          const r=regions.find(x=>x.id===rid);
+          const cls=val===0?'rp-0':val<=2?'rp-12':'rp-345';
+          return `<span class="region-pill ${cls}">${r?.name||rid}: ${val}</span>`;
+        }).join('')}
+      </div>
+      <button class="spontan-del" onclick="delSpontan('${e.id}')">✕</button>
+    </div>`).join('');
+}
+
+function renderDbg(){
+  const out={entzuendung:{}};
+  ANKER.forEach(a=>{
+    const regs=regions.filter(r=>r.groups.includes(a));
+    const vals=Object.fromEntries(regs.filter(r=>ankerData[a][r.id]!=null).map(r=>[r.name,ankerData[a][r.id]]));
+    if(Object.keys(vals).length||ankerComments[a]){
+      out.entzuendung[a]={...vals,...(ankerComments[a]?{kommentar:ankerComments[a]}:{})};
+    }
+  });
+  if(spontanList.length){
+    out.entzuendung.spontan=spontanList.map(e=>({
+      uhrzeit:e.time,...(e.note?{notiz:e.note}:{}),
+      ...Object.fromEntries(Object.entries(e.values).map(([rid,v])=>[regions.find(x=>x.id===rid)?.name||rid,v]))
+    }));
+  }
+  document.getElementById('dbg').textContent=JSON.stringify(out,null,2);
+}
+
+// ── INTERACTIONS ──────────────────────────
+function toggleAnker(id){ankerOpen[id]=!ankerOpen[id];render()}
+
+function setRegion(anker,regionId,val){
+  if(ankerData[anker][regionId]===val) ankerData[anker][regionId]=null;
+  else ankerData[anker][regionId]=val;
+  renderRegions(anker);
+  renderBadge(anker);
+  renderDbg();
+}
+
+// ── COMMENTS ─────────────────────────────
+function toggleComment(anker){
+  ankerCommentOpen[anker]=!ankerCommentOpen[anker];
+  if(ankerCommentOpen[anker]) ankerOpen[anker]=true;
+  render();
+}
+function saveComment(anker){
+  const ta=document.getElementById('ta-'+anker);
+  ankerComments[anker]=ta?ta.value.trim():'';
+  ankerCommentOpen[anker]=false;
+  showToast(ankerComments[anker]?'Kommentar gespeichert ✓':'Kommentar entfernt');
+  render();
+}
+
+// ── DELETE MODE ───────────────────────────
+function toggleDelMode(){
+  delMode=!delMode;
+  const btn=document.getElementById('btn-del');
+  btn.classList.toggle('on',delMode);
+  btn.textContent=delMode?'✓ Fertig':'🗑 Löschen';
+  if(delMode) ANKER.forEach(a=>ankerOpen[a]=true);
+  render();
+}
+
+// ── REGION MANAGER ────────────────────────
+function openRegionMgr(){
+  renderMgrChips();
+  openModal('m-mgr');
+}
+
+function renderMgrChips(){
+  document.getElementById('mgr-chips').innerHTML=regions.map(r=>`
+    <div class="chip" style="flex-direction:row;align-items:center;gap:6px">
+      <span>${r.name}</span>
+      <span style="font-size:9px;color:var(--muted)">${r.groups.join('/')}</span>
+      <button class="chip-edit-btn" onclick="openEditRegion('${r.id}')">✎</button>
+      <button class="chip-del-btn" onclick="deleteRegion('${r.id}')">✕</button>
+    </div>`).join('');
+}
+
+function openNewRegion(){
+  editRegionCtx=null;
+  document.getElementById('m-region-title').textContent='Region anlegen';
+  document.getElementById('m-region-name').value='';
+  document.querySelectorAll('#m-region-grps .grp-btn').forEach(b=>b.classList.add('sel'));
+  openModal('m-region');
+  setTimeout(()=>document.getElementById('m-region-name').focus(),100);
+}
+
+function openEditRegion(rid){
+  const r=regions.find(x=>x.id===rid);
+  if(!r)return;
+  editRegionCtx={rid};
+  document.getElementById('m-region-title').textContent='Region bearbeiten';
+  document.getElementById('m-region-name').value=r.name;
+  document.querySelectorAll('#m-region-grps .grp-btn').forEach(b=>
+    b.classList.toggle('sel',r.groups.includes(b.dataset.g)));
+  openModal('m-region');
+  setTimeout(()=>document.getElementById('m-region-name').focus(),100);
+}
+
+function saveRegion(){
+  const name=document.getElementById('m-region-name').value.trim();
+  const groups=[...document.querySelectorAll('#m-region-grps .grp-btn.sel')].map(b=>b.dataset.g);
+  if(!name){showToast('Name fehlt');return}
+  if(!groups.length){showToast('Mindestens einen Block wählen');return}
+  if(editRegionCtx){
+    const r=regions.find(x=>x.id===editRegionCtx.rid);
+    if(r){r.name=name;r.groups=groups;}
+    showToast(`${name} gespeichert ✓`);
+  } else {
+    if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
+    regions.push({id:uid(),name,groups});
+    regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    showToast(`${name} hinzugefügt`);
+  }
+  editRegionCtx=null;
+  closeModal('m-region');
+  render();
+}
+
+function deleteRegion(rid){
+  const r=regions.find(x=>x.id===rid);
+  regions=regions.filter(x=>x.id!==rid);
+  ANKER.forEach(a=>delete ankerData[a][rid]);
+  showToast(`${r?.name} entfernt`);
+  renderMgrChips();
+  render();
+}
+
+// ── SPONTAN ───────────────────────────────
+function openSpontan(){
+  spontanVals={};
+  const now=new Date();
+  document.getElementById('m-spontan-time').value=
+    `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  document.getElementById('m-spontan-note').value='';
+  renderSpontanRegions();
+  openModal('m-spontan');
+}
+
+function renderSpontanRegions(){
+  document.getElementById('m-spontan-regions').innerHTML=regions.map(r=>`
+    <div class="region-row">
+      <div class="region-header">
+        <span class="region-name">${r.name}</span>
+        ${spontanVals[r.id]!=null?`<span class="region-val">${SCALE[spontanVals[r.id]]?.emoji} ${spontanVals[r.id]}</span>`:''}
+      </div>
+      <div class="scale-row">${SCALE.map(s=>`
+        <button class="sv${spontanVals[r.id]===s.v?' sel-'+s.v:''}"
+          onclick="setSpontanRegion('${r.id}',${s.v},this)">
+          <span class="sv-n">${s.label}</span>
+        </button>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function setSpontanRegion(rid,val,btn){
+  if(spontanVals[rid]===val) delete spontanVals[rid];
+  else spontanVals[rid]=val;
+  // update chips in this row
+  btn.closest('.scale-row').querySelectorAll('.sv').forEach((b,i)=>{
+    b.className='sv'+(spontanVals[rid]===i?' sel-'+i:'');
+  });
+  // update value display
+  const hdr=btn.closest('.region-row').querySelector('.region-header');
+  let vspan=hdr.querySelector('.region-val');
+  if(spontanVals[rid]!=null){
+    if(!vspan){vspan=document.createElement('span');vspan.className='region-val';hdr.appendChild(vspan)}
+    vspan.textContent=`${SCALE[spontanVals[rid]]?.emoji} ${spontanVals[rid]}`;
+  } else if(vspan) vspan.remove();
+}
+
+function saveSpontan(){
+  const time=document.getElementById('m-spontan-time').value;
+  const note=document.getElementById('m-spontan-note').value.trim();
+  if(!Object.keys(spontanVals).length){showToast('Mindestens eine Region wählen');return}
+  spontanList.push({id:uid(),time,note,values:{...spontanVals}});
+  spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+  closeModal('m-spontan');
+  render();
+  showToast(`Befund ${time} gespeichert ✓`);
+}
+
+function delSpontan(id){
+  spontanList=spontanList.filter(e=>e.id!==id);
+  render();
+}
+
+// ── MODALS ────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>
+  o.addEventListener('click',e=>{if(e.target===o)closeModal(o.id)}));
+
+// ── TOAST ─────────────────────────────────
+let tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+// ── INIT ──────────────────────────────────
+render();
+</script>
+</body>
+</html>

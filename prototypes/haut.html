@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Hautpflege · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;
+  --text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;
+  --accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;--warn:#c0761a;
+  --safe:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;
+  --text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;
+  --accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555;--warn:#e09040;
+}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;
+  font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:40px}
+
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid #b09ec8}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+
+/* STACK CARD */
+.stack-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.stack-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none}
+.stack-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em}
+.stack-badge{border-radius:10px;padding:1px 7px;font-size:9px;font-weight:600;background:var(--border);color:var(--muted)}
+.stack-badge.ok{background:var(--accent2);color:#f5f0e8}
+.stack-badge.partial{background:var(--gold);color:#f5f0e8}
+.stack-body{padding:6px 14px 14px;border-top:1px solid var(--border)}
+
+.comment-btn{background:none;border:none;font-size:13px;cursor:pointer;
+  padding:2px 4px;border-radius:6px;transition:opacity .15s;opacity:0.4;line-height:1}
+.comment-btn.has-comment{opacity:1;color:var(--gold)}
+.comment-area{margin-top:10px;border-top:1px solid var(--border);padding-top:10px}
+.comment-textarea{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text);outline:none;resize:none;height:64px;line-height:1.5}
+.comment-textarea:focus{border-color:var(--accent)}
+.comment-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.comment-save{background:var(--accent);color:#f5f0e8;border:none;border-radius:8px;
+  padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer}
+.comment-clear{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted);cursor:pointer}
+.comment-preview{font-size:10px;color:var(--gold);font-style:italic;
+  padding:4px 2px;line-height:1.4;white-space:pre-wrap;word-break:break-word;cursor:pointer}
+
+.btn-alle{font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:20px;
+  padding:4px 12px;border:1px solid var(--border);background:none;color:var(--muted);
+  cursor:pointer;margin-bottom:10px;display:inline-flex;align-items:center;gap:5px}
+.btn-alle.all-done{background:var(--accent2);border-color:var(--accent2);color:#f5f0e8}
+
+/* CHIPS */
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:5px 11px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);
+  transition:all 0.12s;user-select:none;-webkit-user-select:none;flex-direction:column;
+  align-items:flex-start;padding:6px 11px}
+.chip-main{display:flex;align-items:center;gap:5px}
+.chip-sub{font-size:9px;color:var(--muted);margin-top:1px;padding-left:2px}
+.chip.done{background:color-mix(in srgb,var(--accent2) 15%,var(--surface2));
+  border-color:var(--accent2);color:var(--text)}
+.chip.done .ck{color:var(--accent2)}
+.chip.due{border-color:var(--accent2);border-style:solid}
+.chip.not-due{opacity:0.55}
+.chip.del-chip{border-color:var(--delete)!important}
+.chip-edit-btn{background:none;border:1px solid var(--accent3);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--accent3);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;margin-left:2px;line-height:1.4}
+.chip-del-btn{background:none;border:1px solid var(--delete);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--delete);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;margin-left:2px;line-height:1.4}
+.chip-add{background:none;border:1px dashed var(--border);color:var(--muted);
+  font-size:16px;padding:4px 10px;line-height:1;border-radius:20px;
+  flex-direction:row;align-items:center}
+.chip-dose{color:var(--gold);font-size:10px}
+.chip-hint{color:var(--muted);font-size:9px;margin-left:1px}
+
+/* Interval indicator colors */
+.interval-due{color:var(--accent2);font-weight:600}
+.interval-soon{color:var(--gold)}
+.interval-wait{color:var(--muted)}
+
+.btn-del{background:none;border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted);cursor:pointer}
+.btn-del.on{border-color:var(--delete);color:var(--delete);
+  background:color-mix(in srgb,var(--delete) 10%,transparent)}
+
+/* MODALS */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;
+  padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;
+  animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:4px}
+.mt-sub{font-size:10px;color:var(--muted);margin-bottom:16px}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);
+  margin-bottom:6px;display:block;margin-top:12px}
+.ml:first-of-type{margin-top:0}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;
+  color:var(--text);outline:none;margin-bottom:0}
+.mi:focus{border-color:var(--accent)}
+.ms{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;
+  color:var(--text);outline:none;margin-bottom:0;-webkit-appearance:none}
+.mbr{display:flex;gap:8px;margin-top:16px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;
+  padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+
+.dq{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;margin-bottom:4px}
+.db{background:var(--surface2);border:1px solid var(--border);border-radius:20px;
+  padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--text);cursor:pointer}
+.db.sel{background:var(--accent);border-color:var(--accent);color:#f5f0e8}
+
+.stk-sel{display:flex;gap:8px;margin-top:8px}
+.stk-btn{font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:20px;
+  padding:6px 14px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;flex:1;text-align:center}
+.stk-btn.sel{background:var(--accent3);border-color:var(--accent3);color:#f5f0e8}
+
+/* Interval row */
+.interval-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.interval-toggle{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);cursor:pointer}
+.interval-toggle input{accent-color:var(--accent2);width:16px;height:16px}
+.interval-input{width:60px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:7px 10px;font-family:'JetBrains Mono',monospace;
+  font-size:12px;color:var(--text);outline:none;text-align:center}
+.interval-unit{font-size:11px;color:var(--muted)}
+
+/* DEBUG */
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+
+/* TOAST */
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;
+  transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
+  padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;
+  transition:all .2s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Lars · <em>Health</em></h1>
+  <p>Hautpflege · Prototyp</p>
+</div>
+
+<!-- DATUM-SIMULATOR -->
+<div style="background:color-mix(in srgb,var(--gold) 12%,var(--surface));
+  border-bottom:1px solid color-mix(in srgb,var(--gold) 30%,var(--border));
+  padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  <span style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--gold)">🗓 Datum simulieren</span>
+  <input type="date" id="sim-date-input"
+    style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+      padding:4px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;
+      color:var(--text);outline:none"
+    onchange="setSimDate(this.value)">
+  <span id="sim-date-label"
+    style="font-size:10px;color:var(--muted);font-style:italic">Heute (echt)</span>
+  <button onclick="setSimDate(null);document.getElementById('sim-date-input').value=''"
+    style="background:none;border:1px solid var(--border);border-radius:8px;
+      padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;
+      color:var(--muted);cursor:pointer">Reset</button>
+</div>
+
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">Hautpflege</div>
+    <button class="btn-del" id="btn-del" onclick="toggleDelMode()">🗑 Löschen</button>
+  </div>
+  <div id="stacks"></div>
+</div>
+
+<div class="debug">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div>
+  <pre id="dbg"></pre>
+</div>
+
+<!-- Menge-Modal (langer Tap auf angewendetes Produkt) -->
+<div class="modal-overlay" id="m-dose">
+  <div class="modal-sheet">
+    <div class="mt" id="m-dose-title">Menge anpassen</div>
+    <div class="mt-sub">Nur für heute — Standard bleibt unverändert.<br>Kurz tippen = ab/anwählen · Lang halten = Menge ändern</div>
+    <label class="ml">Menge heute</label>
+    <div class="dq" id="m-dose-quick"></div>
+    <input class="mi" id="m-dose-val" type="number" min="0" step="any" placeholder="Andere Menge...">
+    <div class="mbr">
+      <button class="bs" onclick="cancelDose()">Abwählen</button>
+      <button class="bp" onclick="confirmDose()">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Neues Produkt Modal -->
+<div class="modal-overlay" id="m-new">
+  <div class="modal-sheet">
+    <div class="mt">Produkt anlegen</div>
+    <div class="mt-sub">Neue Hautpflege hinzufügen</div>
+
+    <label class="ml">Name</label>
+    <input class="mi" id="m-new-name" placeholder="z.B. Terzolin 2%">
+
+    <label class="ml">Einheit <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <select class="ms" id="m-new-unit" onchange="updateNewQuick()">
+      <option value="">— keine Menge —</option>
+      <option>Fingerkuppe</option>
+      <option>g</option>
+      <option>Hübe</option>
+      <option>ml</option>
+      <option>Pumps</option>
+      <option>Sprühstoß</option>
+      <option>Stk</option>
+      <option>Tropfen</option>
+    </select>
+
+    <label class="ml">Standard-Menge</label>
+    <div class="dq" id="m-new-quick"></div>
+    <input class="mi" id="m-new-dose" type="number" min="0" step="any" placeholder="Menge...">
+
+    <label class="ml">Tageszeit</label>
+    <div class="stk-sel" id="m-new-stacks">
+      <button class="stk-btn" data-s="morgen" onclick="this.classList.toggle('sel')">🌅 Morgen</button>
+      <button class="stk-btn" data-s="abend"  onclick="this.classList.toggle('sel')">🌆 Abend</button>
+    </div>
+
+    <label class="ml">Intervall</label>
+    <div class="interval-row">
+      <label class="interval-toggle">
+        <input type="checkbox" id="m-new-interval-on" onchange="toggleIntervalInput()">
+        Alle
+      </label>
+      <input class="interval-input" id="m-new-interval-days" type="number" min="2" max="30" value="2" disabled placeholder="2">
+      <span class="interval-unit">Tage</span>
+    </div>
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-new')">Abbrechen</button>
+      <button class="bp" onclick="saveNew()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Edit Produkt Modal -->
+<div class="modal-overlay" id="m-edit">
+  <div class="modal-sheet">
+    <div class="mt">Produkt bearbeiten</div>
+    <div class="mt-sub" id="m-edit-sub"></div>
+
+    <label class="ml">Name</label>
+    <input class="mi" id="m-edit-name" placeholder="z.B. Terzolin 2%">
+
+    <label class="ml">Einheit</label>
+    <select class="ms" id="m-edit-unit" onchange="updateEditQuick()">
+      <option value="">— keine Menge —</option>
+      <option>Fingerkuppe</option>
+      <option>g</option>
+      <option>Hübe</option>
+      <option>ml</option>
+      <option>Pumps</option>
+      <option>Sprühstoß</option>
+      <option>Stk</option>
+      <option>Tropfen</option>
+    </select>
+
+    <label class="ml">Standard-Menge</label>
+    <div class="dq" id="m-edit-quick"></div>
+    <input class="mi" id="m-edit-dose" type="number" min="0" step="any" placeholder="Menge...">
+
+    <label class="ml">Tageszeit</label>
+    <div class="stk-sel" id="m-edit-stacks">
+      <button class="stk-btn" data-s="morgen" onclick="this.classList.toggle('sel')">🌅 Morgen</button>
+      <button class="stk-btn" data-s="abend"  onclick="this.classList.toggle('sel')">🌆 Abend</button>
+    </div>
+
+    <label class="ml">Intervall</label>
+    <div class="interval-row">
+      <label class="interval-toggle">
+        <input type="checkbox" id="m-edit-interval-on" onchange="toggleEditIntervalInput()">
+        Alle
+      </label>
+      <input class="interval-input" id="m-edit-interval-days" type="number" min="2" max="30" value="2" disabled>
+      <span class="interval-unit">Tage</span>
+    </div>
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-edit')">Abbrechen</button>
+      <button class="bp" onclick="saveEdit()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── PRESETS per unit ──────────────────────
+const PRESETS = {
+  'Pumps':       [1,2,3,4],
+  'Sprühstoß':   [1,2,3],
+  'ml':          [1,2,5,10,15,20],
+  'Tropfen':     [1,2,3,5],
+  'Fingerkuppe': [0.5,1,2],
+  'Hübe':        [1,2,3],
+  'g':           [1,2,3,5],
+  'Stk':         [0.5,1,2],
+};
+
+const GROUPS = [
+  {id:'morgen', label:'🌅 Morgen-Routine'},
+  {id:'abend',  label:'🌆 Abend-Routine'},
+];
+
+// ── STATE ─────────────────────────────────
+// products: [{id, name, unit, dose, groups:[], intervalDays:null, lastUsed:null}]
+// lastUsed: ISO date string 'YYYY-MM-DD' — would be persisted in real app
+let products = [
+  {id:'ant',  name:'Anthelios 50+',    unit:'Pumps',  dose:2,    groups:['morgen'], intervalDays:null, lastUsed:null},
+  {id:'cica', name:'Cicaplast Mains',  unit:'Pumps',  dose:1,    groups:['morgen','abend'], intervalDays:null, lastUsed:null},
+  {id:'lip1', name:'Lipikar Baume AP+M',unit:'Pumps', dose:3,    groups:['morgen','abend'], intervalDays:null, lastUsed:null},
+  {id:'lip2', name:'Lipikar Syndet AP+',unit:'ml',    dose:10,   groups:['morgen'], intervalDays:null, lastUsed:null},
+  {id:'terz', name:'Terzolin 2%',      unit:'ml',     dose:5,    groups:['morgen'], intervalDays:2,    lastUsed:'2025-04-06'},
+  {id:'tol',  name:'Toleriane Creme',  unit:'Pumps',  dose:2,    groups:['morgen'], intervalDays:null, lastUsed:null},
+  {id:'toln', name:'Toleriane Nuit',   unit:'Pumps',  dose:2,    groups:['abend'],  intervalDays:null, lastUsed:null},
+];
+products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+
+// doneMap: { 'prodId__groupId': { done:bool, overrideDose:number|null } }
+let doneMap = {};
+let delMode = false;
+let openGroups = {morgen:true, abend:false};
+let comments = {};
+let commentOpen = {};
+let doseCtx = null;
+let lpTimer = null, lpFired = false;
+
+// ── HELPERS ───────────────────────────────
+function uid(){return Math.random().toString(36).slice(2,9)}
+// ── DATUM-SIMULATOR ──────────────────────
+let simDate = null; // null = echter heutiger Tag
+
+function today(){
+  if(simDate) return simDate;
+  return new Date().toISOString().slice(0,10);
+}
+
+function setSimDate(val){
+  simDate = val || null;
+  render();
+  const lbl = document.getElementById('sim-date-label');
+  if(lbl) lbl.textContent = simDate ? `Simuliert: ${simDate}` : 'Heute (echt)';
+}
+
+function isDone(pid,grp){return !!(doneMap[pid+'__'+grp]?.done)}
+function getODose(pid,grp){return doneMap[pid+'__'+grp]?.overrideDose??null}
+function setDone(pid,grp,val,od=null){
+  const k=pid+'__'+grp;
+  if(!val){delete doneMap[k];return}
+  doneMap[k]={done:true,overrideDose:od};
+}
+
+function groupProds(grp){return products.filter(p=>p.groups.includes(grp))}
+function doneCount(grp){return groupProds(grp).filter(p=>isDone(p.id,grp)).length}
+
+// ── INTERVAL LOGIC ────────────────────────
+function intervalStatus(prod){
+  if(!prod.intervalDays)return null; // no interval
+  if(!prod.lastUsed)return {due:true, label:'noch nie verwendet → heute fällig', days:0};
+  const last = new Date(prod.lastUsed);
+  const now = new Date(today());
+  const diff = Math.round((now-last)/(1000*60*60*24));
+  const remaining = prod.intervalDays - diff;
+  if(remaining<=0) return {due:true,  label:`zuletzt vor ${diff}d → heute fällig`, days:diff};
+  if(remaining===1) return {due:false, label:`zuletzt vor ${diff}d → morgen fällig`, days:diff};
+  return {due:false, label:`zuletzt vor ${diff}d → in ${remaining}d fällig`, days:diff};
+}
+
+// ── RENDER ────────────────────────────────
+function render(){
+  document.getElementById('stacks').innerHTML=GROUPS.map(renderGroup).join('');
+  renderDbg();
+}
+
+function renderGroup(grp){
+  const prods=groupProds(grp.id);
+  const dc=doneCount(grp.id), total=prods.length;
+  const isOpen=openGroups[grp.id];
+  let bc='',bt='—';
+  if(total>0){
+    if(dc===total){bc='ok';bt=`✓ ${dc}/${total}`}
+    else if(dc>0){bc='partial';bt=`${dc}/${total}`}
+    else bt=`0/${total}`;
+  }
+  const allDone=total>0&&dc===total;
+
+  const chips=prods.map(p=>{
+    const done=isDone(p.id,grp.id);
+    const od=getODose(p.id,grp.id);
+    const d=od!==null?od:p.dose;
+    const ds=p.unit&&d?`${d} ${p.unit}`:'';
+    const changed=od!==null&&od!==p.dose;
+    const ivs=intervalStatus(p);
+
+    // Interval chip classes
+    let chipClass='chip';
+    let subText='';
+    if(done){
+      chipClass+=' done';
+      subText=ds?`${ds} angewendet`:'angewendet';
+    } else if(ivs){
+      chipClass+=ivs.due?' due':' not-due';
+      subText=`<span class="${ivs.due?'interval-due':remaining(p)===1?'interval-soon':'interval-wait'}">${ivs.label}</span>`;
+    } else {
+      subText=ds?`Standard: ${ds}`:'';
+    }
+    if(changed) chipClass+=' dose-changed';
+
+    if(delMode) return `<div class="chip del-chip" style="flex-direction:row;align-items:center;justify-content:space-between;gap:6px">
+      <div class="chip-main" style="flex:1">${p.name}${ds?` <span class="chip-dose">${ds}</span>`:''}</div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="chip-edit-btn" onclick="openEdit('${p.id}')">✎</button>
+        <button class="chip-del-btn" onclick="delProd('${p.id}','${grp.id}')">✕</button>
+      </div>
+    </div>`;
+
+    return `<button class="${chipClass}"
+      data-pid="${p.id}" data-grp="${grp.id}"
+      onclick="tapChip('${p.id}','${grp.id}')">
+      <div class="chip-main">
+        ${done?'<span class="ck">✓</span>':''}
+        ${p.name}
+        ${ds&&!done?`<span class="chip-dose">${ds}</span>`:''}
+        ${done?'<span class="chip-hint">⋯</span>':''}
+        ${changed?'<span style="color:var(--accent);font-size:9px"> ✎</span>':''}
+      </div>
+      ${subText?`<div class="chip-sub">${subText}</div>`:''}
+    </button>`;
+  }).join('');
+
+  const addBtn=delMode?'':`<button class="chip chip-add" onclick="openNew('${grp.id}')">+</button>`;
+  const hasComment=!!(comments[grp.id]&&comments[grp.id].trim());
+  const commentIsOpen=!!commentOpen[grp.id];
+
+  return `<div class="stack-card">
+    <div class="stack-header" onclick="toggleGrp('${grp.id}')">
+      <span class="stack-label">${grp.label}</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="stack-badge ${bc}">${bt}</span>
+        <button class="comment-btn${hasComment?' has-comment':''}"
+          onclick="event.stopPropagation();toggleComment('${grp.id}')"
+          title="${hasComment?'Kommentar bearbeiten':'Kommentar hinzufügen'}">💬</button>
+        <span style="color:var(--muted);font-size:12px">${isOpen?'▲':'▼'}</span>
+      </span>
+    </div>
+    ${isOpen?`<div class="stack-body">
+      ${total>0?`<button class="btn-alle${allDone?' all-done':''}" onclick="toggleAll('${grp.id}')">${allDone?'✓ Alle angewendet':'◎ Alle markieren'}</button>`:''}
+      <div class="chip-row">${chips}${addBtn}</div>
+      ${commentIsOpen?`
+      <div class="comment-area">
+        <textarea class="comment-textarea" id="comment-${grp.id}"
+          placeholder="Kommentar zur ${grp.label}..."
+        >${comments[grp.id]||''}</textarea>
+        <div class="comment-actions">
+          <button class="comment-clear" onclick="clearComment('${grp.id}')">Leeren</button>
+          <button class="comment-save" onclick="saveComment('${grp.id}')">Speichern</button>
+        </div>
+      </div>`:
+      hasComment?`<div class="comment-preview" onclick="toggleComment('${grp.id}')">${escHtml(comments[grp.id])}</div>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+function remaining(p){
+  if(!p.intervalDays||!p.lastUsed)return 0;
+  const diff=Math.round((new Date(today())-new Date(p.lastUsed))/(1000*60*60*24));
+  return p.intervalDays-diff;
+}
+
+function renderDbg(){
+  const out={hautpflege:{}};
+  GROUPS.forEach(grp=>{
+    const prods=groupProds(grp.id);
+    if(!prods.length)return;
+    out.hautpflege[grp.id]={
+      angewendet: prods.filter(p=>isDone(p.id,grp.id)).map(p=>{
+        const od=getODose(p.id,grp.id);
+        const menge=od!==null?od:p.dose;
+        return { produkt: p.name, ...(p.unit&&menge?{menge, einheit:p.unit}:{}) };
+      }),
+      nicht_angewendet: prods.filter(p=>!isDone(p.id,grp.id)).map(p=>p.name),
+      ...(comments[grp.id]?{kommentar:comments[grp.id]}:{})
+    };
+  });
+  document.getElementById('dbg').textContent=JSON.stringify(out,null,2);
+}
+
+function toggleGrp(id){openGroups[id]=!openGroups[id];render()}
+
+// ── COMMENTS ─────────────────────────────
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function toggleComment(grpId){
+  commentOpen[grpId]=!commentOpen[grpId];
+  if(commentOpen[grpId]) openGroups[grpId]=true;
+  render();
+  if(commentOpen[grpId]){
+    setTimeout(()=>{
+      const ta=document.getElementById('comment-'+grpId);
+      if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+    },50);
+  }
+}
+
+function saveComment(grpId){
+  const ta=document.getElementById('comment-'+grpId);
+  const val=ta?ta.value.trim():'';
+  if(val){comments[grpId]=val;showToast('Kommentar gespeichert ✓')}
+  else{delete comments[grpId];showToast('Kommentar entfernt')}
+  commentOpen[grpId]=false;
+  render();
+}
+
+function clearComment(grpId){
+  const ta=document.getElementById('comment-'+grpId);
+  if(ta) ta.value='';
+}
+
+// ── TAP + LONG PRESS ──────────────────────
+function tapChip(pid,grp){
+  const cur=isDone(pid,grp);
+  if(cur){
+    setDone(pid,grp,false);
+    render();
+  } else {
+    setDone(pid,grp,true,null);
+    // Update lastUsed for interval products
+    const p=products.find(x=>x.id===pid);
+    if(p&&p.intervalDays) p.lastUsed=today();
+    showToast(`${p?.name} ✓`);
+    render();
+  }
+}
+
+document.addEventListener('pointerdown',e=>{
+  const btn=e.target.closest('[data-pid]');
+  if(!btn||delMode)return;
+  const pid=btn.dataset.pid, grp=btn.dataset.grp;
+  lpFired=false;
+  lpTimer=setTimeout(()=>{
+    if(!isDone(pid,grp))return;
+    lpFired=true;
+    openDoseModal(pid,grp);
+  },500);
+});
+document.addEventListener('pointerup',()=>clearTimeout(lpTimer));
+document.addEventListener('pointercancel',()=>clearTimeout(lpTimer));
+document.addEventListener('click',e=>{
+  if(lpFired){lpFired=false;e.stopImmediatePropagation();e.preventDefault();}
+},true);
+
+// ── ALLE ──────────────────────────────────
+function toggleAll(grp){
+  const prods=groupProds(grp);
+  const all=prods.every(p=>isDone(p.id,grp));
+  prods.forEach(p=>{
+    setDone(p.id,grp,!all,null);
+    if(!all&&p.intervalDays) p.lastUsed=today();
+  });
+  showToast(all?'Alle abgewählt':`Alle ${prods.length} angewendet ✓`);
+  render();
+}
+
+// ── DELETE MODE ───────────────────────────
+function toggleDelMode(){
+  delMode=!delMode;
+  const btn=document.getElementById('btn-del');
+  btn.classList.toggle('on',delMode);
+  btn.textContent=delMode?'✓ Fertig':'🗑 Löschen';
+  if(delMode)GROUPS.forEach(g=>openGroups[g.id]=true);
+  render();
+}
+function delProd(pid,grp){
+  const p=products.find(x=>x.id===pid);
+  if(!p)return;
+  p.groups=p.groups.filter(g=>g!==grp);
+  if(!p.groups.length){products=products.filter(x=>x.id!==pid);showToast(`${p.name} entfernt`)}
+  else showToast(`${p.name} aus Gruppe entfernt`);
+  render();
+}
+
+// ── DOSE MODAL ────────────────────────────
+function openDoseModal(pid,grp){
+  const p=products.find(x=>x.id===pid);
+  if(!p)return;
+  doseCtx={pid,grp,p};
+  document.getElementById('m-dose-title').textContent=`✎ ${p.name} — Menge heute`;
+  const cur=getODose(pid,grp)??p.dose;
+  document.getElementById('m-dose-val').value=cur||'';
+  const ps=PRESETS[p.unit]||[];
+  document.getElementById('m-dose-quick').innerHTML=ps.map(v=>
+    `<button class="db${parseFloat(cur)===v?' sel':''}" onclick="pickDose(${v},this)">${v}${p.unit?' '+p.unit:''}</button>`
+  ).join('');
+  openModal('m-dose');
+}
+function pickDose(v,btn){
+  document.getElementById('m-dose-val').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function confirmDose(){
+  if(!doseCtx)return;
+  const {pid,grp,p}=doseCtx;
+  const d=parseFloat(document.getElementById('m-dose-val').value)||null;
+  setDone(pid,grp,true,d);
+  closeModal('m-dose');doseCtx=null;
+  showToast(`${p.name}${d&&p.unit?` · ${d} ${p.unit}`:''} ✓`);
+  render();
+}
+function cancelDose(){
+  if(!doseCtx)return;
+  const {pid,grp,p}=doseCtx;
+  setDone(pid,grp,false);
+  closeModal('m-dose');doseCtx=null;
+  showToast(`${p.name} abgewählt`);
+  render();
+}
+
+// ── EDIT PRODUCT ──────────────────────────
+let editCtx = null;
+
+function openEdit(pid){
+  const p=products.find(x=>x.id===pid);
+  if(!p)return;
+  editCtx={pid};
+  document.getElementById('m-edit-sub').textContent=`ID: ${pid}`;
+  document.getElementById('m-edit-name').value=p.name;
+  document.getElementById('m-edit-unit').value=p.unit||'';
+  document.getElementById('m-edit-dose').value=p.dose||'';
+  document.querySelectorAll('#m-edit-stacks .stk-btn').forEach(b=>
+    b.classList.toggle('sel',p.groups.includes(b.dataset.s)));
+  const hasInterval=!!p.intervalDays;
+  document.getElementById('m-edit-interval-on').checked=hasInterval;
+  document.getElementById('m-edit-interval-days').disabled=!hasInterval;
+  document.getElementById('m-edit-interval-days').value=p.intervalDays||2;
+  updateEditQuick();
+  openModal('m-edit');
+  setTimeout(()=>document.getElementById('m-edit-name').focus(),100);
+}
+
+function toggleEditIntervalInput(){
+  const on=document.getElementById('m-edit-interval-on').checked;
+  document.getElementById('m-edit-interval-days').disabled=!on;
+}
+
+function updateEditQuick(){
+  const u=document.getElementById('m-edit-unit').value;
+  const cur=parseFloat(document.getElementById('m-edit-dose').value);
+  document.getElementById('m-edit-quick').innerHTML=(PRESETS[u]||[]).map(v=>
+    `<button class="db${cur===v?' sel':''}" onclick="pickEdit(${v},this)">${v}${u?' '+u:''}</button>`
+  ).join('');
+}
+
+function pickEdit(v,btn){
+  document.getElementById('m-edit-dose').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function saveEdit(){
+  if(!editCtx)return;
+  const p=products.find(x=>x.id===editCtx.pid);
+  if(!p)return;
+  const name=document.getElementById('m-edit-name').value.trim();
+  const unit=document.getElementById('m-edit-unit').value||null;
+  const dose=parseFloat(document.getElementById('m-edit-dose').value)||null;
+  const groups=[...document.querySelectorAll('#m-edit-stacks .stk-btn.sel')].map(b=>b.dataset.s);
+  const intervalOn=document.getElementById('m-edit-interval-on').checked;
+  const intervalDays=intervalOn?parseInt(document.getElementById('m-edit-interval-days').value)||null:null;
+  if(!name){showToast('Name fehlt');return}
+  if(!groups.length){showToast('Tageszeit wählen');return}
+  p.name=name; p.unit=unit; p.dose=dose; p.groups=groups; p.intervalDays=intervalDays;
+  products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  editCtx=null;
+  closeModal('m-edit');
+  showToast(`${name} gespeichert ✓`);
+  render();
+}
+
+// ── NEW PRODUCT MODAL ─────────────────────
+function openNew(preGrp){
+  document.getElementById('m-new-name').value='';
+  document.getElementById('m-new-dose').value='';
+  document.getElementById('m-new-unit').value='';
+  document.getElementById('m-new-interval-on').checked=false;
+  document.getElementById('m-new-interval-days').disabled=true;
+  document.getElementById('m-new-interval-days').value=2;
+  document.querySelectorAll('#m-new-stacks .stk-btn').forEach(b=>
+    b.classList.toggle('sel',b.dataset.s===preGrp));
+  updateNewQuick();
+  openModal('m-new');
+  setTimeout(()=>document.getElementById('m-new-name').focus(),100);
+}
+function toggleIntervalInput(){
+  const on=document.getElementById('m-new-interval-on').checked;
+  document.getElementById('m-new-interval-days').disabled=!on;
+}
+function updateNewQuick(){
+  const u=document.getElementById('m-new-unit').value;
+  const cur=parseFloat(document.getElementById('m-new-dose').value);
+  document.getElementById('m-new-quick').innerHTML=(PRESETS[u]||[]).map(v=>
+    `<button class="db${cur===v?' sel':''}" onclick="pickNew(${v},this)">${v}${u?' '+u:''}</button>`
+  ).join('');
+}
+function pickNew(v,btn){
+  document.getElementById('m-new-dose').value=v;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function saveNew(){
+  const name=document.getElementById('m-new-name').value.trim();
+  const unit=document.getElementById('m-new-unit').value||null;
+  const dose=parseFloat(document.getElementById('m-new-dose').value)||null;
+  const groups=[...document.querySelectorAll('#m-new-stacks .stk-btn.sel')].map(b=>b.dataset.s);
+  const intervalOn=document.getElementById('m-new-interval-on').checked;
+  const intervalDays=intervalOn?parseInt(document.getElementById('m-new-interval-days').value)||null:null;
+  if(!name){showToast('Name fehlt');return}
+  if(!groups.length){showToast('Tageszeit wählen');return}
+  const ex=products.find(p=>p.name.toLowerCase()===name.toLowerCase());
+  if(ex){
+    groups.forEach(g=>{if(!ex.groups.includes(g))ex.groups.push(g)});
+    if(intervalDays)ex.intervalDays=intervalDays;
+    showToast(`${name} aktualisiert`);
+  } else {
+    products.push({id:uid(),name,unit,dose,groups,intervalDays,lastUsed:null});
+    products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    showToast(`${name} hinzugefügt`);
+  }
+  closeModal('m-new');render();
+}
+
+// ── MODALS ────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>
+  o.addEventListener('click',e=>{if(e.target===o){doseCtx=null;closeModal(o.id)}}));
+
+// ── TOAST ─────────────────────────────────
+let tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+// ── INIT ──────────────────────────────────
+render();
+</script>
+</body>
+</html>

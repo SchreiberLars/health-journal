@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Medikamente · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f0e8;
+  --surface: #ede8de;
+  --surface2: #e4ddd0;
+  --border: #d4ccbc;
+  --text: #2a2420;
+  --muted: #8a7e72;
+  --accent: #8b4a2f;
+  --accent2: #4a7a5a;
+  --accent3: #4a5a7a;
+  --gold: #b8860b;
+  --red: #8b2f2f;
+  --delete-color: #c0392b;
+  --safe: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1714;
+    --surface: #242018;
+    --surface2: #2e2a22;
+    --border: #3d3830;
+    --text: #f0ebe0;
+    --muted: #9a8e7e;
+    --accent: #c47a52;
+    --accent2: #6aaa82;
+    --accent3: #7a9ab2;
+    --gold: #d4a030;
+    --red: #c04848;
+    --delete-color: #e05555;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+/* HEADER */
+.page-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.page-header h1 {
+  font-family: 'Lora', serif;
+  font-size: 1.6rem;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.page-header h1 em { color: var(--accent); font-style: italic; }
+.page-header p { color: var(--muted); font-size: 10px; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.1em; }
+
+/* SECTION */
+.form-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid #d4907e;
+}
+.section-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+/* ── CHIP BASE ── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 20px;
+  padding: 5px 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  transition: all 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
+  white-space: nowrap;
+}
+.chip:active { opacity: 0.7; transform: scale(0.96); }
+
+/* Med-Liste Chip (die konfigurierten Medikamente) */
+.chip-med-list {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+.chip-med-list .chip-dose {
+  color: var(--gold);
+  font-size: 10px;
+}
+
+/* Einnahme-Chip (heute eingenommen) */
+.chip-entry {
+  background: var(--surface2);
+  border-color: var(--accent);
+  color: var(--text);
+  padding: 5px 10px;
+  gap: 6px;
+}
+.chip-entry .chip-time {
+  color: var(--gold);
+  font-size: 10px;
+  border-left: 1px solid var(--border);
+  padding-left: 6px;
+  margin-left: 2px;
+}
+.chip-entry .chip-dose-val {
+  color: var(--accent);
+  font-size: 10px;
+}
+.chip-hint { color: var(--muted); font-size: 9px; margin-left: 1px; }
+
+/* ADD CHIP */
+.chip-med-list.not-due { opacity: 0.55; }
+
+/* ADD CHIP */
+.chip-add {
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 16px;
+  padding: 4px 10px;
+  line-height: 1;
+}
+.chip-add:active { border-color: var(--accent); color: var(--accent); }
+
+.chip-edit-btn{background:none;border:1px solid var(--accent3);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--accent3);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;line-height:1.4}
+.chip-del-btn{background:none;border:1px solid var(--delete-color);border-radius:12px;
+  padding:2px 8px;font-size:10px;color:var(--delete-color);cursor:pointer;
+  font-family:'JetBrains Mono',monospace;line-height:1.4}
+
+/* DELETE MODE */
+.delete-mode .chip-med-list,
+.delete-mode .chip-entry {
+  border-color: var(--delete-color) !important;
+  animation: wiggle 0.4s ease;
+}
+.delete-mode .chip::after {
+  content: '✕';
+  font-size: 10px;
+  color: var(--delete-color);
+  margin-left: 2px;
+}
+@keyframes wiggle {
+  0%,100% { transform: rotate(0deg); }
+  25% { transform: rotate(-1.5deg); }
+  75% { transform: rotate(1.5deg); }
+}
+
+/* COMMENT */
+.comment-btn{background:none;border:none;font-size:13px;cursor:pointer;
+  padding:2px 4px;border-radius:6px;opacity:0.4;line-height:1}
+.comment-btn.has-comment{opacity:1;color:var(--gold)}
+.comment-textarea{width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text);outline:none;resize:none;height:64px;line-height:1.5}
+.comment-textarea:focus{border-color:var(--accent)}
+.comment-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.comment-save{background:var(--accent);color:#f5f0e8;border:none;border-radius:8px;
+  padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer}
+.comment-clear{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted);cursor:pointer}
+.comment-preview{font-size:10px;color:var(--gold);font-style:italic;
+  padding:4px 2px;line-height:1.4;white-space:pre-wrap;word-break:break-word;cursor:pointer}
+
+/* DELETE BUTTON */
+.btn-delete-mode {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-delete-mode.active {
+  border-color: var(--delete-color);
+  color: var(--delete-color);
+  background: color-mix(in srgb, var(--delete-color) 10%, transparent);
+}
+
+/* GENERIC BUTTON */
+.btn-ghost {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.btn-ghost:active { border-color: var(--accent); color: var(--accent); }
+
+/* CHIP ROWS */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* SECTION HEADER ROW */
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+/* SUBLABEL */
+.sublabel {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 6px;
+  margin-top: 12px;
+}
+
+/* MODAL OVERLAY */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 200;
+  align-items: flex-end;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-sheet {
+  background: var(--surface);
+  border-radius: 18px 18px 0 0;
+  padding: 20px 20px calc(20px + var(--safe));
+  width: 100%;
+  max-width: 480px;
+  animation: slideUp 0.22s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.modal-title {
+  font-family: 'Lora', serif;
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+.modal-field-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 6px;
+  display: block;
+}
+.modal-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  margin-bottom: 12px;
+}
+.modal-input:focus { border-color: var(--accent); }
+.modal-select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  margin-bottom: 12px;
+  -webkit-appearance: none;
+}
+
+/* DOSE QUICK BUTTONS */
+.dose-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.dose-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.dose-btn.selected, .dose-btn:active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #f5f0e8;
+}
+
+/* MODAL BUTTONS */
+.modal-btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.btn-primary {
+  flex: 1;
+  background: var(--accent);
+  color: #f5f0e8;
+  border: none;
+  border-radius: 10px;
+  padding: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-secondary {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* EMPTY STATE */
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 16px 0 8px;
+  font-style: italic;
+}
+
+/* TOAST */
+.toast {
+  position: fixed;
+  bottom: calc(20px + var(--safe));
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--text);
+  color: var(--bg);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 11px;
+  opacity: 0;
+  transition: all 0.2s;
+  pointer-events: none;
+  z-index: 999;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* DEBUG panel */
+.debug-panel {
+  margin: 16px 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.debug-panel pre {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Lars · <em>Health</em></h1>
+  <p>Medikamente · Prototyp</p>
+</div>
+
+<!-- DATUM-SIMULATOR -->
+<div style="background:color-mix(in srgb,var(--gold) 12%,var(--surface));
+  border-bottom:1px solid color-mix(in srgb,var(--gold) 30%,var(--border));
+  padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  <span style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--gold)">🗓 Datum simulieren</span>
+  <input type="date" id="sim-date-input"
+    style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+      padding:4px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;
+      color:var(--text);outline:none"
+    onchange="simDate=this.value||null;document.getElementById('sim-lbl').textContent=simDate?'Simuliert: '+simDate:'Heute (echt)';render()">
+  <span id="sim-lbl" style="font-size:10px;color:var(--muted);font-style:italic">Heute (echt)</span>
+  <button onclick="simDate=null;document.getElementById('sim-date-input').value='';document.getElementById('sim-lbl').textContent='Heute (echt)';render()"
+    style="background:none;border:1px solid var(--border);border-radius:8px;
+      padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;
+      color:var(--muted);cursor:pointer">Reset</button>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MEDIKAMENTE SEKTION
+═══════════════════════════════════════════ -->
+<div class="form-section" id="med-section">
+
+  <!-- ZEILE 1: Titel + Buttons -->
+  <div class="section-header-row">
+    <div class="section-title" style="margin-bottom:0">Medikamente</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="comment-btn" id="med-comment-btn" onclick="toggleMedComment()"
+        title="Kommentar hinzufügen">💬</button>
+      <button class="btn-delete-mode" id="delete-mode-btn" onclick="toggleDeleteMode()">
+        🗑 Löschen
+      </button>
+    </div>
+  </div>
+
+  <!-- TEIL A: Medikamentenliste -->
+  <div class="sublabel">Verfügbare Medikamente</div>
+  <div class="chip-row" id="med-list-chips"></div>
+
+  <!-- TEIL B: Heutige Einnahmen -->
+  <div class="sublabel" style="margin-top:14px">Einnahmen heute</div>
+  <div class="chip-row" id="med-entry-chips">
+    <div class="empty-state" id="med-empty">Noch keine Einnahmen</div>
+  </div>
+
+  <!-- KOMMENTAR -->
+  <div id="med-comment-area" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+    <textarea class="comment-textarea" id="med-comment-text"
+      placeholder="Kommentar zu Medikamenten heute..."></textarea>
+    <div class="comment-actions">
+      <button class="comment-clear" onclick="document.getElementById('med-comment-text').value=''">Leeren</button>
+      <button class="comment-save" onclick="saveMedComment()">Speichern</button>
+    </div>
+  </div>
+  <div id="med-comment-preview" style="display:none"
+    class="comment-preview" onclick="toggleMedComment()"></div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     DEBUG: aktueller State
+═══════════════════════════════════════════ -->
+<div class="debug-panel">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:6px">→ JSON Export (live)</div>
+  <pre id="debug-output"></pre>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: Neues Medikament anlegen
+═══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-new-med">
+  <div class="modal-sheet">
+    <div class="modal-title">Medikament anlegen</div>
+
+    <label class="modal-field-label">Name</label>
+    <input class="modal-input" id="new-med-name" placeholder="z.B. Ibuprofen" oninput="updateDoseQuick()">
+
+    <label class="modal-field-label">Einheit <button onclick="openUnitsLib()" style="background:none;border:none;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent);cursor:pointer;padding:0;margin-left:6px;text-decoration:underline">+ verwalten</button></label>
+    <select class="modal-select unit-select" id="new-med-unit" onchange="updateDoseQuick()"></select>
+
+    <label class="modal-field-label">Standard-Dosis</label>
+    <div class="dose-quick" id="new-med-dose-quick"></div>
+    <input class="modal-input" id="new-med-dose" placeholder="Dosis eingeben..." type="number" min="0" step="any">
+
+    <div class="modal-btn-row">
+      <button class="btn-secondary" onclick="closeModal('modal-new-med')">Abbrechen</button>
+      <button class="btn-primary" onclick="saveMed()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: Einnahme erfassen (Dosis wählen)
+═══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-take-med">
+  <div class="modal-sheet">
+    <div class="modal-title" id="take-med-title">Einnahme erfassen</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:14px">Kurz tippen = Standard erfassen · Lang halten = Dosis / Einheit ändern</div>
+
+    <label class="modal-field-label">Einheit</label>
+    <select class="modal-select unit-select" id="take-unit-input" onchange="updateTakeDoseQuick()"></select>
+
+    <label class="modal-field-label">Dosis</label>
+    <div class="dose-quick" id="take-dose-quick"></div>
+    <input class="modal-input" id="take-dose-input" placeholder="Andere Dosis..." type="number" min="0" step="any">
+
+    <label class="modal-field-label">Uhrzeit</label>
+    <input class="modal-input" id="take-time-input" type="time">
+
+    <div class="modal-btn-row">
+      <button class="btn-secondary" onclick="closeModal('modal-take-med')">Abbrechen</button>
+      <button class="btn-primary" onclick="confirmTake()">Einnahme eintragen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Einheiten-Bibliothek -->
+<div class="modal-overlay" id="modal-units-lib">
+  <div class="modal-sheet">
+    <div class="modal-title">Einheiten-Bibliothek</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:14px">Verfügbar in Supplements, Medikamenten und Getränken</div>
+    <div id="units-lib-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:4px">
+      <input class="modal-input" id="new-unit-input" placeholder="Neue Einheit..." style="margin-bottom:0;flex:1"
+        onkeydown="if(event.key==='Enter'){addUnit();event.preventDefault()}">
+      <button class="btn-primary" style="flex:none;padding:9px 16px" onclick="addUnit()">+</button>
+    </div>
+    <div style="font-size:9px;color:var(--muted);margin-top:6px">z.B. Pumps · Beutel · EL · TL · Sprühstoß</div>
+    <div class="modal-btn-row" style="margin-top:16px">
+      <button class="btn-primary" onclick="closeModal('modal-units-lib');populateUnitSelects()">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODAL: Medikament bearbeiten -->
+<div class="modal-overlay" id="modal-edit-med">
+  <div class="modal-sheet">
+    <div class="modal-title">Medikament bearbeiten</div>
+
+    <label class="modal-field-label">Name</label>
+    <input class="modal-input" id="edit-med-name" placeholder="z.B. Ibuprofen">
+
+    <label class="modal-field-label">Einheit</label>
+    <select class="modal-select unit-select" id="edit-med-unit" onchange="updateEditMedQuick()"></select>
+
+    <label class="modal-field-label">Standard-Dosis</label>
+    <div class="dose-quick" id="edit-med-dose-quick"></div>
+    <input class="modal-input" id="edit-med-dose" type="number" min="0" step="any" placeholder="Dosis...">
+
+    <label class="modal-field-label" style="margin-top:12px">Intervall</label>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);cursor:pointer">
+        <input type="checkbox" id="edit-med-interval-on"
+          onchange="document.getElementById('edit-med-interval-days').disabled=!this.checked"
+          style="accent-color:var(--accent2);width:16px;height:16px">
+        Alle
+      </label>
+      <input type="number" id="edit-med-interval-days" min="2" max="90" value="2" disabled
+        style="width:60px;background:var(--surface2);border:1px solid var(--border);
+          border-radius:8px;padding:7px 10px;font-family:'JetBrains Mono',monospace;
+          font-size:12px;color:var(--text);outline:none;text-align:center">
+      <span style="font-size:11px;color:var(--muted)">Tage</span>
+    </div>
+
+    <div class="modal-btn-row">
+      <button class="btn-secondary" onclick="closeModal('modal-edit-med')">Abbrechen</button>
+      <button class="btn-primary" onclick="saveEditMed()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// EINHEITEN-BIBLIOTHEK (shared, localStorage)
+// ═══════════════════════════════════════════
+const UNITS_KEY = 'hj_units_lib';
+const DEFAULT_UNITS = [
+  { id: 'kps',     label: 'Kps.',    presets: [0.5, 1, 2, 3]          },
+  { id: 'mg',      label: 'mg',      presets: [50, 100, 200, 400, 500, 1000] },
+  { id: 'g',       label: 'g',       presets: [1, 2, 3, 5, 10]        },
+  { id: 'ml',      label: 'ml',      presets: [2.5, 5, 10, 15, 20]    },
+  { id: 'tropfen', label: 'Tropfen', presets: [1, 2, 3, 5, 10]        },
+  { id: 'huebe',   label: 'Hübe',    presets: [1, 2, 3]               },
+  { id: 'stk',     label: 'Stk',     presets: [0.5, 1, 2]             },
+];
+
+function loadUnits() {
+  return JSON.parse(localStorage.getItem(UNITS_KEY) || 'null') || DEFAULT_UNITS;
+}
+function saveUnits(units) {
+  localStorage.setItem(UNITS_KEY, JSON.stringify(units));
+}
+function getPresetsForUnit(unitLabel) {
+  return loadUnits().find(u => u.label === unitLabel)?.presets || [1, 2, 3];
+}
+function populateUnitSelects() {
+  const units = loadUnits();
+  const opts = units.map(u => `<option value="${u.label}">${u.label}</option>`).join('');
+  document.querySelectorAll('select.unit-select').forEach(sel => {
+    const prev = sel.value;
+    sel.innerHTML = opts;
+    if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  });
+}
+function openUnitsLib() {
+  renderUnitsLibChips();
+  document.getElementById('new-unit-input').value = '';
+  openModal('modal-units-lib');
+}
+function renderUnitsLibChips() {
+  const units = loadUnits();
+  document.getElementById('units-lib-chips').innerHTML = units.map(u =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text)">
+      ${u.label}
+      ${!u.builtin ? `<button onclick="deleteUnit('${u.id}')" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;line-height:1;margin-left:2px">×</button>` : ''}
+    </span>`
+  ).join('');
+}
+function addUnit() {
+  const input = document.getElementById('new-unit-input');
+  const label = input.value.trim();
+  if (!label) return;
+  const units = loadUnits();
+  if (units.find(u => u.label.toLowerCase() === label.toLowerCase())) {
+    showToast('Einheit bereits vorhanden'); return;
+  }
+  units.push({ id: 'custom_' + Date.now(), label, presets: [1, 2, 3, 5] });
+  units.sort((a, b) => a.label.localeCompare(b.label, 'de'));
+  saveUnits(units);
+  input.value = '';
+  renderUnitsLibChips();
+  showToast(`"${label}" hinzugefügt`);
+}
+function deleteUnit(unitId) {
+  saveUnits(loadUnits().filter(u => u.id !== unitId));
+  renderUnitsLibChips();
+}
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+
+// Persisted med list: [{id, name, unit, defaultDose}]
+let medList = JSON.parse(localStorage.getItem('hj_medlist_v2') || 'null') || [
+  { id: 'levo',  name: 'Levocetirizin', unit: 'mg',   defaultDose: 5,   intervalDays: null, lastUsed: null },
+  { id: 'ibup',  name: 'Ibuprofen',     unit: 'mg',   defaultDose: 400, intervalDays: null, lastUsed: null },
+  { id: 'nasen', name: 'Nasenspray',    unit: 'Hübe', defaultDose: 2,   intervalDays: null, lastUsed: null },
+];
+
+// Session entries: [{id, medId, name, dose, unit, time}]
+let medEntries = [];
+
+// Delete mode
+let deleteMode = false;
+
+// Context for take-modal
+let takeCtx = null; // {med}
+
+function saveMedList() {
+  localStorage.setItem('hj_medlist_v2', JSON.stringify(medList));
+}
+
+function sortMedList() {
+  medList.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+}
+
+function nowTime() {
+  const n = new Date();
+  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+// ═══════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════
+
+function render() {
+  renderMedListChips();
+  renderMedEntryChips();
+  renderDebug();
+}
+
+function renderMedListChips() {
+  const el = document.getElementById('med-list-chips');
+  const chips = medList.map(med => {
+    const doseStr = med.defaultDose ? `${med.defaultDose}${med.unit}` : med.unit;
+    const ivs = intervalStatusMed(med);
+    if (deleteMode) {
+      return `<div class="chip chip-med-list" style="border-color:var(--delete-color);flex-direction:row;align-items:center;justify-content:space-between;gap:6px">
+        <div style="flex:1;display:flex;align-items:center;gap:5px">💊 ${med.name} <span class="chip-dose">${doseStr}</span></div>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="chip-edit-btn" onclick="openEditMed('${med.id}')">✎</button>
+          <button class="chip-del-btn" onclick="deleteMed('${med.id}')">✕</button>
+        </div>
+      </div>`;
+    }
+    return `<button class="chip chip-med-list${ivs&&!ivs.due?' not-due':''}"
+      data-medid="${med.id}"
+      onclick="quickTake('${med.id}')"
+      style="flex-direction:column;align-items:flex-start;padding:6px 11px">
+      <div style="display:flex;align-items:center;gap:5px">
+        💊 ${med.name} <span class="chip-dose">${doseStr}</span>
+        <span class="chip-hint">⋯</span>
+      </div>
+      ${ivs ? `<div style="font-size:9px;color:${ivs.due?'var(--accent2)':'var(--muted)'};margin-top:2px">${ivs.label}</div>` : ''}
+    </button>`;
+  }).join('');
+
+  const addBtn = deleteMode ? '' :
+    `<button class="chip chip-add" onclick="openNewMed()" title="Medikament hinzufügen">+</button>`;
+
+  el.innerHTML = chips + addBtn;
+}
+
+function renderMedEntryChips() {
+  const el = document.getElementById('med-entry-chips');
+  const empty = document.getElementById('med-empty');
+
+  if (!medEntries.length) {
+    el.innerHTML = '<div class="empty-state">Noch keine Einnahmen</div>';
+    return;
+  }
+
+  // Sort entries by time
+  const sorted = [...medEntries].sort((a, b) => a.time.localeCompare(b.time));
+
+  el.innerHTML = sorted.map(entry => {
+    const doseStr = entry.dose ? `${entry.dose}${entry.unit}` : '';
+    if (deleteMode) {
+      return `<div class="chip chip-entry" style="border-color:var(--delete-color);flex-direction:row;align-items:center;justify-content:space-between;gap:6px">
+        <div style="flex:1;display:flex;align-items:center;gap:5px">
+          ${entry.name}
+          ${doseStr ? `<span class="chip-dose-val">${doseStr}</span>` : ''}
+          <span class="chip-time">${entry.time}</span>
+        </div>
+        <button class="chip-del-btn" onclick="deleteEntry('${entry.id}')">✕</button>
+      </div>`;
+    }
+    return `<button class="chip chip-entry"
+      data-entryid="${entry.id}">
+      ${entry.name}
+      ${doseStr ? `<span class="chip-dose-val">${doseStr}</span>` : ''}
+      <span class="chip-time">${entry.time}</span>
+      <span class="chip-hint">⋯</span>
+    </button>`;
+  }).join('');
+}
+
+function renderDebug() {
+  const out = {
+    medikamente: medEntries.map(e => ({
+      medikament: e.name,
+      ...(e.dose ? { menge: e.dose, einheit: e.unit } : {}),
+      uhrzeit: e.time
+    })).sort((a,b) => a.uhrzeit.localeCompare(b.uhrzeit)),
+    ...(medComment ? { kommentar: medComment } : {})
+  };
+  document.getElementById('debug-output').textContent = JSON.stringify(out, null, 2);
+}
+
+// ═══════════════════════════════════════════
+// DELETE MODE
+// ═══════════════════════════════════════════
+
+function toggleDeleteMode() {
+  deleteMode = !deleteMode;
+  const btn = document.getElementById('delete-mode-btn');
+  btn.classList.toggle('active', deleteMode);
+  btn.textContent = deleteMode ? '✓ Fertig' : '🗑 Löschen';
+  render();
+}
+
+function deleteMed(id) {
+  const med = medList.find(m => m.id === id);
+  medList = medList.filter(m => m.id !== id);
+  saveMedList();
+  render();
+  showToast(`${med?.name} entfernt`);
+  // Auto-exit delete mode if list empty
+  if (!medList.length) toggleDeleteMode();
+}
+
+function deleteEntry(id) {
+  const entry = medEntries.find(e => e.id === id);
+  medEntries = medEntries.filter(e => e.id !== id);
+  render();
+  showToast(`Einnahme ${entry?.name} gelöscht`);
+}
+
+// ═══════════════════════════════════════════
+// NEW MED MODAL
+// ═══════════════════════════════════════════
+
+function openNewMed() {
+  document.getElementById('new-med-name').value = '';
+  document.getElementById('new-med-dose').value = '';
+  document.getElementById('new-med-unit').value = 'mg';
+  updateDoseQuick();
+  openModal('modal-new-med');
+  setTimeout(() => document.getElementById('new-med-name').focus(), 100);
+}
+
+function updateDoseQuick() {
+  const unit = document.getElementById('new-med-unit').value;
+  const presets = getPresetsForUnit(unit);
+  const currentVal = document.getElementById('new-med-dose').value;
+
+  document.getElementById('new-med-dose-quick').innerHTML = presets.map(v =>
+    `<button class="dose-btn${parseFloat(currentVal) === v ? ' selected' : ''}"
+      onclick="selectDosePreset('new-med-dose', ${v}, this)">${v}${unit}</button>`
+  ).join('');
+}
+
+function selectDosePreset(inputId, val, btn) {
+  document.getElementById(inputId).value = val;
+  // Highlight selected
+  btn.closest('.dose-quick').querySelectorAll('.dose-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+function saveMed() {
+  const name = document.getElementById('new-med-name').value.trim();
+  const unit = document.getElementById('new-med-unit').value;
+  const dose = parseFloat(document.getElementById('new-med-dose').value) || null;
+
+  if (!name) { showToast('Bitte Namen eingeben'); return; }
+  if (medList.find(m => m.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Medikament bereits vorhanden'); return;
+  }
+
+  medList.push({ id: uid(), name, unit, defaultDose: dose });
+  sortMedList();
+  saveMedList();
+  closeModal('modal-new-med');
+  render();
+  showToast(`${name} hinzugefügt`);
+}
+
+// ═══════════════════════════════════════════
+// TAKE MED MODAL
+// ═══════════════════════════════════════════
+
+// ── QUICK TAKE (kurzer Tap auf Listen-Chip) ──
+function quickTake(medId) {
+  const med = medList.find(m => m.id === medId);
+  if (!med) return;
+  const now = new Date();
+  const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  medEntries.push({ id: uid(), medId: med.id, name: med.name, dose: med.defaultDose, unit: med.unit, time: t });
+  if(med.intervalDays) med.lastUsed = today();
+  render();
+  const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
+  showToast(`${med.name}${doseStr} ✓`);
+}
+
+// ── OPEN TAKE MODAL (langer Tap auf Listen-Chip) ──
+function openTake(medId) {
+  const med = medList.find(m => m.id === medId);
+  if (!med) return;
+  takeCtx = { med };
+  document.getElementById('take-med-title').textContent = `💊 ${med.name}`;
+  document.getElementById('take-time-input').value = nowTime();
+  document.getElementById('take-dose-input').value = med.defaultDose || '';
+  // Set unit select
+  populateUnitSelects();
+  document.getElementById('take-unit-input').value = med.unit;
+  updateTakeDoseQuick();
+  openModal('modal-take-med');
+}
+
+function updateTakeDoseQuick() {
+  const unit = document.getElementById('take-unit-input').value;
+  const curVal = document.getElementById('take-dose-input').value;
+  const presets = getPresetsForUnit(unit);
+  document.getElementById('take-dose-quick').innerHTML = presets.map(v =>
+    `<button class="dose-btn${parseFloat(curVal) === v ? ' selected' : ''}"
+      onclick="selectDosePreset('take-dose-input', ${v}, this)">${v}${unit}</button>`
+  ).join('');
+}
+
+function confirmTake() {
+  if (!takeCtx) return;
+  const dose = parseFloat(document.getElementById('take-dose-input').value) || null;
+  const unit = document.getElementById('take-unit-input').value;
+  const time = document.getElementById('take-time-input').value || nowTime();
+
+  if (takeCtx.editId) {
+    const idx = medEntries.findIndex(e => e.id === takeCtx.editId);
+    if (idx !== -1) {
+      medEntries[idx].dose = dose;
+      medEntries[idx].unit = unit;
+      medEntries[idx].time = time;
+    }
+    closeModal('modal-take-med');
+    takeCtx = null;
+    render();
+    showToast('Einnahme aktualisiert ✓');
+  } else {
+    const { med } = takeCtx;
+    medEntries.push({ id: uid(), medId: med.id, name: med.name, dose, unit, time });
+    closeModal('modal-take-med');
+    takeCtx = null;
+    render();
+    const doseStr = dose ? ` · ${dose}${unit}` : '';
+    showToast(`${med.name}${doseStr} um ${time} ✓`);
+  }
+}
+
+// ── EDIT ENTRY (langer Tap auf Einnahme-Chip) ──
+function editEntry(entryId) {
+  const entry = medEntries.find(e => e.id === entryId);
+  if (!entry) return;
+  const med = medList.find(m => m.id === entry.medId) || { name: entry.name, unit: entry.unit, defaultDose: entry.dose };
+  takeCtx = { med, editId: entryId };
+  document.getElementById('take-med-title').textContent = `✎ ${entry.name} bearbeiten`;
+  document.getElementById('take-time-input').value = entry.time;
+  document.getElementById('take-dose-input').value = entry.dose || '';
+  populateUnitSelects();
+  document.getElementById('take-unit-input').value = entry.unit;
+  updateTakeDoseQuick();
+  openModal('modal-take-med');
+}
+
+// ── LONG PRESS ────────────────────────────
+let lpTimer = null, lpFired = false;
+
+document.addEventListener('pointerdown', e => {
+  const listBtn = e.target.closest('[data-medid]');
+  const entryBtn = e.target.closest('[data-entryid]');
+  if (!listBtn && !entryBtn) return;
+  if (deleteMode) return;
+  lpFired = false;
+  lpTimer = setTimeout(() => {
+    lpFired = true;
+    if (listBtn) openTake(listBtn.dataset.medid);
+    if (entryBtn) editEntry(entryBtn.dataset.entryid);
+  }, 500);
+});
+document.addEventListener('pointerup', () => clearTimeout(lpTimer));
+document.addEventListener('pointercancel', () => clearTimeout(lpTimer));
+document.addEventListener('click', e => {
+  if (lpFired) { lpFired = false; e.stopImmediatePropagation(); e.preventDefault(); }
+}, true);
+
+// ═══════════════════════════════════════════
+// MODAL HELPERS
+// ═══════════════════════════════════════════
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  takeCtx = null;
+}
+// Close on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeModal(overlay.id);
+  });
+});
+
+// ═══════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════
+
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+
+// ── DATUM / INTERVALL ────────────────────
+let simDate = null;
+function today(){ return simDate || new Date().toISOString().slice(0,10); }
+
+function intervalStatusMed(med){
+  if(!med.intervalDays) return null;
+  if(!med.lastUsed) return { due:true, label:'noch nie → heute fällig' };
+  const diff = Math.round((new Date(today()) - new Date(med.lastUsed)) / (1000*60*60*24));
+  const rem = med.intervalDays - diff;
+  if(rem <= 0) return { due:true,  label:`zuletzt vor ${diff}d → heute fällig` };
+  if(rem === 1) return { due:false, label:`zuletzt vor ${diff}d → morgen fällig` };
+  return { due:false, label:`zuletzt vor ${diff}d → in ${rem}d fällig` };
+}
+
+// ── EDIT MED ─────────────────────────────
+let editMedCtx = null;
+
+function openEditMed(medId){
+  const med = medList.find(m => m.id === medId);
+  if(!med) return;
+  editMedCtx = { medId };
+  document.getElementById('edit-med-name').value = med.name;
+  document.getElementById('edit-med-dose').value = med.defaultDose || '';
+  const hasInterval = !!med.intervalDays;
+  document.getElementById('edit-med-interval-on').checked = hasInterval;
+  document.getElementById('edit-med-interval-days').disabled = !hasInterval;
+  document.getElementById('edit-med-interval-days').value = med.intervalDays || 2;
+  populateUnitSelects();
+  document.getElementById('edit-med-unit').value = med.unit;
+  updateEditMedQuick();
+  openModal('modal-edit-med');
+  setTimeout(()=>document.getElementById('edit-med-name').focus(), 100);
+}
+
+function updateEditMedQuick(){
+  const unit = document.getElementById('edit-med-unit').value;
+  const cur = parseFloat(document.getElementById('edit-med-dose').value);
+  const presets = getPresetsForUnit(unit);
+  document.getElementById('edit-med-dose-quick').innerHTML = presets.map(v =>
+    `<button class="dose-btn${cur===v?' selected':''}"
+      onclick="selectDosePreset('edit-med-dose',${v},this)">${v}${unit}</button>`
+  ).join('');
+}
+
+function saveEditMed(){
+  if(!editMedCtx) return;
+  const med = medList.find(m => m.id === editMedCtx.medId);
+  if(!med) return;
+  const name = document.getElementById('edit-med-name').value.trim();
+  const unit = document.getElementById('edit-med-unit').value;
+  const dose = parseFloat(document.getElementById('edit-med-dose').value) || null;
+  const intervalOn = document.getElementById('edit-med-interval-on').checked;
+  const intervalDays = intervalOn ? parseInt(document.getElementById('edit-med-interval-days').value) || null : null;
+  if(!name){ showToast('Name fehlt'); return; }
+  med.name = name; med.unit = unit; med.defaultDose = dose;
+  med.intervalDays = intervalDays;
+  sortMedList();
+  editMedCtx = null;
+  closeModal('modal-edit-med');
+  showToast(`${name} gespeichert ✓`);
+  render();
+}
+
+// ── KOMMENTARE ─────────────────────────────────────────────
+
+let medComment = '';
+let medCommentOpen = false;
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function toggleMedComment(){
+  medCommentOpen = !medCommentOpen;
+  const area = document.getElementById('med-comment-area');
+  const preview = document.getElementById('med-comment-preview');
+  const btn = document.getElementById('med-comment-btn');
+  if(medCommentOpen){
+    area.style.display = 'block';
+    preview.style.display = 'none';
+    document.getElementById('med-comment-text').value = medComment;
+    setTimeout(()=>{
+      const ta = document.getElementById('med-comment-text');
+      if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }, 50);
+  } else {
+    area.style.display = 'none';
+    if(medComment){
+      preview.textContent = medComment;
+      preview.style.display = 'block';
+    } else {
+      preview.style.display = 'none';
+    }
+  }
+  btn.classList.toggle('has-comment', !!medComment);
+}
+
+function saveMedComment(){
+  const val = document.getElementById('med-comment-text').value.trim();
+  medComment = val;
+  medCommentOpen = false;
+  const area = document.getElementById('med-comment-area');
+  const preview = document.getElementById('med-comment-preview');
+  const btn = document.getElementById('med-comment-btn');
+  area.style.display = 'none';
+  btn.classList.toggle('has-comment', !!medComment);
+  if(medComment){
+    preview.textContent = medComment;
+    preview.style.display = 'block';
+    showToast('Kommentar gespeichert ✓');
+  } else {
+    preview.style.display = 'none';
+    showToast('Kommentar entfernt');
+  }
+  renderDebug();
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+
+sortMedList();
+populateUnitSelects();
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Aktivität · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;--text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;--accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;--safe:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;--text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;--accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:40px}
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid #8bc4d8}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+.sublabel{font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:8px}
+
+/* ENTRY */
+.entry-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px}
+.entry-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.entry-time{font-size:10px;color:var(--gold)}
+.entry-del{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer}
+
+/* ACTIVITY CHIPS */
+.chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.act-chip{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:6px 12px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);
+  transition:all .12s;user-select:none}
+.act-chip:active{transform:scale(0.95)}
+.act-chip.sel{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 15%,var(--surface2));color:var(--text)}
+
+/* INTENSITY */
+.int-row{display:flex;gap:6px;margin-top:8px}
+.int-btn{flex:1;padding:6px 4px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted);cursor:pointer;text-align:center;transition:all .12s}
+.int-btn.sel-leicht{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 15%,var(--surface2));color:var(--accent2)}
+.int-btn.sel-mittel{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 12%,var(--surface2));color:var(--gold)}
+.int-btn.sel-intensiv{border-color:var(--delete);background:color-mix(in srgb,var(--delete) 12%,var(--surface2));color:var(--delete)}
+
+/* DAUER */
+.dauer-row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.db{background:var(--surface2);border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text);cursor:pointer}
+.db.sel{background:var(--accent);border-color:var(--accent);color:#f5f0e8}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);outline:none;margin-top:6px}
+.mi:focus{border-color:var(--accent)}
+
+.btn-ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-edit-mode{background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-edit-mode.on{border-color:var(--accent3);color:var(--accent3);background:color-mix(in srgb,var(--accent3) 10%,transparent)}
+.icon-opt{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:6px 8px;font-size:18px;cursor:pointer;line-height:1;transition:all .12s}
+.icon-opt:active,.icon-opt.sel{background:var(--accent2);border-color:var(--accent2)}
+.btn-del{background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-del.on{border-color:var(--delete);color:var(--delete);background:color-mix(in srgb,var(--delete) 10%,transparent)}
+.chip-edit-btn{background:none;border:1px solid var(--accent3);border-radius:12px;padding:2px 8px;font-size:10px;color:var(--accent3);cursor:pointer;font-family:'JetBrains Mono',monospace}
+.chip-del-btn{background:none;border:1px solid var(--delete);border-radius:12px;padding:2px 8px;font-size:10px;color:var(--delete);cursor:pointer;font-family:'JetBrains Mono',monospace}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:4px}
+.mt-sub{font-size:10px;color:var(--muted);margin-bottom:14px}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:6px;display:block;margin-top:12px}
+.ml:first-of-type{margin-top:0}
+.ms{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none}
+.mbr{display:flex;gap:8px;margin-top:16px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;transition:all .2s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="page-header"><h1>Lars · <em>Health</em></h1><p>Aktivität · Prototyp</p></div>
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">🏃 Aktivität</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn-del" id="btn-del" onclick="toggleDelMode()">🗑 Löschen</button>
+      <button class="btn-edit-mode" id="btn-edit" onclick="toggleEditMode()">✎ Bearbeiten</button>
+      <button class="btn-ghost" onclick="openNew()">+ Neu</button>
+    </div>
+  </div>
+  <div class="sublabel">Heute erfasst</div>
+  <div id="entries"></div>
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+    <div class="sublabel">Aktivität wählen</div>
+    <div id="act-chips" class="chip-row"></div>
+  </div>
+</div>
+<div class="debug"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div><pre id="dbg"></pre></div>
+
+<!-- MODAL: Aktivität hinzufügen -->
+<div class="modal-overlay" id="m-add">
+  <div class="modal-sheet">
+    <div class="mt" id="m-add-title">Aktivität erfassen</div>
+    <div class="mt-sub">Kurz tippen = direkt erfassen · Lang halten = Details</div>
+    <label class="ml">Aktivität</label>
+    <select class="ms" id="m-add-type"></select>
+    <label class="ml">Dauer (Minuten) <span style="color:var(--accent)">*</span></label>
+    <div class="dauer-row" id="m-add-quick"></div>
+    <input class="mi" id="m-add-dauer" type="number" min="1" placeholder="Andere Dauer...">
+    <label class="ml">Intensität</label>
+    <div class="int-row" id="m-add-int">
+      <button class="int-btn" onclick="setInt('leicht',this)">🟢 Leicht</button>
+      <button class="int-btn sel-mittel" onclick="setInt('mittel',this)">🟡 Mittel</button>
+      <button class="int-btn" onclick="setInt('intensiv',this)">🔴 Intensiv</button>
+    </div>
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="m-add-time" type="time">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-add')">Abbrechen</button>
+      <button class="bp" onclick="confirmAdd()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Aktivität anlegen/bearbeiten -->
+<div class="modal-overlay" id="m-new">
+  <div class="modal-sheet">
+    <div class="mt" id="m-new-title">Aktivität anlegen</div>
+    <label class="ml">Name</label>
+    <input class="mi" id="m-new-name" placeholder="z.B. Klettern, Tanzen...">
+    <label class="ml">Icon wählen</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px" id="icon-picker">
+      <button class="icon-opt" onclick="selectIcon('🚶',this)">🚶</button>
+      <button class="icon-opt" onclick="selectIcon('🏃',this)">🏃</button>
+      <button class="icon-opt" onclick="selectIcon('🚴',this)">🚴</button>
+      <button class="icon-opt" onclick="selectIcon('🏊',this)">🏊</button>
+      <button class="icon-opt" onclick="selectIcon('🧗',this)">🧗</button>
+      <button class="icon-opt" onclick="selectIcon('🤸',this)">🤸</button>
+      <button class="icon-opt" onclick="selectIcon('⛷',this)">⛷</button>
+      <button class="icon-opt" onclick="selectIcon('🏋',this)">🏋</button>
+      <button class="icon-opt" onclick="selectIcon('🤾',this)">🤾</button>
+      <button class="icon-opt" onclick="selectIcon('🧘',this)">🧘</button>
+      <button class="icon-opt" onclick="selectIcon('🏇',this)">🏇</button>
+      <button class="icon-opt" onclick="selectIcon('🏄',this)">🏄</button>
+      <button class="icon-opt" onclick="selectIcon('⛹',this)">⛹</button>
+      <button class="icon-opt" onclick="selectIcon('🥾',this)">🥾</button>
+      <button class="icon-opt" onclick="selectIcon('🏅',this)">🏅</button>
+      <button class="icon-opt" onclick="selectIcon('💪',this)">💪</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div id="selected-icon-preview" style="font-size:24px;line-height:1">🏅</div>
+      <input class="mi" id="m-new-icon" placeholder="oder eigenes Emoji..." maxlength="2"
+        oninput="updateIconPreview()" style="flex:1">
+    </div>
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-new')">Abbrechen</button>
+      <button class="bp" onclick="saveNew()">Speichern</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const DAUER_QUICK = [15,20,30,45,60,90];
+let aktivitaeten = [];
+// Leer — Aktivitäten selbst anlegen
+let entries = [];
+let addCtx = null, editCtx = null, currentInt = 'mittel';
+let delMode = false, editMode = false;
+let lpTimer = null, lpFired = false;
+function uid(){return Math.random().toString(36).slice(2,9)}
+function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+
+function setInt(v,btn){
+  currentInt=v;
+  document.querySelectorAll('#m-add-int .int-btn').forEach(b=>b.className='int-btn');
+  btn.className=`int-btn sel-${v}`;
+}
+
+function render(){
+  // entries
+  const el=document.getElementById('entries');
+  if(!entries.length){el.innerHTML='<div style="font-size:11px;color:var(--muted);font-style:italic;margin-bottom:10px">Noch nichts erfasst</div>';return;}
+  const intColor={leicht:'var(--accent2)',mittel:'var(--gold)',intensiv:'var(--delete)'};
+  el.innerHTML=[...entries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
+    <div class="entry-card">
+      <div class="entry-header">
+        <span style="font-size:14px">${e.icon}</span>
+        <span style="font-size:11px;font-weight:500;flex:1;margin-left:6px">${e.name}</span>
+        ${e.dauer?`<span style="font-size:10px;color:var(--gold)">${e.dauer} min</span>`:''}
+        <span style="font-size:10px;color:${intColor[e.intensitaet]||'var(--muted)'};margin-left:8px">${e.intensitaet}</span>
+        <span class="entry-time" style="margin-left:8px">${e.time}</span>
+        <button class="entry-del" onclick="deleteEntry('${e.id}')">✕</button>
+      </div>
+    </div>`).join('');
+  renderDbg();
+  // chips
+  const cc=document.getElementById('act-chips');
+  if(!aktivitaeten.length && !delMode && !editMode){
+    cc.innerHTML=`<div style="font-size:11px;color:var(--muted);font-style:italic;margin-bottom:6px">Noch keine Aktivitäten — lege deine erste an!</div><button class="act-chip" onclick="openNew()" style="border-style:dashed">+</button>`;
+    return;
+  }
+  cc.innerHTML=aktivitaeten.map(a=>{
+    if(delMode) return `<div class="act-chip" style="border-color:var(--delete);flex-direction:row;align-items:center;gap:6px">
+      <span style="flex:1">${a.icon} ${a.name}</span>
+      <button class="chip-del-btn" onclick="deleteAkt('${a.id}')">✕</button>
+    </div>`;
+    if(editMode) return `<div class="act-chip" style="border-color:var(--accent3);flex-direction:row;align-items:center;gap:6px">
+      <span style="flex:1">${a.icon} ${a.name}</span>
+      <button class="chip-edit-btn" onclick="openEdit('${a.id}')">✎</button>
+    </div>`;
+    return `<button class="act-chip" onclick="quickAdd('${a.id}')">${a.icon} ${a.name}</button>`;
+  }).join('')+(!delMode&&!editMode?`<button class="act-chip" onclick="openNew()" style="border-style:dashed">+</button>`:'');
+}
+
+function renderDbg(){
+  document.getElementById('dbg').textContent=JSON.stringify({aktivitaet:entries.sort((a,b)=>a.time.localeCompare(b.time)).map(e=>({aktivitaet:e.name,...(e.dauer?{dauer_min:e.dauer}:{}),intensitaet:e.intensitaet,uhrzeit:e.time}))},null,2);
+}
+
+function quickAdd(aid){
+  openAddModal(aid);
+}
+
+
+
+function openAddModal(aid){
+  if(!aktivitaeten.length){showToast('Erst eine Aktivität anlegen →  + Neu');return;}
+  const a=aktivitaeten.find(x=>x.id===aid)||aktivitaeten[0];
+  addCtx={aid:a.id};
+  document.getElementById('m-add-title').textContent=`${a.icon} ${a.name}`;
+  document.getElementById('m-add-time').value=nowTime();
+  document.getElementById('m-add-dauer').value='';
+  document.getElementById('m-add-type').innerHTML=aktivitaeten.map(x=>`<option value="${x.id}"${x.id===aid?' selected':''}>${x.icon} ${x.name}</option>`).join('');
+  document.getElementById('m-add-quick').innerHTML=DAUER_QUICK.map(v=>`<button class="db" onclick="pickDauer(${v},this)">${v} min</button>`).join('');
+  setInt('mittel',document.querySelectorAll('#m-add-int .int-btn')[1]);
+  openModal('m-add');
+}
+function pickDauer(v,btn){
+  document.getElementById('m-add-dauer').value=v;
+  btn.closest('.dauer-row').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function confirmAdd(){
+  const aid=document.getElementById('m-add-type').value;
+  const a=aktivitaeten.find(x=>x.id===aid);
+  const dauer=parseInt(document.getElementById('m-add-dauer').value)||null;
+  if(!dauer){showToast('Bitte Dauer eingeben');document.getElementById('m-add-dauer').focus();return;}
+  const time=document.getElementById('m-add-time').value||nowTime();
+  entries.push({id:uid(),aid,name:a.name,icon:a.icon,dauer,intensitaet:currentInt,time});
+  closeModal('m-add');addCtx=null;render();
+  showToast(`${a.icon} ${a.name} · ${dauer} min ✓`);
+}
+function deleteEntry(id){entries=entries.filter(e=>e.id!==id);render();}
+function toggleDelMode(){
+  delMode=!delMode;
+  if(delMode)editMode=false;
+  updateModeBtns();render();
+}
+function toggleEditMode(){
+  editMode=!editMode;
+  if(editMode)delMode=false;
+  updateModeBtns();render();
+}
+function updateModeBtns(){
+  const d=document.getElementById('btn-del');
+  d.classList.toggle('on',delMode);d.textContent=delMode?'✓ Fertig':'🗑 Löschen';
+  const e=document.getElementById('btn-edit');
+  e.classList.toggle('on',editMode);e.textContent=editMode?'✓ Fertig':'✎ Bearbeiten';
+}
+function openEdit(id){
+  editCtx={id};
+  const a=aktivitaeten.find(x=>x.id===id);if(!a)return;
+  document.getElementById('m-new-title').textContent='Aktivität bearbeiten';
+  document.getElementById('m-new-name').value=a.name;
+  document.getElementById('m-new-icon').value='';
+  document.getElementById('selected-icon-preview').textContent=a.icon;
+  document.querySelectorAll('#icon-picker .icon-opt').forEach(b=>b.classList.toggle('sel',b.textContent===a.icon));
+  openModal('m-new');
+  setTimeout(()=>document.getElementById('m-new-name').focus(),50);
+}
+function selectIcon(icon,btn){
+  document.getElementById('selected-icon-preview').textContent=icon;
+  document.getElementById('m-new-icon').value='';
+  document.querySelectorAll('#icon-picker .icon-opt').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function updateIconPreview(){
+  const v=document.getElementById('m-new-icon').value.trim();
+  if(v){
+    document.getElementById('selected-icon-preview').textContent=v;
+    document.querySelectorAll('#icon-picker .icon-opt').forEach(b=>b.classList.remove('sel'));
+  }
+}
+function deleteAkt(id){aktivitaeten=aktivitaeten.filter(x=>x.id!==id);render();}
+function openNew(){
+  editCtx=null;
+  document.getElementById('m-new-title').textContent='Aktivität anlegen';
+  document.getElementById('m-new-name').value='';
+  document.getElementById('m-new-icon').value='';
+  document.getElementById('selected-icon-preview').textContent='🏅';
+  document.querySelectorAll('#icon-picker .icon-opt').forEach(b=>b.classList.remove('sel'));
+  openModal('m-new');
+  setTimeout(()=>document.getElementById('m-new-name').focus(),50);
+}
+function saveNew(){
+  const name=document.getElementById('m-new-name').value.trim();
+  const icon=document.getElementById('selected-icon-preview')?.textContent||document.getElementById('m-new-icon').value.trim()||'🏅';
+  if(!name){showToast('Name fehlt');return;}
+  if(editCtx?.id){
+    const a=aktivitaeten.find(x=>x.id===editCtx.id);
+    if(a){a.name=name;a.icon=icon;}
+    showToast(`${icon} ${name} gespeichert ✓`);
+  } else {
+    aktivitaeten.push({id:uid(),name,icon});
+    aktivitaeten.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    showToast(`${icon} ${name} hinzugefügt`);
+  }
+  editCtx=null;
+  closeModal('m-new');render();
+}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeModal(o.id)}));
+let tt;
+function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);}
+render();
+</script>
+</body>
+</html>

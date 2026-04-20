@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Befinden · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;
+  --text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;
+  --accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;
+  --c-befinden:#8bc4a0;
+  --safe:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;
+  --text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;
+  --accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555;
+}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;
+  font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:40px}
+
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid var(--c-befinden)}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+
+/* ANKER CARDS */
+.anker-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.anker-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none}
+.anker-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em}
+.anker-badge{border-radius:10px;padding:1px 7px;font-size:9px;font-weight:600;background:var(--border);color:var(--muted)}
+.anker-badge.done{background:var(--accent2);color:#f5f0e8}
+.anker-body{padding:12px 14px 14px;border-top:1px solid var(--border)}
+
+/* METRIC ROW */
+.metric-row{margin-bottom:12px}
+.metric-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.metric-label{font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)}
+.metric-value{font-size:11px;color:var(--accent);font-weight:500}
+.metric-optional-btn{font-size:9px;color:var(--accent3);background:none;border:1px solid var(--accent3);
+  border-radius:10px;padding:1px 7px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.metric-optional-btn.active{background:var(--accent3);color:#f5f0e8}
+
+/* CHIP SCALE */
+.chip-scale{display:flex;gap:5px}
+.scale-chip{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:6px 2px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);cursor:pointer;transition:all .12s;
+  font-family:'JetBrains Mono',monospace;user-select:none;-webkit-user-select:none}
+.scale-chip:active{transform:scale(0.95)}
+.scale-chip.selected{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 18%,var(--surface2))}
+.scale-chip.selected .sc-num{color:var(--accent2)}
+.scale-chip .sc-emoji{font-size:14px;line-height:1}
+.scale-chip .sc-num{font-size:9px;color:var(--muted)}
+
+/* Entzündung / Haut scale — red tones */
+.scale-chip.pain-0.selected{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 18%,var(--surface2))}
+.scale-chip.pain-0.selected .sc-num{color:var(--accent2)}
+.scale-chip.pain-1.selected,.scale-chip.pain-2.selected{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 15%,var(--surface2))}
+.scale-chip.pain-1.selected .sc-num,.scale-chip.pain-2.selected .sc-num{color:var(--gold)}
+.scale-chip.pain-3.selected,.scale-chip.pain-4.selected,.scale-chip.pain-5.selected{border-color:var(--delete);background:color-mix(in srgb,var(--delete) 15%,var(--surface2))}
+.scale-chip.pain-3.selected .sc-num,.scale-chip.pain-4.selected .sc-num,.scale-chip.pain-5.selected .sc-num{color:var(--delete)}
+
+/* OPTIONAL METRICS EXPAND */
+.optional-metrics{margin-top:4px;padding-top:10px;border-top:1px dashed var(--border)}
+.add-optional-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.opt-toggle-chip{display:inline-flex;align-items:center;gap:4px;border-radius:20px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  border:1px dashed var(--border);background:none;color:var(--muted);cursor:pointer}
+.opt-toggle-chip.active{border-style:solid;border-color:var(--accent3);
+  background:color-mix(in srgb,var(--accent3) 12%,transparent);color:var(--accent3)}
+
+/* COMMENT */
+.comment-btn{background:none;border:none;font-size:13px;cursor:pointer;
+  padding:2px 4px;opacity:0.4;line-height:1}
+.comment-btn.has-comment{opacity:1;color:var(--gold)}
+.comment-textarea{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text);outline:none;resize:none;height:56px;line-height:1.5;margin-top:10px}
+.comment-textarea:focus{border-color:var(--accent)}
+.comment-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.comment-save{background:var(--accent);color:#f5f0e8;border:none;border-radius:8px;
+  padding:4px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer}
+.comment-clear{background:none;border:1px solid var(--border);border-radius:8px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.comment-preview{font-size:10px;color:var(--gold);font-style:italic;
+  padding:4px 2px;line-height:1.4;white-space:pre-wrap;cursor:pointer;margin-top:6px}
+
+/* SPONTAN ENTRIES */
+.spontan-entry{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;margin-bottom:8px;position:relative}
+.spontan-time{font-size:9px;color:var(--gold);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px}
+.spontan-del{position:absolute;top:8px;right:10px;background:none;border:none;
+  font-size:12px;color:var(--muted);cursor:pointer}
+
+/* METRIKEN MANAGER */
+.metric-mgr-chip{display:inline-flex;align-items:center;gap:5px;border-radius:20px;
+  padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  border:1px solid var(--border);background:var(--surface2);color:var(--text)}
+.metric-mgr-chip.pflicht{border-color:var(--accent2);color:var(--accent2)}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;
+  padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:4px}
+.mt-sub{font-size:10px;color:var(--muted);margin-bottom:16px}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:6px;display:block;margin-top:12px}
+.ml:first-of-type{margin-top:0}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);outline:none}
+.mi:focus{border-color:var(--accent)}
+.ms{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none}
+.mbr{display:flex;gap:8px;margin-top:16px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;
+  padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+
+.btn-ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-ghost:active{border-color:var(--accent);color:var(--accent)}
+
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;
+  transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
+  padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;transition:all .2s;
+  pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.btn-del{background:none;border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.btn-del.on{border-color:var(--delete);color:var(--delete);background:color-mix(in srgb,var(--delete) 10%,transparent)}
+
+.stk-btn-e{font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:20px;
+  padding:6px 16px;border:1px solid var(--border);background:none;color:var(--muted);
+  cursor:pointer;flex:1}
+.stk-btn-e.sel{background:var(--accent3);border-color:var(--accent3);color:#f5f0e8}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Lars · <em>Health</em></h1>
+  <p>Befinden · Prototyp</p>
+</div>
+
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">Befinden</div>
+    <button class="btn-ghost" onclick="openMetrikMgr()">⚙ Metriken</button>
+  </div>
+
+  <!-- ANKER: MORGEN -->
+  <div class="anker-card" id="card-morgen">
+    <div class="anker-header" onclick="toggleAnker('morgen')">
+      <span class="anker-label">🌅 Morgen</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="anker-badge" id="badge-morgen">—</span>
+        <button class="comment-btn" id="cbtn-morgen"
+          onclick="event.stopPropagation();toggleComment('morgen')" title="Kommentar">💬</button>
+        <span style="color:var(--muted);font-size:12px" id="arr-morgen">▼</span>
+      </span>
+    </div>
+    <div class="anker-body" id="body-morgen" style="display:none">
+      <div id="metrics-morgen"></div>
+      <div id="comment-area-morgen"></div>
+    </div>
+  </div>
+
+  <!-- ANKER: ABEND -->
+  <div class="anker-card" id="card-abend">
+    <div class="anker-header" onclick="toggleAnker('abend')">
+      <span class="anker-label">🌆 Abend</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="anker-badge" id="badge-abend">—</span>
+        <button class="comment-btn" id="cbtn-abend"
+          onclick="event.stopPropagation();toggleComment('abend')" title="Kommentar">💬</button>
+        <span style="color:var(--muted);font-size:12px" id="arr-abend">▼</span>
+      </span>
+    </div>
+    <div class="anker-body" id="body-abend" style="display:none">
+      <div id="metrics-abend"></div>
+      <div id="comment-area-abend"></div>
+    </div>
+  </div>
+
+  <!-- SPONTANE EINTRÄGE -->
+  <div style="margin-top:6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)">Spontan</div>
+      <button class="btn-ghost" onclick="openSpontan()">+ Jetzt erfassen</button>
+    </div>
+    <div id="spontan-list"></div>
+  </div>
+</div>
+
+<div class="debug">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div>
+  <pre id="dbg"></pre>
+</div>
+
+<!-- MODAL: Spontan / Metriken eingeben -->
+<div class="modal-overlay" id="m-spontan">
+  <div class="modal-sheet">
+    <div class="mt" id="m-spontan-title">Befinden erfassen</div>
+    <div class="mt-sub" id="m-spontan-sub">Spontaner Eintrag</div>
+    <div id="m-spontan-metrics"></div>
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="m-spontan-time" type="time">
+    <label class="ml">Label <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <input class="mi" id="m-spontan-label" placeholder="z.B. Nachmittagstief, nach Sport..." style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-spontan')">Abbrechen</button>
+      <button class="bp" onclick="saveSpontan()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Metriken verwalten -->
+<div class="modal-overlay" id="m-mgr">
+  <div class="modal-sheet">
+    <div class="mt">Metriken verwalten</div>
+    <div class="mt-sub">Pflicht-Metriken immer sichtbar · Optionale per Tap aktivierbar</div>
+
+    <div id="mgr-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+      <label class="ml" style="margin-top:0">Neue Metrik</label>
+      <input class="mi" id="mgr-new-name" placeholder="z.B. Fokus, Kopfschmerz..." style="margin-bottom:8px">
+      <label class="ml">Skala</label>
+      <select class="ms" id="mgr-new-scale" style="margin-bottom:8px">
+        <option value="energie">😴→⚡ Energie (1–5)</option>
+        <option value="stimmung">😞→😊 Stimmung (1–5)</option>
+        <option value="pain">✅→🔴 Belastung (0–5)</option>
+        <option value="yesno">Ja / Nein</option>
+      </select>
+      <label class="ml">Typ</label>
+      <select class="ms" id="mgr-new-pflicht">
+        <option value="optional">Optional</option>
+        <option value="pflicht">Pflicht</option>
+      </select>
+    </div>
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-mgr')">Fertig</button>
+      <button class="bp" onclick="addMetrik()">+ Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- MODAL: Metrik bearbeiten -->
+<div class="modal-overlay" id="m-edit-metrik">
+  <div class="modal-sheet">
+    <div class="mt">Metrik bearbeiten</div>
+    <div class="mt-sub" id="m-edit-metrik-sub"></div>
+
+    <label class="ml">Name</label>
+    <input class="mi" id="edit-metrik-name" placeholder="z.B. Energie">
+
+    <label class="ml">Skala</label>
+    <select class="ms" id="edit-metrik-scale">
+      <option value="energie">😴→⚡ Energie (1–5)</option>
+      <option value="stimmung">😞→😊 Stimmung (1–5)</option>
+      <option value="pain">✅→🔴 Belastung (0–5)</option>
+      <option value="yesno">Ja / Nein</option>
+    </select>
+
+    <label class="ml">Typ</label>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button id="edit-pflicht-btn" class="stk-btn-e" onclick="setEditPflicht(true)">★ Pflicht</button>
+      <button id="edit-optional-btn" class="stk-btn-e" onclick="setEditPflicht(false)">☆ Optional</button>
+    </div>
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-edit-metrik')">Abbrechen</button>
+      <button class="bp" onclick="saveEditMetrik()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── SKALEN ────────────────────────────────
+const SCALES = {
+  energie: [
+    {v:1,label:'1'},{v:2,label:'2'},{v:3,label:'3'},{v:4,label:'4'},{v:5,label:'5'}
+  ],
+  stimmung: [
+    {v:1,label:'1'},{v:2,label:'2'},{v:3,label:'3'},{v:4,label:'4'},{v:5,label:'5'}
+  ],
+  pain: [
+    {v:0,label:'0'},{v:1,label:'1'},{v:2,label:'2'},{v:3,label:'3'},{v:4,label:'4'},{v:5,label:'5'}
+  ],
+  yesno: [
+    {v:0,label:'Nein'},{v:1,label:'Ja'}
+  ]
+};
+
+// ── METRIKEN (konfigurierbar) ─────────────
+let metriken = [
+  {id:'energie',  name:'Energie',    scale:'energie',  pflicht:true},
+  {id:'stimmung', name:'Stimmung',   scale:'stimmung', pflicht:true},
+  {id:'entz',     name:'Entzündung', scale:'pain',     pflicht:false},
+  {id:'haut',     name:'Haut',       scale:'pain',     pflicht:false},
+  {id:'schmerz',  name:'Schmerz',    scale:'pain',     pflicht:false},
+  {id:'fokus',    name:'Fokus',      scale:'energie',  pflicht:false},
+];
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+
+// ── STATE ─────────────────────────────────
+// ankerData: { morgen: { energie:3, stimmung:4, entz:null, ... }, abend:{...} }
+let ankerData = { morgen:{}, abend:{} };
+let ankerOpen = { morgen:true, abend:false };
+let ankerComments = { morgen:'', abend:'' };
+let ankerCommentOpen = { morgen:false, abend:false };
+// which optional metriken are active per anker
+let activeOptional = { morgen: new Set(), abend: new Set() };
+// spontaneous entries
+let spontanList = [];
+
+// ── RENDER ────────────────────────────────
+function render(){
+  ['morgen','abend'].forEach(anker => {
+    const body = document.getElementById('body-'+anker);
+    const arr = document.getElementById('arr-'+anker);
+    if(ankerOpen[anker]){
+      body.style.display='block';
+      arr.textContent='▲';
+      renderMetrics(anker);
+      renderCommentArea(anker);
+    } else {
+      body.style.display='none';
+      arr.textContent='▼';
+    }
+    renderBadge(anker);
+  });
+  renderSpontan();
+  renderDbg();
+}
+
+function renderBadge(anker){
+  const badge = document.getElementById('badge-'+anker);
+  const cbtn = document.getElementById('cbtn-'+anker);
+  const data = ankerData[anker];
+  const pflicht = metriken.filter(m=>m.pflicht);
+  const filled = pflicht.filter(m=>data[m.id]!=null).length;
+  if(filled===0){badge.textContent='—';badge.className='anker-badge'}
+  else if(filled===pflicht.length){badge.textContent='✓';badge.className='anker-badge done'}
+  else{badge.textContent=`${filled}/${pflicht.length}`;badge.className='anker-badge'}
+  cbtn.classList.toggle('has-comment',!!(ankerComments[anker]));
+}
+
+function renderMetrics(anker){
+  const container = document.getElementById('metrics-'+anker);
+  const data = ankerData[anker];
+  const aktOpt = activeOptional[anker];
+
+  // Pflicht metriken
+  const pflichtHtml = metriken.filter(m=>m.pflicht).map(m=>renderMetricRow(m,anker,data[m.id])).join('');
+
+  // Optionale die aktiv sind
+  const optActiveHtml = metriken.filter(m=>!m.pflicht && aktOpt.has(m.id))
+    .map(m=>renderMetricRow(m,anker,data[m.id],true)).join('');
+
+  // Toggle-Buttons für optionale
+  const optToggleHtml = metriken.filter(m=>!m.pflicht).map(m=>`
+    <button class="opt-toggle-chip${aktOpt.has(m.id)?' active':''}"
+      onclick="toggleOptional('${anker}','${m.id}')">
+      ${aktOpt.has(m.id)?'✓ ':'+ '}${m.name}
+    </button>`).join('');
+
+  container.innerHTML = `
+    ${pflichtHtml}
+    ${optActiveHtml}
+    <div class="add-optional-row">${optToggleHtml}</div>
+  `;
+}
+
+function renderMetricRow(m, anker, val, isOptional=false){
+  const scale = SCALES[m.scale];
+  const chips = scale.map(s=>`
+    <button class="scale-chip${val===s.v?' selected':''} ${m.scale==='pain'?'pain-'+s.v:(m.scale==='energie'||m.scale==='stimmung')?'en-'+s.v:''}"
+      onclick="setMetric('${anker}','${m.id}',${s.v})">
+      <span class="sc-num">${s.label}</span>
+    </button>`).join('');
+
+  return `
+    <div class="metric-row">
+      <div class="metric-label-row">
+        <span class="metric-label">${m.name}</span>
+        ${val!=null ? `<span class="metric-value">${val}</span>` : ''}
+      </div>
+      <div class="chip-scale">${chips}</div>
+    </div>`;
+}
+
+function renderCommentArea(anker){
+  const container = document.getElementById('comment-area-'+anker);
+  const isOpen = ankerCommentOpen[anker];
+  const comment = ankerComments[anker];
+  if(isOpen){
+    container.innerHTML = `
+      <textarea class="comment-textarea" id="ta-${anker}"
+        placeholder="Kommentar zum ${anker==='morgen'?'Morgen':'Abend'}..."
+      >${comment}</textarea>
+      <div class="comment-actions">
+        <button class="comment-clear" onclick="document.getElementById('ta-${anker}').value=''">Leeren</button>
+        <button class="comment-save" onclick="saveComment('${anker}')">Speichern</button>
+      </div>`;
+    setTimeout(()=>{
+      const ta=document.getElementById('ta-'+anker);
+      if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+    },50);
+  } else if(comment){
+    container.innerHTML = `<div class="comment-preview" onclick="toggleComment('${anker}')">${escHtml(comment)}</div>`;
+  } else {
+    container.innerHTML='';
+  }
+}
+
+function renderSpontan(){
+  const el = document.getElementById('spontan-list');
+  if(!spontanList.length){el.innerHTML='';return}
+  el.innerHTML = spontanList.map(e=>`
+    <div class="spontan-entry">
+      <div class="spontan-time">${e.time}${e.label?' · '+e.label:''}</div>
+      ${Object.entries(e.values).map(([mid,val])=>{
+        const m=metriken.find(x=>x.id===mid);
+        const s=SCALES[m?.scale||'energie'].find(x=>x.v===val);
+        return `<span style="font-size:11px;margin-right:10px">${m?.name||mid}: ${s?.emoji||val} ${val}</span>`;
+      }).join('')}
+      <button class="spontan-del" onclick="delSpontan('${e.id}')">✕</button>
+    </div>`).join('');
+}
+
+function renderDbg(){
+  const out = { befinden:{} };
+  ['morgen','abend'].forEach(anker=>{
+    const d = ankerData[anker];
+    const vals = Object.fromEntries(Object.entries(d).filter(([,v])=>v!=null));
+    if(Object.keys(vals).length||ankerComments[anker]){
+      out.befinden[anker] = {
+        ...vals,
+        ...(ankerComments[anker]?{kommentar:ankerComments[anker]}:{})
+      };
+    }
+  });
+  if(spontanList.length){
+    out.befinden.spontan = spontanList.map(e=>({
+      uhrzeit:e.time,
+      ...(e.label?{label:e.label}:{}),
+      ...e.values
+    }));
+  }
+  document.getElementById('dbg').textContent=JSON.stringify(out,null,2);
+}
+
+// ── INTERACTIONS ──────────────────────────
+function toggleAnker(id){
+  ankerOpen[id]=!ankerOpen[id];
+  render();
+}
+
+function setMetric(anker, metrikId, val){
+  // Toggle: tap same value again = deselect
+  if(ankerData[anker][metrikId]===val) ankerData[anker][metrikId]=null;
+  else ankerData[anker][metrikId]=val;
+  renderMetrics(anker);
+  renderBadge(anker);
+  renderDbg();
+}
+
+function toggleOptional(anker, metrikId){
+  const s = activeOptional[anker];
+  if(s.has(metrikId)){
+    s.delete(metrikId);
+    delete ankerData[anker][metrikId];
+  } else {
+    s.add(metrikId);
+  }
+  renderMetrics(anker);
+  renderDbg();
+}
+
+// ── COMMENTS ─────────────────────────────
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function toggleComment(anker){
+  ankerCommentOpen[anker]=!ankerCommentOpen[anker];
+  if(ankerCommentOpen[anker]) ankerOpen[anker]=true;
+  render();
+}
+
+function saveComment(anker){
+  const ta=document.getElementById('ta-'+anker);
+  ankerComments[anker]=ta?ta.value.trim():'';
+  ankerCommentOpen[anker]=false;
+  showToast(ankerComments[anker]?'Kommentar gespeichert ✓':'Kommentar entfernt');
+  render();
+}
+
+// ── SPONTAN ───────────────────────────────
+let spontanCtx = null;
+
+function openSpontan(){
+  spontanCtx = { editId: null };
+  const now = new Date();
+  document.getElementById('m-spontan-time').value =
+    `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  document.getElementById('m-spontan-label').value='';
+  document.getElementById('m-spontan-title').textContent='Befinden erfassen';
+  document.getElementById('m-spontan-sub').textContent='Spontaner Eintrag — wähle nur was relevant ist';
+  renderSpontanMetrics({});
+  openModal('m-spontan');
+}
+
+function renderSpontanMetrics(vals){
+  const container = document.getElementById('m-spontan-metrics');
+  container.innerHTML = metriken.map(m=>`
+    <div class="metric-row">
+      <div class="metric-label-row">
+        <span class="metric-label">${m.name}${m.pflicht?'':' <span style="color:var(--muted);font-size:8px">opt.</span>'}</span>
+        ${vals[m.id]!=null?`<span class="metric-value">${vals[m.id]}</span>`:''}
+      </div>
+      <div class="chip-scale">${SCALES[m.scale].map(s=>`
+        <button class="scale-chip${vals[m.id]===s.v?' selected':''} ${m.scale==='pain'?'pain-'+s.v:(m.scale==='energie'||m.scale==='stimmung')?'en-'+s.v:''}"
+          onclick="setSpontanMetric('${m.id}',${s.v},this)"> 
+          <span class="sc-num">${s.label}</span>
+        </button>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+let spontanVals = {};
+function setSpontanMetric(metrikId, val, btn){
+  if(spontanVals[metrikId]===val) delete spontanVals[metrikId];
+  else spontanVals[metrikId]=val;
+  // Re-render just the chips in this row
+  btn.closest('.chip-scale').querySelectorAll('.scale-chip').forEach(b=>{
+    b.classList.toggle('selected', parseInt(b.querySelector('.sc-num').textContent)===spontanVals[metrikId]);
+  });
+  // Update value label
+  const vLabel = btn.closest('.metric-row').querySelector('.metric-value');
+  if(vLabel) vLabel.textContent = spontanVals[metrikId]??'';
+  else if(spontanVals[metrikId]!=null){
+    btn.closest('.metric-label-row')?.insertAdjacentHTML('beforeend',
+      `<span class="metric-value">${spontanVals[metrikId]}</span>`);
+  }
+}
+
+function saveSpontan(){
+  const time = document.getElementById('m-spontan-time').value;
+  const label = document.getElementById('m-spontan-label').value.trim();
+  if(!Object.keys(spontanVals).length){ showToast('Mindestens eine Metrik wählen'); return; }
+  spontanList.push({ id:uid(), time, label, values:{...spontanVals} });
+  spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+  spontanVals={};
+  closeModal('m-spontan');
+  render();
+  showToast(`Befinden ${time} gespeichert ✓`);
+}
+
+function delSpontan(id){
+  spontanList=spontanList.filter(e=>e.id!==id);
+  render();
+}
+
+// ── METRIKEN MANAGER ─────────────────────
+function openMetrikMgr(){
+  renderMgrList();
+  openModal('m-mgr');
+}
+
+function renderMgrList(){
+  document.getElementById('mgr-list').innerHTML = metriken.map(m=>`
+    <div class="metric-mgr-chip${m.pflicht?' pflicht':''}" style="padding:5px 8px">
+      <span>${m.name}</span>
+      <span style="font-size:9px;color:var(--muted);margin:0 2px">${m.scale}</span>
+      <button onclick="togglePflicht('${m.id}')" title="${m.pflicht?'→ Optional':'→ Pflicht'}"
+        style="background:none;border:none;font-size:10px;cursor:pointer;padding:0 2px;
+          color:${m.pflicht?'var(--accent2)':'var(--muted)'}">
+        ${m.pflicht?'★':'☆'}
+      </button>
+      <button onclick="openEditMetrik('${m.id}')"
+        style="background:none;border:1px solid var(--accent3);border-radius:10px;
+          font-size:9px;color:var(--accent3);cursor:pointer;padding:1px 6px;
+          font-family:'JetBrains Mono',monospace">✎</button>
+      <button onclick="delMetrik('${m.id}')"
+        style="background:none;border:1px solid var(--delete);border-radius:10px;
+          font-size:9px;color:var(--delete);cursor:pointer;padding:1px 6px">✕</button>
+    </div>`).join('');
+}
+
+// ── EDIT METRIK ───────────────────────────
+let editMetrikCtx = null;
+
+function openEditMetrik(id){
+  const m = metriken.find(x=>x.id===id);
+  if(!m) return;
+  editMetrikCtx = { id };
+  document.getElementById('m-edit-metrik-sub').textContent = `Metrik: ${m.name}`;
+  document.getElementById('edit-metrik-name').value = m.name;
+  document.getElementById('edit-metrik-scale').value = m.scale;
+  setEditPflicht(m.pflicht);
+  // close mgr first, open edit
+  closeModal('m-mgr');
+  openModal('m-edit-metrik');
+  setTimeout(()=>document.getElementById('edit-metrik-name').focus(), 100);
+}
+
+function setEditPflicht(val){
+  document.getElementById('edit-pflicht-btn').classList.toggle('sel', val);
+  document.getElementById('edit-optional-btn').classList.toggle('sel', !val);
+  document.getElementById('edit-pflicht-btn').dataset.val = val ? '1' : '0';
+}
+
+function saveEditMetrik(){
+  if(!editMetrikCtx) return;
+  const m = metriken.find(x=>x.id===editMetrikCtx.id);
+  if(!m) return;
+  const name = document.getElementById('edit-metrik-name').value.trim();
+  const scale = document.getElementById('edit-metrik-scale').value;
+  const pflicht = document.getElementById('edit-pflicht-btn').dataset.val === '1';
+  if(!name){ showToast('Name fehlt'); return; }
+  m.name = name;
+  m.scale = scale;
+  m.pflicht = pflicht;
+  editMetrikCtx = null;
+  closeModal('m-edit-metrik');
+  // reopen manager
+  openMetrikMgr();
+  showToast(`${name} gespeichert ✓`);
+  render();
+}
+
+function togglePflicht(id){
+  const m=metriken.find(x=>x.id===id);
+  if(m) m.pflicht=!m.pflicht;
+  renderMgrList();
+  render();
+}
+
+function delMetrik(id){
+  metriken=metriken.filter(x=>x.id!==id);
+  // Clean up data
+  Object.keys(ankerData).forEach(a=>delete ankerData[a][id]);
+  renderMgrList();
+  render();
+}
+
+function addMetrik(){
+  const name=document.getElementById('mgr-new-name').value.trim();
+  const scale=document.getElementById('mgr-new-scale').value;
+  const pflicht=document.getElementById('mgr-new-pflicht').value==='pflicht';
+  if(!name){showToast('Name fehlt');return}
+  if(metriken.find(m=>m.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
+  metriken.push({id:uid(),name,scale,pflicht});
+  document.getElementById('mgr-new-name').value='';
+  renderMgrList();
+  render();
+  showToast(`${name} hinzugefügt`);
+}
+
+// ── MODALS ────────────────────────────────
+function openModal(id){
+  spontanVals={};
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>
+  o.addEventListener('click',e=>{if(e.target===o)closeModal(o.id)}));
+
+// ── TOAST ─────────────────────────────────
+let tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+// ── INIT ──────────────────────────────────
+render();
+</script>
+</body>
+</html>

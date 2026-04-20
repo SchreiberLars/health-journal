@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Familie & Soziales · Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f0e8;--surface:#ede8de;--surface2:#e4ddd0;--border:#d4ccbc;--text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;--accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;--safe:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;--text:#f0ebe0;--muted:#9a8e7e;--accent:#c47a52;--accent2:#6aaa82;--accent3:#7a9ab2;--gold:#d4a030;--delete:#e05555}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;min-height:100vh;max-width:480px;margin:0 auto;padding-bottom:40px}
+.page-header{padding:20px 20px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h1{font-family:'Lora',serif;font-size:1.6rem;letter-spacing:-0.02em}
+.page-header h1 em{color:var(--accent);font-style:italic}
+.page-header p{color:var(--muted);font-size:10px;margin-top:4px;text-transform:uppercase;letter-spacing:0.1em}
+
+/* SECTIONS */
+.form-section{padding:16px 20px;border-bottom:1px solid var(--border);border-left:4px solid #d4a0b8}
+.form-section.sozial{border-left-color:#a0b8d4}
+.section-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted)}
+
+/* ANKER CARD */
+.anker-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.anker-header{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;cursor:pointer;user-select:none}
+.anker-label{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em}
+.anker-body{padding:12px 13px 13px;border-top:1px solid var(--border)}
+
+/* STIMMUNG CHIPS — 3-stufig */
+.stimmung-row{display:flex;gap:6px;margin-bottom:10px}
+.stim-btn{flex:1;padding:10px 6px;border-radius:10px;border:1px solid var(--border);
+  background:var(--surface);font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--muted);cursor:pointer;text-align:center;transition:all .12s;line-height:1.4}
+.stim-btn:active{transform:scale(0.95)}
+.stim-btn.sel-harmonisch{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 18%,var(--surface2));color:var(--accent2);font-weight:600}
+.stim-btn.sel-neutral{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 15%,var(--surface2));color:var(--gold);font-weight:600}
+.stim-btn.sel-angespannt{border-color:var(--delete);background:color-mix(in srgb,var(--delete) 15%,var(--surface2));color:var(--delete);font-weight:600}
+
+/* COMMENT */
+.comment-btn{background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px;opacity:0.4;line-height:1}
+.comment-btn.has-comment{opacity:1;color:var(--gold)}
+.comment-textarea{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);outline:none;resize:none;height:56px;line-height:1.5;margin-top:8px}
+.comment-textarea:focus{border-color:var(--accent)}
+.comment-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.comment-save{background:var(--accent);color:#f5f0e8;border:none;border-radius:8px;padding:4px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer}
+.comment-clear{background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.comment-preview{font-size:10px;color:var(--gold);font-style:italic;padding:4px 2px;line-height:1.4;white-space:pre-wrap;cursor:pointer;margin-top:6px}
+
+/* SOZIAL ENTRIES */
+.sozial-entry{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:flex-start;gap:8px}
+.se-icon{font-size:16px;flex-shrink:0;line-height:1.2}
+.se-body{flex:1}
+.se-type{font-size:10px;font-weight:600;color:var(--text)}
+.se-meta{font-size:9px;color:var(--muted);margin-top:2px}
+.se-qual{font-size:9px;border-radius:10px;padding:1px 7px;border:1px solid var(--border)}
+.se-qual.oberflächlich{border-color:var(--muted);color:var(--muted)}
+.se-qual.gut{border-color:var(--gold);color:var(--gold)}
+.se-qual.tief{border-color:var(--accent2);color:var(--accent2)}
+.se-del{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;flex-shrink:0}
+
+/* TYPE BTNS */
+.type-row{display:flex;gap:6px;margin-bottom:10px}
+.type-btn{flex:1;padding:8px 4px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted);cursor:pointer;text-align:center;transition:all .12s}
+.type-btn.sel{border-color:var(--accent3);background:color-mix(in srgb,var(--accent3) 15%,var(--surface2));color:var(--accent3);font-weight:600}
+
+.qual-btns{display:flex;gap:6px;margin-bottom:10px}
+.qual-btn{flex:1;padding:7px 4px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;text-align:center;transition:all .12s}
+.qual-btn.sel-oberflächlich{border-color:var(--muted);color:var(--muted);background:var(--surface2)}
+.qual-btn.sel-gut{border-color:var(--gold);color:var(--gold);background:color-mix(in srgb,var(--gold) 12%,var(--surface2))}
+.qual-btn.sel-tief{border-color:var(--accent2);color:var(--accent2);background:color-mix(in srgb,var(--accent2) 15%,var(--surface2))}
+
+.btn-ghost{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);outline:none;margin-top:4px}
+.mi:focus{border-color:var(--accent)}
+.ml{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:6px;display:block;margin-top:12px}
+.ml:first-of-type{margin-top:0}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--surface);border-radius:18px 18px 0 0;padding:20px 20px calc(20px + var(--safe));width:100%;max-width:480px;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mt{font-family:'Lora',serif;font-size:1rem;color:var(--text);margin-bottom:4px}
+.mt-sub{font-size:10px;color:var(--muted);margin-bottom:14px}
+.mbr{display:flex;gap:8px;margin-top:16px}
+.bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
+.debug{margin:16px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px}
+.debug pre{font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+.toast{position:fixed;bottom:calc(20px + var(--safe));left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:11px;opacity:0;transition:all .2s;pointer-events:none;z-index:999}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="page-header"><h1>Lars · <em>Health</em></h1><p>Familie & Soziales · Prototyp</p></div>
+
+<!-- FAMILIE -->
+<div class="form-section">
+  <div class="section-title" style="margin-bottom:14px">👨‍👩‍👦 Familie</div>
+
+  <!-- Morgen -->
+  <div class="anker-card">
+    <div class="anker-header" onclick="toggleAnker('morgen')">
+      <span class="anker-label">🌅 Morgen</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span id="fam-badge-morgen" style="font-size:11px"></span>
+        <button class="comment-btn" id="fam-cbtn-morgen" onclick="event.stopPropagation();toggleFamComment('morgen')">💬</button>
+        <span style="color:var(--muted);font-size:12px" id="fam-arr-morgen">▼</span>
+      </span>
+    </div>
+    <div id="fam-body-morgen" style="display:none">
+      <div class="anker-body">
+        <div class="stimmung-row">
+          <button class="stim-btn" onclick="setFamStimmung('morgen','harmonisch',this)">😌<br>Harmonisch</button>
+          <button class="stim-btn" onclick="setFamStimmung('morgen','neutral',this)">😐<br>Neutral</button>
+          <button class="stim-btn" onclick="setFamStimmung('morgen','angespannt',this)">😤<br>Angespannt</button>
+        </div>
+        <div id="fam-comment-area-morgen"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Abend -->
+  <div class="anker-card">
+    <div class="anker-header" onclick="toggleAnker('abend')">
+      <span class="anker-label">🌆 Abend</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span id="fam-badge-abend" style="font-size:11px"></span>
+        <button class="comment-btn" id="fam-cbtn-abend" onclick="event.stopPropagation();toggleFamComment('abend')">💬</button>
+        <span style="color:var(--muted);font-size:12px" id="fam-arr-abend">▼</span>
+      </span>
+    </div>
+    <div id="fam-body-abend" style="display:none">
+      <div class="anker-body">
+        <div class="stimmung-row">
+          <button class="stim-btn" onclick="setFamStimmung('abend','harmonisch',this)">😌<br>Harmonisch</button>
+          <button class="stim-btn" onclick="setFamStimmung('abend','neutral',this)">😐<br>Neutral</button>
+          <button class="stim-btn" onclick="setFamStimmung('abend','angespannt',this)">😤<br>Angespannt</button>
+        </div>
+        <div id="fam-comment-area-abend"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SOZIALE KONTAKTE -->
+<div class="form-section sozial">
+  <div class="section-row">
+    <div class="section-title">👥 Soziale Kontakte</div>
+    <button class="btn-ghost" onclick="openAddKontakt()">+ Kontakt</button>
+  </div>
+  <div id="sozial-list"></div>
+</div>
+
+<div class="debug"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">→ JSON Export</div><pre id="dbg"></pre></div>
+
+<!-- MODAL: Kontakt hinzufügen -->
+<div class="modal-overlay" id="m-kontakt">
+  <div class="modal-sheet">
+    <div class="mt">Sozialer Kontakt</div>
+    <div class="mt-sub">Was war es?</div>
+    <label class="ml">Art des Kontakts</label>
+    <div class="type-row" id="kontakt-type-row">
+      <button class="type-btn" onclick="setKontaktType('telefon',this)">📞 Telefon</button>
+      <button class="type-btn" onclick="setKontaktType('nachricht',this)">💬 Nachricht</button>
+      <button class="type-btn sel" onclick="setKontaktType('treffen',this)">🤝 Treffen</button>
+    </div>
+    <label class="ml">Qualität</label>
+    <div class="qual-btns" id="kontakt-qual-row">
+      <button class="qual-btn" onclick="setKontaktQual('oberflächlich',this)">Oberflächlich</button>
+      <button class="qual-btn sel-gut" onclick="setKontaktQual('gut',this)">Gut</button>
+      <button class="qual-btn" onclick="setKontaktQual('tief',this)">Tief & bedeutsam</button>
+    </div>
+    <label class="ml">Mit wem? <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <input class="mi" id="kontakt-person" placeholder="z.B. Finn, Max, Familie...">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-kontakt')">Abbrechen</button>
+      <button class="bp" onclick="saveKontakt()">Speichern</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── FAMILIE ───────────────────────────────
+const FAM_ICONS = {harmonisch:'😌',neutral:'😐',angespannt:'😤'};
+let famData = {morgen:{stimmung:null,kommentar:''},abend:{stimmung:null,kommentar:''}};
+let famAnkerOpen = {morgen:true,abend:false};
+let famCommentOpen = {morgen:false,abend:false};
+
+function toggleAnker(id){famAnkerOpen[id]=!famAnkerOpen[id];renderFam();}
+
+function setFamStimmung(anker,val,btn){
+  famData[anker].stimmung = famData[anker].stimmung===val?null:val;
+  const row=btn.closest('.stimmung-row');
+  row.querySelectorAll('.stim-btn').forEach(b=>b.className='stim-btn');
+  if(famData[anker].stimmung) btn.className=`stim-btn sel-${val}`;
+  updateFamBadge(anker);renderDbg();
+  if(famData[anker].stimmung) showToast(`Familie ${anker}: ${FAM_ICONS[val]} ${val}`);
+}
+
+function updateFamBadge(anker){
+  const s=famData[anker].stimmung;
+  document.getElementById('fam-badge-'+anker).textContent=s?FAM_ICONS[s]:'';
+  document.getElementById('fam-cbtn-'+anker).classList.toggle('has-comment',!!famData[anker].kommentar);
+}
+
+function renderFam(){
+  ['morgen','abend'].forEach(a=>{
+    const body=document.getElementById('fam-body-'+a);
+    const arr=document.getElementById('fam-arr-'+a);
+    if(famAnkerOpen[a]){body.style.display='block';arr.textContent='▲';}
+    else{body.style.display='none';arr.textContent='▼';}
+    updateFamBadge(a);
+    renderFamComment(a);
+  });
+}
+
+function toggleFamComment(anker){
+  famCommentOpen[anker]=!famCommentOpen[anker];
+  if(famCommentOpen[anker]) famAnkerOpen[anker]=true;
+  renderFam();
+}
+function renderFamComment(anker){
+  const container=document.getElementById('fam-comment-area-'+anker);
+  if(!container)return;
+  const isOpen=famCommentOpen[anker];
+  const comment=famData[anker].kommentar;
+  if(isOpen){
+    container.innerHTML=`<textarea class="comment-textarea" id="ta-fam-${anker}" placeholder="Kommentar...">${comment}</textarea>
+      <div class="comment-actions">
+        <button class="comment-clear" onclick="document.getElementById('ta-fam-${anker}').value=''">Leeren</button>
+        <button class="comment-save" onclick="saveFamComment('${anker}')">Speichern</button>
+      </div>`;
+    setTimeout(()=>{const ta=document.getElementById('ta-fam-'+anker);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}},50);
+  } else if(comment){
+    container.innerHTML=`<div class="comment-preview" onclick="toggleFamComment('${anker}')">${comment}</div>`;
+  } else container.innerHTML='';
+}
+function saveFamComment(anker){
+  const ta=document.getElementById('ta-fam-'+anker);
+  famData[anker].kommentar=ta?ta.value.trim():'';
+  famCommentOpen[anker]=false;
+  showToast(famData[anker].kommentar?'Kommentar gespeichert ✓':'Kommentar entfernt');
+  renderFam();renderDbg();
+}
+
+// ── SOZIALE KONTAKTE ──────────────────────
+const TYPE_ICONS = {telefon:'📞',nachricht:'💬',treffen:'🤝'};
+let kontakte = [];
+let currentKontaktType = 'treffen';
+let currentKontaktQual = 'gut';
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+
+function setKontaktType(v,btn){
+  currentKontaktType=v;
+  document.querySelectorAll('#kontakt-type-row .type-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function setKontaktQual(v,btn){
+  currentKontaktQual=v;
+  document.querySelectorAll('#kontakt-qual-row .qual-btn').forEach(b=>b.className='qual-btn');
+  btn.className=`qual-btn sel-${v}`;
+}
+
+// ── LONG PRESS ON KONTAKT ────────────────
+let kontaktLpTimer=null, kontaktLpFired=false;
+document.addEventListener('pointerdown',e=>{
+  const entry=e.target.closest('[data-kid]');
+  if(!entry||e.target.closest('.se-del'))return;
+  kontaktLpFired=false;
+  kontaktLpTimer=setTimeout(()=>{
+    kontaktLpFired=true;
+    openEditKontakt(entry.dataset.kid);
+  },500);
+});
+document.addEventListener('pointerup',()=>clearTimeout(kontaktLpTimer));
+document.addEventListener('pointercancel',()=>clearTimeout(kontaktLpTimer));
+document.addEventListener('click',e=>{if(kontaktLpFired){kontaktLpFired=false;e.stopImmediatePropagation();e.preventDefault();}},true);
+
+let editKontaktCtx=null;
+
+function openEditKontakt(id){
+  const k=kontakte.find(x=>x.id===id);if(!k)return;
+  editKontaktCtx={id};
+  setKontaktType(k.type, document.querySelector(`#kontakt-type-row .type-btn:nth-child(${k.type==='telefon'?1:k.type==='nachricht'?2:3})`));
+  setKontaktQual(k.qualitaet, document.querySelector(`#kontakt-qual-row .qual-btn:nth-child(${k.qualitaet==='oberflächlich'?1:k.qualitaet==='gut'?2:3})`));
+  document.getElementById('kontakt-person').value=k.person||'';
+  openModal('m-kontakt');
+  setTimeout(()=>document.getElementById('kontakt-person').focus(),50);
+}
+
+function openAddKontakt(){
+  editKontaktCtx=null;
+  currentKontaktType='treffen';currentKontaktQual='gut';
+  document.getElementById('kontakt-person').value='';
+  document.querySelectorAll('#kontakt-type-row .type-btn').forEach((b,i)=>b.classList.toggle('sel',i===2));
+  document.querySelectorAll('#kontakt-qual-row .qual-btn').forEach((b,i)=>{b.className='qual-btn';if(i===1)b.className='qual-btn sel-gut';});
+  openModal('m-kontakt');
+  setTimeout(()=>document.getElementById('kontakt-person').focus(),50);
+}
+
+function saveKontakt(){
+  const person=document.getElementById('kontakt-person').value.trim();
+  if(editKontaktCtx){
+    const k=kontakte.find(x=>x.id===editKontaktCtx.id);
+    if(k){k.type=currentKontaktType;k.qualitaet=currentKontaktQual;k.person=person||undefined;}
+    editKontaktCtx=null;
+    closeModal('m-kontakt');renderSozial();renderDbg();
+    showToast('Kontakt aktualisiert ✓');
+  } else {
+    kontakte.push({id:uid(),type:currentKontaktType,qualitaet:currentKontaktQual,...(person?{person}:{})});
+    closeModal('m-kontakt');renderSozial();renderDbg();
+    showToast(`${TYPE_ICONS[currentKontaktType]} Kontakt erfasst ✓`);
+  }
+}
+
+function renderSozial(){
+  const el=document.getElementById('sozial-list');
+  if(!kontakte.length){el.innerHTML='<div style="font-size:11px;color:var(--muted);font-style:italic">Noch keine Kontakte erfasst</div>';return;}
+  el.innerHTML=kontakte.map(k=>`
+    <div class="sozial-entry" data-kid="${k.id}">
+      <div class="se-icon">${TYPE_ICONS[k.type]}</div>
+      <div class="se-body">
+        <div class="se-type">${k.type.charAt(0).toUpperCase()+k.type.slice(1)}${k.person?' · '+k.person:''}</div>
+        <div class="se-meta"><span class="se-qual ${k.qualitaet}">${k.qualitaet}</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+        <button class="se-del" onclick="deleteKontakt('${k.id}')">✕</button>
+        <span style="font-size:9px;color:var(--muted)">⋯</span>
+      </div>
+    </div>`).join('');
+}
+
+function deleteKontakt(id){kontakte=kontakte.filter(k=>k.id!==id);renderSozial();renderDbg();}
+
+function renderDbg(){
+  document.getElementById('dbg').textContent=JSON.stringify({
+    familie:{
+      morgen:{...famData.morgen.stimmung?{stimmung:famData.morgen.stimmung}:{},...famData.morgen.kommentar?{kommentar:famData.morgen.kommentar}:{}},
+      abend:{...famData.abend.stimmung?{stimmung:famData.abend.stimmung}:{},...famData.abend.kommentar?{kommentar:famData.abend.kommentar}:{}}
+    },
+    soziale_kontakte:kontakte.map(k=>({art:k.type,qualitaet:k.qualitaet,...(k.person?{person:k.person}:{})}))
+  },null,2);
+}
+
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeModal(o.id)}));
+let tt;function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);}
+renderFam();renderSozial();renderDbg();
+</script>
+</body>
+</html>
