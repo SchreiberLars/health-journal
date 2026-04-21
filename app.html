@@ -1871,6 +1871,10 @@ function injectModules() {
     <div id="ern-target-indicator" style="font-size:9px;color:var(--accent3);border:1px solid var(--accent3);
       border-radius:10px;padding:1px 8px"></div>
   </div>
+    <input class="mi" id="ern-bibli-search" placeholder="🔍 Suchen... (Enter = ersten Treffer hinzufügen)"
+      style="margin-bottom:8px;font-size:12px"
+      oninput="window.ern_filterBibli(this.value)"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();window.ern_searchEnter()}">
     <div id="ern-bibliothek-list" class="chip-row"></div>
   </div>
 </div>
@@ -4989,6 +4993,7 @@ let spontanSelected = new Set();
 let addCtx = null, editCtx = null;
 let currentBewertung = 'gut';
 let lpTimer = null, lpFired = false;
+let bibliFilter = '';
 
 
 function gerichtBewertung(item) {
@@ -5250,7 +5255,10 @@ function renderBibliothek(){
     else { ind.textContent='Mahlzeit öffnen'; ind.style.borderColor='var(--muted)'; ind.style.color='var(--muted)'; }
   }
   const container = document.getElementById('ern-bibliothek-list');
-  container.innerHTML = bibliothek.map(item=>{
+  const q = bibliFilter.trim().toLowerCase();
+  const filtered = q ? bibliothek.filter(it => it.name.toLowerCase().includes(q)) : bibliothek;
+  const noHit = q && filtered.length===0;
+  container.innerHTML = filtered.map(item=>{
     if(delMode){
       const bw3 = item.bewertung||'unklar';
       return `<button class="chip" style="background:${BW_COLOR[bw3]};border-color:${BW_BORDER[bw3]}">
@@ -5269,7 +5277,30 @@ function renderBibliothek(){
     return `<button class="chip" data-iid="${item.id}"
       onclick="window.ern_quickAdd('${item.id}')"
       style="background:${BW_COLOR[bw]};border-color:${BW_BORDER[bw]}">${item.name}</button>`;
-  }).join('') + (!delMode&&!editMode?`<button class="chip-add" onclick="window.ern_openNewItem()">+</button>`:'');
+  }).join('')
+    + (noHit ? `<span style="font-size:11px;color:var(--muted);padding:4px 2px">Kein Treffer</span>` : '')
+    + (!delMode&&!editMode&&!q?`<button class="chip-add" onclick="window.ern_openNewItem()">+</button>`:'');
+}
+
+function filterBibli(val){
+  bibliFilter = val || '';
+  // Only re-render the list, don't touch the search input (preserve focus)
+  renderBibliothek();
+}
+
+function searchEnter(){
+  const q = bibliFilter.trim().toLowerCase();
+  if(!q) return;
+  const hit = bibliothek.find(it => it.name.toLowerCase().includes(q));
+  if(!hit){ showToast('Kein Treffer'); return; }
+  // Reset filter first so the subsequent render() shows full list
+  bibliFilter = '';
+  const input = document.getElementById('ern-bibli-search');
+  if(input){ input.value=''; }
+  // Use existing quickAdd path (handles "no meal open" toast, calls render)
+  quickAdd(hit.id);
+  // Restore focus after render
+  if(input) input.focus();
 }
 
 // ── MEAL INTERACTIONS ─────────────────────
@@ -5511,6 +5542,8 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_toggleDelMode = toggleDelMode;
   window.ern_toggleEditMode = toggleEditMode;
   window.ern_toggleZutatenSection = toggleZutatenSection;
+  window.ern_filterBibli = filterBibli;
+  window.ern_searchEnter = searchEnter;
   window.ern_render = render;
   window.ern_toggleZutat = toggleZutat;
   window.ern_setZutatMenge = setZutatMenge;
