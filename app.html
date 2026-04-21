@@ -15,6 +15,7 @@
   --text:#2a2420;--muted:#8a7e72;--accent:#8b4a2f;--accent2:#4a7a5a;
   --accent3:#4a5a7a;--gold:#b8860b;--delete:#c0392b;--warn:#c0761a;--red:#8b2f2f;
   --safe:env(safe-area-inset-bottom,0px);
+  --safe-top:env(safe-area-inset-top,0px);
   --c-med:#d4907e;--c-supp:#8bc4a0;--c-haut:#b09ec8;
   --c-bef:#8bc4a0;--c-entz:#d4907e;--c-get:#8bb8d8;
   --c-ern:#d4a96a;--c-schmerz:#d4907e;--c-stuhl:#b0a090;
@@ -34,7 +35,7 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 
 /* ── DATE HEADER ────────────────────────── */
 .date-header{position:sticky;top:0;z-index:50;background:var(--surface);
-  border-bottom:1px solid var(--border);padding:10px 16px;
+  border-bottom:1px solid var(--border);padding:calc(10px + var(--safe-top)) 16px 10px;
   display:flex;align-items:center;gap:8px}
 .date-nav{background:none;border:1px solid var(--border);border-radius:8px;
   padding:6px 10px;font-size:13px;color:var(--muted);cursor:pointer;flex-shrink:0;line-height:1}
