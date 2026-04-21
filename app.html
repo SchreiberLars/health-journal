@@ -2216,6 +2216,22 @@ function injectModules() {
       <button class="btn-edit-mode" id="regen-btn-edit" onclick="window.regen_toggleEditMode()">✎ Bearbeiten</button>
     </div>
   </div>
+
+  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">
+    <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:6px">🌡 Basaltemperatur</div>
+    <div id="regen-temp-entries" style="margin-bottom:8px"></div>
+    <div class="chip-row" id="regen-temp-chips" style="margin-bottom:6px"></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input class="mi" id="regen-temp-input" type="tel" inputmode="numeric" maxlength="4"
+        placeholder="z.B. 365 → 36.5"
+        style="margin:0;flex:1;font-size:12px"
+        oninput="window.regen_tempInputFormat(this)"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();window.regen_addTempFromInput()}">
+      <input class="mi" id="regen-temp-time" type="time" style="margin:0;width:95px;font-size:11px">
+      <button class="bp" style="padding:6px 12px;font-size:11px" onclick="window.regen_addTempFromInput()">+</button>
+    </div>
+  </div>
+
   <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px">Heute erfasst</div>
   <div id="regen-entries" style="margin-bottom:12px"></div>
   <div style="border-top:1px solid var(--border);padding-top:12px">
@@ -6288,9 +6304,80 @@ let regenItems=[
 ];
 regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
 let entries=[];
+let tempEntries=[];
+const TEMP_CHIPS=[35.8,35.9,36.0,36.1,36.2,36.3,36.4,36.5];
 let delMode=false,editMode=false,addCtx=null,editCtx=null;
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+
+// ── BASALTEMPERATUR ──────────────────────
+function fmtTemp(t){ return t.toFixed(1).replace('.',','); }
+
+function renderTemp(){
+  const chipEl=document.getElementById('regen-temp-chips');
+  if(chipEl){
+    chipEl.innerHTML=TEMP_CHIPS.map(t=>
+      `<button class="chip" style="font-size:11px"
+        onclick="window.regen_addTempChip(${t})">${fmtTemp(t)}</button>`
+    ).join('');
+  }
+  const el=document.getElementById('regen-temp-entries');
+  if(el){
+    if(!tempEntries.length){
+      el.innerHTML='';
+    } else {
+      el.innerHTML=[...tempEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
+        <div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
+          <div class="entry-header">
+            <span style="font-size:13px">🌡</span>
+            <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmtTemp(e.temp)} °C</span>
+            <span class="entry-time">${e.time}</span>
+            <button class="entry-del" onclick="window.regen_deleteTempEntry('${e.id}')" style="margin-left:6px">✕</button>
+          </div>
+        </div>`).join('');
+    }
+  }
+  // sync time input default to "now" if empty
+  const tEl=document.getElementById('regen-temp-time');
+  if(tEl && !tEl.value) tEl.value=nowTime();
+}
+
+function addTemp(temp){
+  if(temp==null||isNaN(temp)) return;
+  if(temp<30||temp>45){ showToast('Bitte realistische Temperatur eingeben'); return; }
+  const timeEl=document.getElementById('regen-temp-time');
+  const time=(timeEl&&timeEl.value)||nowTime();
+  tempEntries.push({id:uid(),time,temp:Math.round(temp*10)/10});
+  renderTemp();
+  showToast(`🌡 ${fmtTemp(temp)} °C um ${time} ✓`);
+}
+
+function addTempChip(t){ addTemp(t); }
+
+function tempInputFormat(input){
+  // Keep only digits, max 4
+  const digits=input.value.replace(/\D/g,'').slice(0,4);
+  input.value=digits;
+}
+
+function addTempFromInput(){
+  const input=document.getElementById('regen-temp-input');
+  if(!input) return;
+  const raw=input.value.replace(/\D/g,'');
+  if(!raw){ showToast('Bitte Wert eingeben'); return; }
+  // 3 digits: e.g. 365 -> 36.5; 4 digits: e.g. 3650 -> 365.0 (implausible, reject above)
+  // Also accept 2 digits as whole °C, e.g. "36" -> 36.0
+  let temp;
+  if(raw.length<=2) temp=parseInt(raw,10);
+  else temp=parseInt(raw,10)/Math.pow(10,raw.length-2);
+  addTemp(temp);
+  input.value='';
+}
+
+function deleteTempEntry(id){
+  tempEntries=tempEntries.filter(e=>e.id!==id);
+  renderTemp();
+}
 
 function render(){
   // entries list
@@ -6325,6 +6412,8 @@ function render(){
     </div>`;
     return `<button class="regen-chip" onclick="window.regen_openAddModal('${item.id}')">${item.icon} ${item.name}</button>`;
   }).join('')+(!delMode&&!editMode?`<button class="chip-add" onclick="window.regen_openNewItem()" style="display:inline-flex;align-items:center;border-radius:20px;padding:4px 10px;font-size:16px;border:1px dashed var(--border);color:var(--muted);cursor:pointer;background:none">+</button>`:'');
+  // basal temperature section
+  renderTemp();
 }
 
 // ── ADD MODAL ─────────────────────────────
@@ -6440,6 +6529,10 @@ window.regen_lpAction=function(card){if(typeof entries==='undefined'||!entries)r
   window.regen_toggleEditMode = toggleEditMode;
   window.regen_updateRegenIconPreview = updateRegenIconPreview;
   window.regen_render = render;
+  window.regen_addTempChip = addTempChip;
+  window.regen_addTempFromInput = addTempFromInput;
+  window.regen_tempInputFormat = tempInputFormat;
+  window.regen_deleteTempEntry = deleteTempEntry;
 })();
 
 (function() {
