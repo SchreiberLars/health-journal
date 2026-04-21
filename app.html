@@ -4338,7 +4338,7 @@ function renderRegions(anker){
       <div class="region-row">
         <div class="region-header">
           <span class="region-name">${r.name}</span>
-          ${val!=null?`<span class="region-val ${valClass}">${SCALE[val]?.emoji} ${val}</span>`:''}
+          ${val!=null?`<span class="region-val ${valClass}">${val}</span>`:''}
         </div>
         <div class="scale-row">${chips}</div>
       </div>`;
@@ -4498,7 +4498,7 @@ function renderSpontanRegions(){
     <div class="region-row">
       <div class="region-header">
         <span class="region-name">${r.name}</span>
-        ${spontanVals[r.id]!=null?`<span class="region-val">${SCALE[spontanVals[r.id]]?.emoji} ${spontanVals[r.id]}</span>`:''}
+        ${spontanVals[r.id]!=null?`<span class="region-val">${spontanVals[r.id]}</span>`:''}
       </div>
       <div class="scale-row">${SCALE.map(s=>`
         <button class="sv${spontanVals[r.id]===s.v?' sel-'+s.v:''}"
@@ -4521,7 +4521,7 @@ function setSpontanRegion(rid,val,btn){
   let vspan=hdr.querySelector('.region-val');
   if(spontanVals[rid]!=null){
     if(!vspan){vspan=document.createElement('span');vspan.className='region-val';hdr.appendChild(vspan)}
-    vspan.textContent=`${SCALE[spontanVals[rid]]?.emoji} ${spontanVals[rid]}`;
+    vspan.textContent=`${spontanVals[rid]}`;
   } else if(vspan) vspan.remove();
 }
 
