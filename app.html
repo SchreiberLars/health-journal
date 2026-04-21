@@ -5707,7 +5707,7 @@ function setRegion(anker,regionId,val){
 }
 
 function toggleAufstehen(anker,regionId){
-  if(!ankerData[anker][regionId]) return;
+  if(!ankerData[anker][regionId]) ankerData[anker][regionId]={};
   ankerData[anker][regionId].nurAufstehen=!ankerData[anker][regionId].nurAufstehen;
   renderRegions(anker);
 }
