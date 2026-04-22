@@ -1604,13 +1604,39 @@ function injectModules() {
     <div class="mt" id="bef-m-spontan-title">Befinden erfassen</div>
     <div class="mt-sub" id="bef-m-spontan-sub">Spontaner Eintrag</div>
     <div id="bef-m-spontan-metrics"></div>
-    <label class="ml">Uhrzeit</label>
-    <input class="mi" id="bef-m-spontan-time" type="time">
+
+    <label class="ml">Startzeit</label>
+    <div class="dq" id="bef-m-spontan-start-chips" style="margin-top:4px"></div>
+    <input class="mi" id="bef-m-spontan-time" type="time" style="margin-top:4px">
+
+    <label class="ml">Endzeit <span style="color:var(--muted);font-size:9px">(leer = läuft noch)</span></label>
+    <div style="font-size:10px;color:var(--muted);font-style:italic;margin-bottom:4px;line-height:1.4">
+      Zeit, zu der du das Befinden aktiv das letzte Mal gespürt hast — nicht: wann dir auffiel, dass es weg ist
+    </div>
+    <div class="dq" id="bef-m-spontan-end-chips" style="margin-top:4px"></div>
+    <input class="mi" id="bef-m-spontan-endtime" type="time" style="margin-top:4px">
+
     <label class="ml">Label <span style="color:var(--muted);font-size:9px">(optional)</span></label>
     <input class="mi" id="bef-m-spontan-label" placeholder="z.B. Nachmittagstief, nach Sport..." style="margin-top:4px">
     <div class="mbr">
       <button class="bs" onclick="closeModal('bef-m-spontan')">Abbrechen</button>
       <button class="bp" onclick="window.bef_saveSpontan()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="bef-m-end">
+  <div class="modal-sheet">
+    <div class="mt">Episode beenden</div>
+    <div class="mt-sub" id="bef-m-end-sub">Wann hast du das Befinden aktiv das letzte Mal gespürt?</div>
+    <div style="font-size:10px;color:var(--muted);font-style:italic;margin-bottom:8px;line-height:1.4">
+      Nicht: wann dir auffiel, dass es weg ist
+    </div>
+    <div class="dq" id="bef-m-end-chips" style="margin-top:4px"></div>
+    <input class="mi" id="bef-m-end-time" type="time" style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('bef-m-end')">Abbrechen</button>
+      <button class="bp" onclick="window.bef_confirmEnd()">Beenden</button>
     </div>
   </div>
 </div>
@@ -2095,13 +2121,37 @@ function injectModules() {
 </div>
 
 
-<div class="modal-overlay" id="schmerz-m-spontan">
+<div class="modal-overlay" id="schmerz-m-end">
+  <div class="modal-sheet">
+    <div class="mt">Episode beenden</div>
+    <div class="mt-sub" id="schmerz-m-end-sub">Wann hast du den Schmerz aktiv das letzte Mal gespürt?</div>
+    <div style="font-size:10px;color:var(--muted);font-style:italic;margin-bottom:8px;line-height:1.4">
+      Nicht: wann dir auffiel, dass er weg ist
+    </div>
+    <div class="dq" id="schmerz-m-end-chips" style="margin-top:4px"></div>
+    <input class="mi" id="schmerz-m-end-time" type="time" style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('schmerz-m-end')">Abbrechen</button>
+      <button class="bp" onclick="window.schmerz_confirmEnd()">Beenden</button>
+    </div>
+  </div>
+</div>
   <div class="modal-sheet">
     <div class="mt">Schmerz erfassen</div>
     <div class="mt-sub">Spontaner Eintrag — wähle betroffene Regionen</div>
     <div id="schmerz-m-spontan-regions"></div>
-    <label class="ml">Uhrzeit</label>
-    <input class="mi" id="schmerz-m-spontan-time" type="time">
+
+    <label class="ml">Startzeit</label>
+    <div class="dq" id="schmerz-m-spontan-start-chips" style="margin-top:4px"></div>
+    <input class="mi" id="schmerz-m-spontan-time" type="time" style="margin-top:4px">
+
+    <label class="ml">Endzeit <span style="color:var(--muted);font-size:9px">(leer = läuft noch)</span></label>
+    <div style="font-size:10px;color:var(--muted);font-style:italic;margin-bottom:4px;line-height:1.4">
+      Zeit, zu der du den Schmerz aktiv das letzte Mal gespürt hast — nicht: wann dir auffiel, dass er weg ist
+    </div>
+    <div class="dq" id="schmerz-m-spontan-end-chips" style="margin-top:4px"></div>
+    <input class="mi" id="schmerz-m-spontan-endtime" type="time" style="margin-top:4px">
+
     <label class="ml">Notiz <span style="color:var(--muted);font-size:9px">(optional)</span></label>
     <input class="mi" id="schmerz-m-spontan-note" placeholder="z.B. nach Mahlzeit, beim Treppensteigen..." style="margin-top:4px">
     <div class="mbr">
@@ -4057,16 +4107,28 @@ function renderCommentArea(anker){
 function renderSpontan(){
   const el = document.getElementById('bef-spontan-list');
   if(!spontanList.length){el.innerHTML='';return}
-  el.innerHTML = spontanList.map(e=>`
-    <div class="spontan-entry">
-      <div class="spontan-time">${e.time}${e.label?' · '+e.label:''}</div>
+  const now = timeToMin(`${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`);
+  el.innerHTML = spontanList.map(e=>{
+    const startMin = timeToMin(e.time);
+    let durHtml='';
+    if(e.endtime){
+      const dur = timeToMin(e.endtime)-startMin;
+      durHtml = `<span style="font-size:10px;color:var(--muted);margin-left:6px">${fmtRange(e.time,e.endtime)} · ${minToHm(dur)}</span>`;
+    } else {
+      const running = Math.max(0, now-startMin);
+      durHtml = `<span style="font-size:10px;color:var(--delete);margin-left:6px;font-weight:600">${e.time} · läuft seit ${minToHm(running)}</span>
+        <button class="bs" style="margin-left:6px;padding:2px 8px;font-size:10px;background:var(--delete);color:#fff;border:none" onclick="window.bef_endOpenEntry('${e.id}')">Beenden</button>`;
+    }
+    return `<div class="spontan-entry">
+      <div class="spontan-time">${durHtml}${e.label?' · '+e.label:''}</div>
       ${Object.entries(e.values).map(([mid,val])=>{
         const m=metriken.find(x=>x.id===mid);
         const s=SCALES[m?.scale||'energie'].find(x=>x.v===val);
         return `<span style="font-size:11px;margin-right:10px">${m?.name||mid}: ${s?.emoji||val} ${val}</span>`;
       }).join('')}
       <button class="spontan-del" onclick="window.bef_delSpontan('${e.id}')">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── INTERACTIONS ──────────────────────────
@@ -4113,17 +4175,65 @@ function saveComment(anker){
 
 // ── SPONTAN ───────────────────────────────
 let spontanCtx = null;
+let endingEntryId = null;
+
+// Time helpers
+function timeToMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; }
+function minToTime(min){ min=((min%1440)+1440)%1440; return `${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}`; }
+function minToHm(min){
+  if(min<60) return `${min}min`;
+  const h=Math.floor(min/60), m=min%60;
+  return m===0 ? `${h}h` : `${h}h ${m}min`;
+}
+function fmtRange(s,e){ return e ? `${s}–${e}` : s; }
 
 function openSpontan(){
   spontanCtx = { editId: null };
   const now = new Date();
   document.getElementById('bef-m-spontan-time').value =
     `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  document.getElementById('bef-m-spontan-endtime').value='';
   document.getElementById('bef-m-spontan-label').value='';
   document.getElementById('bef-m-spontan-title').textContent='Befinden erfassen';
   document.getElementById('bef-m-spontan-sub').textContent='Spontaner Eintrag — wähle nur was relevant ist';
   renderSpontanMetrics({});
+  renderTimeChips('bef-m-spontan-start-chips','bef-m-spontan-time',true);
+  renderTimeChips('bef-m-spontan-end-chips','bef-m-spontan-endtime',false);
   openModal('bef-m-spontan');
+}
+
+function renderTimeChips(containerId, inputId, isStart){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const now = timeToMin(`${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`);
+  const startInput = document.getElementById('bef-m-spontan-time');
+  const startMin = startInput ? timeToMin(startInput.value) : now;
+  const presets = [
+    {label:'jetzt', min:now},
+    {label:'vor 15min', min:now-15},
+    {label:'vor 30min', min:now-30},
+    {label:'vor 1h', min:now-60},
+    {label:'vor 2h', min:now-120},
+  ];
+  let html = presets.map(p=>{
+    if(!isStart && startMin!=null && p.min <= startMin) return '';
+    return `<button class="db" onclick="window.bef_pickTimeChip('${inputId}',${p.min},this)">${p.label}</button>`;
+  }).join('');
+  if(!isStart){
+    html += `<button class="db" onclick="window.bef_pickTimeChip('${inputId}',null,this)">noch nicht vorbei</button>`;
+  }
+  el.innerHTML = html;
+}
+
+function pickTimeChip(inputId, min, btn){
+  const input = document.getElementById(inputId);
+  if(!input) return;
+  input.value = (min==null) ? '' : minToTime(min);
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  if(inputId==='bef-m-spontan-time'){
+    renderTimeChips('bef-m-spontan-end-chips','bef-m-spontan-endtime',false);
+  }
 }
 
 function renderSpontanMetrics(vals){
@@ -4162,14 +4272,72 @@ function setSpontanMetric(metrikId, val, btn){
 
 function saveSpontan(){
   const time = document.getElementById('bef-m-spontan-time').value;
+  const endtimeRaw = document.getElementById('bef-m-spontan-endtime').value;
+  const endtime = endtimeRaw||null;
   const label = document.getElementById('bef-m-spontan-label').value.trim();
   if(!Object.keys(spontanVals).length){ showToast('Mindestens eine Metrik wählen'); return; }
-  spontanList.push({ id:uid(), time, label, values:{...spontanVals} });
+  if(endtime && timeToMin(endtime) <= timeToMin(time)){
+    showToast('Endzeit muss nach Startzeit liegen'); return;
+  }
+  spontanList.push({ id:uid(), time, endtime, label, values:{...spontanVals} });
   spontanList.sort((a,b)=>a.time.localeCompare(b.time));
   spontanVals={};
   closeModal('bef-m-spontan');
   render();
-  showToast(`Befinden ${time} gespeichert ✓`);
+  const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
+  showToast(`Befinden ${time}${dur} ✓`);
+}
+
+function endOpenEntry(id){
+  const e = spontanList.find(x=>x.id===id);
+  if(!e) return;
+  endingEntryId = id;
+  const now = timeToMin(`${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`);
+  const startMin = timeToMin(e.time);
+  const defaultMin = Math.max(startMin+1, now-30);
+  document.getElementById('bef-m-end-time').value = minToTime(defaultMin);
+  const running = Math.max(0, now-startMin);
+  document.getElementById('bef-m-end-sub').textContent =
+    `Episode läuft seit ${e.time} (${minToHm(running)})`;
+  renderEndChips(startMin, now);
+  openModal('bef-m-end');
+}
+
+function renderEndChips(startMin, now){
+  const presets = [
+    {label:'vor 15min', min:now-15},
+    {label:'vor 30min', min:now-30},
+    {label:'vor 1h',   min:now-60},
+    {label:'vor 2h',   min:now-120},
+    {label:'jetzt',    min:now},
+  ];
+  const html = presets.map(p=>{
+    if(p.min <= startMin) return '';
+    const isDefault = p.label==='vor 30min' && p.min>startMin;
+    return `<button class="db${isDefault?' sel':''}" onclick="window.bef_pickEndChip(${p.min},this)">${p.label}</button>`;
+  }).join('');
+  document.getElementById('bef-m-end-chips').innerHTML = html;
+}
+
+function pickEndChip(min, btn){
+  document.getElementById('bef-m-end-time').value = minToTime(min);
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function confirmEnd(){
+  if(!endingEntryId) return;
+  const e = spontanList.find(x=>x.id===endingEntryId);
+  if(!e){ closeModal('bef-m-end'); return; }
+  const t = document.getElementById('bef-m-end-time').value;
+  if(!t){ showToast('Bitte Zeit angeben'); return; }
+  const startMin = timeToMin(e.time);
+  if(timeToMin(t) <= startMin){ showToast('Endzeit muss nach Startzeit liegen'); return; }
+  e.endtime = t;
+  endingEntryId = null;
+  closeModal('bef-m-end');
+  render();
+  showToast(`Beendet · Dauer ${minToHm(timeToMin(t)-startMin)} ✓`);
 }
 
 
@@ -4327,6 +4495,15 @@ function showToast(msg){
   window.bef_toggleKrank = toggleKrank;
   window.bef_saveKrankKommentar = function(){var v=document.getElementById('bef-krank-kommentar');if(v)krankData.kommentar=v.value||'';if(typeof showToast==='function')showToast('Gespeichert');};
   window.bef_setKrankKommentar = setKrankKommentar;
+  window.bef_pickTimeChip = pickTimeChip;
+  window.bef_endOpenEntry = endOpenEntry;
+  window.bef_pickEndChip = pickEndChip;
+  window.bef_confirmEnd = confirmEnd;
+
+  // Live-update offene Episoden alle 60s
+  setInterval(()=>{
+    if(spontanList.some(e=>!e.endtime)) renderSpontan();
+  }, 60000);
 })();
 
 (function() {
@@ -5813,9 +5990,20 @@ function renderCommentArea(anker){
 function renderSpontan(){
   const el=document.getElementById('schmerz-spontan-list');
   if(!spontanList.length){el.innerHTML='';return}
-  el.innerHTML=spontanList.map(e=>`
-    <div class="spontan-entry">
-      <div class="spontan-time">${e.time}${e.note?' · '+e.note:''}</div>
+  const now = timeToMin(nowTime());
+  el.innerHTML=spontanList.map(e=>{
+    const startMin = timeToMin(e.time);
+    let durHtml='';
+    if(e.endtime){
+      const dur = timeToMin(e.endtime)-startMin;
+      durHtml = `<span style="font-size:10px;color:var(--muted);margin-left:6px">${fmtRange(e.time,e.endtime)} · ${minToHm(dur)}</span>`;
+    } else {
+      const running = Math.max(0, now-startMin);
+      durHtml = `<span style="font-size:10px;color:var(--delete);margin-left:6px;font-weight:600">${e.time} · läuft seit ${minToHm(running)}</span>
+        <button class="bs" style="margin-left:6px;padding:2px 8px;font-size:10px;background:var(--delete);color:#fff;border:none" onclick="window.schmerz_endOpenEntry('${e.id}')">Beenden</button>`;
+    }
+    return `<div class="spontan-entry">
+      <div class="spontan-time">${durHtml}${e.note?' · '+e.note:''}</div>
       <div style="display:flex;flex-wrap:wrap">
         ${Object.entries(e.values).map(([rid,val])=>{
           const r=regions.find(x=>x.id===rid);
@@ -5824,7 +6012,8 @@ function renderSpontan(){
         }).join('')}
       </div>
       <button class="spontan-del" onclick="window.schmerz_delSpontan('${e.id}')">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── INTERACTIONS ──────────────────────────
@@ -5927,9 +6116,70 @@ function deleteRegion(rid){
 function openSpontan(){
   spontanVals={};
   document.getElementById('schmerz-m-spontan-time').value=nowTime();
+  document.getElementById('schmerz-m-spontan-endtime').value='';
   document.getElementById('schmerz-m-spontan-note').value='';
   renderSpontanRegions();
+  renderTimeChips('schmerz-m-spontan-start-chips','schmerz-m-spontan-time',true);
+  renderTimeChips('schmerz-m-spontan-end-chips','schmerz-m-spontan-endtime',false);
   openModal('schmerz-m-spontan');
+}
+
+// Time helpers ────────────────────────────
+function timeToMin(t){
+  if(!t) return null;
+  const [h,m]=t.split(':').map(Number);
+  return h*60+m;
+}
+function minToTime(min){
+  min=((min%1440)+1440)%1440;
+  return `${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}`;
+}
+function minToHm(min){
+  if(min<60) return `${min}min`;
+  const h=Math.floor(min/60), m=min%60;
+  return m===0 ? `${h}h` : `${h}h ${m}min`;
+}
+function fmtRange(start,end){
+  if(!end) return `${start}`;
+  return `${start}–${end}`;
+}
+
+// Render time chips: "jetzt" + "vor 15min/30min/1h/2h" (start) or + "noch nicht vorbei" (end)
+function renderTimeChips(containerId, inputId, isStart){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const now = timeToMin(nowTime());
+  const startInput = document.getElementById('schmerz-m-spontan-time');
+  const startMin = startInput ? timeToMin(startInput.value) : now;
+  const presets = [
+    {label:'jetzt', min:now},
+    {label:'vor 15min', min:now-15},
+    {label:'vor 30min', min:now-30},
+    {label:'vor 1h', min:now-60},
+    {label:'vor 2h', min:now-120},
+  ];
+  let html = presets.map(p=>{
+    // For end chips: hide chips that would be before/equal start
+    if(!isStart && startMin!=null && p.min <= startMin) return '';
+    return `<button class="db" onclick="window.schmerz_pickTimeChip('${inputId}',${p.min},this)">${p.label}</button>`;
+  }).join('');
+  if(!isStart){
+    html += `<button class="db" onclick="window.schmerz_pickTimeChip('${inputId}',null,this)">noch nicht vorbei</button>`;
+  }
+  el.innerHTML = html;
+}
+
+function pickTimeChip(inputId, min, btn){
+  const input = document.getElementById(inputId);
+  if(!input) return;
+  input.value = (min==null) ? '' : minToTime(min);
+  // Mark selected
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  // If start time changed, re-render end chips (they depend on start)
+  if(inputId==='schmerz-m-spontan-time'){
+    renderTimeChips('schmerz-m-spontan-end-chips','schmerz-m-spontan-endtime',false);
+  }
 }
 
 function renderSpontanRegions(){
@@ -5964,12 +6214,75 @@ function setSpontanRegion(rid,val,btn){
 
 function saveSpontan(){
   const time=document.getElementById('schmerz-m-spontan-time').value||nowTime();
+  const endtimeRaw=document.getElementById('schmerz-m-spontan-endtime').value;
+  const endtime=endtimeRaw||null;
   const note=document.getElementById('schmerz-m-spontan-note').value.trim();
   if(!Object.keys(spontanVals).length){showToast('Mindestens eine Region wählen');return}
-  spontanList.push({id:uid(),time,note,values:{...spontanVals}});
+  // Plausi: end must be after start (if set)
+  if(endtime && timeToMin(endtime) <= timeToMin(time)){
+    showToast('Endzeit muss nach Startzeit liegen'); return;
+  }
+  spontanList.push({id:uid(),time,endtime,note,values:{...spontanVals}});
   spontanList.sort((a,b)=>a.time.localeCompare(b.time));
   closeModal('schmerz-m-spontan');render();
-  showToast(`Schmerz ${time} erfasst ✓`);
+  const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
+  showToast(`Schmerz ${time}${dur} ✓`);
+}
+
+let endingEntryId = null;
+
+function endOpenEntry(id){
+  const e = spontanList.find(x=>x.id===id);
+  if(!e) return;
+  endingEntryId = id;
+  const now = timeToMin(nowTime());
+  const startMin = timeToMin(e.time);
+  // Default = vor 30min, aber min. 1 Minute nach Start
+  const defaultMin = Math.max(startMin+1, now-30);
+  document.getElementById('schmerz-m-end-time').value = minToTime(defaultMin);
+  // Sub-Text mit Kontext: seit wann läuft sie?
+  const running = Math.max(0, now-startMin);
+  document.getElementById('schmerz-m-end-sub').textContent =
+    `Episode läuft seit ${e.time} (${minToHm(running)})`;
+  renderEndChips(startMin, now);
+  openModal('schmerz-m-end');
+}
+
+function renderEndChips(startMin, now){
+  const presets = [
+    {label:'vor 15min', min:now-15},
+    {label:'vor 30min', min:now-30},
+    {label:'vor 1h',   min:now-60},
+    {label:'vor 2h',   min:now-120},
+    {label:'jetzt',    min:now},
+  ];
+  const html = presets.map(p=>{
+    if(p.min <= startMin) return ''; // vor Start = unsinnig
+    const isDefault = p.label==='vor 30min' && p.min>startMin;
+    return `<button class="db${isDefault?' sel':''}" onclick="window.schmerz_pickEndChip(${p.min},this)">${p.label}</button>`;
+  }).join('');
+  document.getElementById('schmerz-m-end-chips').innerHTML = html;
+}
+
+function pickEndChip(min, btn){
+  document.getElementById('schmerz-m-end-time').value = minToTime(min);
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function confirmEnd(){
+  if(!endingEntryId) return;
+  const e = spontanList.find(x=>x.id===endingEntryId);
+  if(!e){ closeModal('schmerz-m-end'); return; }
+  const t = document.getElementById('schmerz-m-end-time').value;
+  if(!t){ showToast('Bitte Zeit angeben'); return; }
+  const startMin = timeToMin(e.time);
+  if(timeToMin(t) <= startMin){ showToast('Endzeit muss nach Startzeit liegen'); return; }
+  e.endtime = t;
+  endingEntryId = null;
+  closeModal('schmerz-m-end');
+  render();
+  showToast(`Beendet · Dauer ${minToHm(timeToMin(t)-startMin)} ✓`);
 }
 
 function delSpontan(id){spontanList=spontanList.filter(e=>e.id!==id);render()}
@@ -5985,6 +6298,11 @@ function showToast(msg){
   el.textContent=msg;el.classList.add('show');
   clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
 }
+// Live-update offene Episoden alle 60s
+setInterval(()=>{
+  if(spontanList.some(e=>!e.endtime)) renderSpontan();
+}, 60000);
+
 // Exports
   window.schmerz_delSpontan = delSpontan;
   window.schmerz_deleteRegion = deleteRegion;
@@ -6003,6 +6321,10 @@ function showToast(msg){
   window.schmerz_saveSpontan = saveSpontan;
   window.schmerz_toggleAnker = toggleAnker;
   window.schmerz_toggleComment = toggleComment;
+  window.schmerz_pickTimeChip = pickTimeChip;
+  window.schmerz_endOpenEntry = endOpenEntry;
+  window.schmerz_pickEndChip = pickEndChip;
+  window.schmerz_confirmEnd = confirmEnd;
   window.schmerz_render = render;
   window.schmerz_toggleAllodynie = toggleAllodynie;
   window.schmerz_copyFromPrevDay = copyFromPrevDay;
