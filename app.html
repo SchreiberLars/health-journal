@@ -20,6 +20,7 @@
   --c-bef:#8bc4a0;--c-entz:#d4907e;--c-get:#8bb8d8;
   --c-ern:#d4a96a;--c-schmerz:#d4907e;--c-stuhl:#b0a090;
   --c-akt:#8bb8d8;--c-regen:#8bc4a0;
+  --c-messw:#c8a888;
   --c-fam:#d4a0b8;--c-soz:#a0b8d4;--c-hyp:#b09ec8;
 }
 @media(prefers-color-scheme:dark){:root{
@@ -795,7 +796,24 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
   </div>
 </div>
 
-<!-- 12. FAMILIE & SOZIALES -->
+<!-- 12. MESSWERTE -->
+<div class="section" id="sec-messw" style="border-left-color:var(--c-messw)">
+  <div class="section-header" onclick="toggleSection('messw')">
+    <div class="section-left">
+      <span>📊</span>
+      <span class="section-label">Messwerte</span>
+      <span class="section-badge" id="badge-messw">—</span>
+    </div>
+    <div class="section-right">
+      <span class="section-chevron" id="chev-messw">▼</span>
+    </div>
+  </div>
+  <div class="section-body" id="body-messw" style="display:none">
+    <div id="messw-content"><!-- messwerte JS --></div>
+  </div>
+</div>
+
+<!-- 13. FAMILIE & SOZIALES -->
 <div class="section" id="sec-fam" style="border-left-color:var(--c-fam)">
   <div class="section-header" onclick="toggleSection('fam')">
     <div class="section-left">
@@ -1020,7 +1038,7 @@ function confirmDate(){activeDate=new Date(calSelectedDate);closeModal('m-cal');
 // ═══════════════════════════════════════════
 // SECTIONS
 // ═══════════════════════════════════════════
-const sectionOpen={med:true,supp:true,haut:false,bef:false,entz:false,get:false,ern:false,schmerz:false,stuhl:false,akt:false,regen:false,fam:false};
+const sectionOpen={med:true,supp:true,haut:false,bef:false,entz:false,get:false,ern:false,schmerz:false,stuhl:false,akt:false,regen:false,messw:false,fam:false};
 
 function toggleSection(id){
   sectionOpen[id]=!sectionOpen[id];
@@ -2217,47 +2235,6 @@ function injectModules() {
     </div>
   </div>
 
-  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">
-    <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:6px">🌡 Basaltemperatur</div>
-    <div id="regen-temp-entries" style="margin-bottom:8px"></div>
-    <div class="chip-row" id="regen-temp-chips" style="margin-bottom:6px"></div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <input class="mi" id="regen-temp-input" type="tel" inputmode="numeric" maxlength="4"
-        placeholder="z.B. 365 → 36.5"
-        style="margin:0;flex:1;font-size:12px"
-        oninput="window.regen_tempInputFormat(this)"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();window.regen_addTempFromInput()}">
-      <input class="mi" id="regen-temp-time" type="time" style="margin:0;width:95px;font-size:11px">
-      <button class="bp" style="padding:6px 12px;font-size:11px" onclick="window.regen_addTempFromInput()">+</button>
-    </div>
-  </div>
-
-  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:0">🩸 Blutdruck</div>
-      <button onclick="window.regen_openBpInfo()"
-        style="background:none;border:1px solid var(--border);border-radius:50%;width:22px;height:22px;font-size:11px;color:var(--muted);cursor:pointer;padding:0;line-height:1">ⓘ</button>
-    </div>
-    <div id="regen-bp-entries" style="margin-bottom:8px"></div>
-    <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px">
-      <input class="mi" id="regen-bp-syst" type="tel" inputmode="numeric" maxlength="3"
-        placeholder="syst" style="margin:0;flex:1;font-size:12px;text-align:center"
-        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
-      <span style="color:var(--muted);font-size:14px">/</span>
-      <input class="mi" id="regen-bp-diast" type="tel" inputmode="numeric" maxlength="3"
-        placeholder="diast" style="margin:0;flex:1;font-size:12px;text-align:center"
-        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
-      <span style="color:var(--muted);font-size:11px;margin:0 2px">♥</span>
-      <input class="mi" id="regen-bp-puls" type="tel" inputmode="numeric" maxlength="3"
-        placeholder="puls" style="margin:0;flex:1;font-size:12px;text-align:center"
-        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
-    </div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <input class="mi" id="regen-bp-time" type="time" style="margin:0;width:95px;font-size:11px">
-      <button class="bp" style="padding:6px 12px;font-size:11px;flex:1" onclick="window.regen_addBp()">Speichern</button>
-    </div>
-  </div>
-
   <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px">Heute erfasst</div>
   <div id="regen-entries" style="margin-bottom:12px"></div>
   <div style="border-top:1px solid var(--border);padding-top:12px">
@@ -2284,7 +2261,7 @@ function injectModules() {
   </div>
 </div>
 
-<div class="modal-overlay" id="regen-m-bp-info">
+<div class="modal-overlay" id="messw-m-bp-info">
   <div class="modal-sheet">
     <div class="mt">🩸 Blutdruck richtig messen</div>
     <div class="mt-sub">Leitlinien der Deutschen Hochdruckliga / ESH</div>
@@ -2330,7 +2307,7 @@ function injectModules() {
     </div>
 
     <div class="mbr" style="margin-top:14px">
-      <button class="bp" onclick="closeModal('regen-m-bp-info')">Verstanden</button>
+      <button class="bp" onclick="closeModal('messw-m-bp-info')">Verstanden</button>
     </div>
   </div>
 </div>
@@ -6381,144 +6358,9 @@ let regenItems=[
 ];
 regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
 let entries=[];
-let tempEntries=[];
-let bpEntries=[];
-const TEMP_CHIPS=[35.8,35.9,36.0,36.1,36.2,36.3,36.4,36.5];
 let delMode=false,editMode=false,addCtx=null,editCtx=null;
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
-
-// ── BASALTEMPERATUR ──────────────────────
-function fmtTemp(t){ return t.toFixed(1).replace('.',','); }
-
-function renderTemp(){
-  const chipEl=document.getElementById('regen-temp-chips');
-  if(chipEl){
-    chipEl.innerHTML=TEMP_CHIPS.map(t=>
-      `<button class="chip" style="font-size:11px"
-        onclick="window.regen_addTempChip(${t})">${fmtTemp(t)}</button>`
-    ).join('');
-  }
-  const el=document.getElementById('regen-temp-entries');
-  if(el){
-    if(!tempEntries.length){
-      el.innerHTML='';
-    } else {
-      el.innerHTML=[...tempEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
-        <div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
-          <div class="entry-header">
-            <span style="font-size:13px">🌡</span>
-            <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmtTemp(e.temp)} °C</span>
-            <span class="entry-time">${e.time}</span>
-            <button class="entry-del" onclick="window.regen_deleteTempEntry('${e.id}')" style="margin-left:6px">✕</button>
-          </div>
-        </div>`).join('');
-    }
-  }
-  // sync time input default to "now" if empty
-  const tEl=document.getElementById('regen-temp-time');
-  if(tEl && !tEl.value) tEl.value=nowTime();
-}
-
-function addTemp(temp){
-  if(temp==null||isNaN(temp)) return;
-  if(temp<30||temp>45){ showToast('Bitte realistische Temperatur eingeben'); return; }
-  const timeEl=document.getElementById('regen-temp-time');
-  const time=(timeEl&&timeEl.value)||nowTime();
-  tempEntries.push({id:uid(),time,temp:Math.round(temp*10)/10});
-  renderTemp();
-  showToast(`🌡 ${fmtTemp(temp)} °C um ${time} ✓`);
-}
-
-function addTempChip(t){ addTemp(t); }
-
-function tempInputFormat(input){
-  // Keep only digits, max 4
-  const digits=input.value.replace(/\D/g,'').slice(0,4);
-  input.value=digits;
-}
-
-function addTempFromInput(){
-  const input=document.getElementById('regen-temp-input');
-  if(!input) return;
-  const raw=input.value.replace(/\D/g,'');
-  if(!raw){ showToast('Bitte Wert eingeben'); return; }
-  // 3 digits: e.g. 365 -> 36.5; 4 digits: e.g. 3650 -> 365.0 (implausible, reject above)
-  // Also accept 2 digits as whole °C, e.g. "36" -> 36.0
-  let temp;
-  if(raw.length<=2) temp=parseInt(raw,10);
-  else temp=parseInt(raw,10)/Math.pow(10,raw.length-2);
-  addTemp(temp);
-  input.value='';
-}
-
-function deleteTempEntry(id){
-  tempEntries=tempEntries.filter(e=>e.id!==id);
-  renderTemp();
-}
-
-// ── BLUTDRUCK ────────────────────────────
-function bpCategory(syst, diast){
-  // Higher category of the two wins (worst case)
-  if(syst>=140 || diast>=90) return {label:'Hyperton',color:'var(--delete)'};
-  if(syst>=130 || diast>=85) return {label:'Hochnormal',color:'var(--warn)'};
-  if(syst>=120 || diast>=80) return {label:'Normal',color:'var(--gold)'};
-  return {label:'Optimal',color:'var(--accent2)'};
-}
-
-function renderBp(){
-  const el=document.getElementById('regen-bp-entries');
-  if(el){
-    if(!bpEntries.length){
-      el.innerHTML='';
-    } else {
-      el.innerHTML=[...bpEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>{
-        const cat=bpCategory(e.syst,e.diast);
-        return `<div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
-          <div class="entry-header">
-            <span style="font-size:13px">🩸</span>
-            <span style="font-size:12px;font-weight:600;margin-left:6px">${e.syst}/${e.diast}</span>
-            ${e.puls?`<span style="font-size:11px;color:var(--muted);margin-left:6px">♥ ${e.puls}</span>`:''}
-            <span style="font-size:9px;color:${cat.color};margin-left:8px;font-weight:600">${cat.label}</span>
-            <span style="flex:1"></span>
-            <span class="entry-time">${e.time}</span>
-            <button class="entry-del" onclick="window.regen_deleteBpEntry('${e.id}')" style="margin-left:6px">✕</button>
-          </div>
-        </div>`;
-      }).join('');
-    }
-  }
-  const tEl=document.getElementById('regen-bp-time');
-  if(tEl && !tEl.value) tEl.value=nowTime();
-}
-
-function addBp(){
-  const systEl=document.getElementById('regen-bp-syst');
-  const diastEl=document.getElementById('regen-bp-diast');
-  const pulsEl=document.getElementById('regen-bp-puls');
-  const timeEl=document.getElementById('regen-bp-time');
-  const syst=parseInt(systEl.value,10);
-  const diast=parseInt(diastEl.value,10);
-  const puls=parseInt(pulsEl.value,10);
-  if(!syst||!diast||!puls){ showToast('Syst, Diast und Puls eingeben'); return; }
-  if(syst<60||syst>260){ showToast('Systolischer Wert unplausibel'); return; }
-  if(diast<30||diast>180){ showToast('Diastolischer Wert unplausibel'); return; }
-  if(syst<=diast){ showToast('Systolisch muss größer als diastolisch sein'); return; }
-  if(puls<20||puls>240){ showToast('Pulswert unplausibel'); return; }
-  const time=(timeEl&&timeEl.value)||nowTime();
-  bpEntries.push({id:uid(),time,syst,diast,puls});
-  systEl.value=''; diastEl.value=''; pulsEl.value='';
-  renderBp();
-  showToast(`🩸 ${syst}/${diast} ♥${puls} um ${time} ✓`);
-  systEl.focus();
-}
-
-function deleteBpEntry(id){
-  bpEntries=bpEntries.filter(e=>e.id!==id);
-  renderBp();
-}
-
-function openBpInfo(){ openModal('regen-m-bp-info'); }
 
 function render(){
   // entries list
@@ -6553,10 +6395,6 @@ function render(){
     </div>`;
     return `<button class="regen-chip" onclick="window.regen_openAddModal('${item.id}')">${item.icon} ${item.name}</button>`;
   }).join('')+(!delMode&&!editMode?`<button class="chip-add" onclick="window.regen_openNewItem()" style="display:inline-flex;align-items:center;border-radius:20px;padding:4px 10px;font-size:16px;border:1px dashed var(--border);color:var(--muted);cursor:pointer;background:none">+</button>`:'');
-  // basal temperature section
-  renderTemp();
-  // blood pressure section
-  renderBp();
 }
 
 // ── ADD MODAL ─────────────────────────────
@@ -6672,13 +6510,279 @@ window.regen_lpAction=function(card){if(typeof entries==='undefined'||!entries)r
   window.regen_toggleEditMode = toggleEditMode;
   window.regen_updateRegenIconPreview = updateRegenIconPreview;
   window.regen_render = render;
-  window.regen_addTempChip = addTempChip;
-  window.regen_addTempFromInput = addTempFromInput;
-  window.regen_tempInputFormat = tempInputFormat;
-  window.regen_deleteTempEntry = deleteTempEntry;
-  window.regen_addBp = addBp;
-  window.regen_deleteBpEntry = deleteBpEntry;
-  window.regen_openBpInfo = openBpInfo;
+})();
+
+(function() {
+// ── MESSWERTE ─────────────────────────────
+let tempEntries=[];
+let bpEntries=[];
+let weightEntries=[];
+const TEMP_CHIPS=[35.8,35.9,36.0,36.1,36.2,36.3,36.4,36.5];
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+function fmt1(n){ return n.toFixed(1).replace('.',','); }
+
+// ── INJECT UI ────────────────────────────
+function injectUI(){
+  const host=document.getElementById('messw-content');
+  if(!host) return;
+  if(host.dataset.injected==='1') return;
+  host.innerHTML=`<div class="form-section">
+    <div class="section-row">
+      <div class="section-title">📊 Messwerte</div>
+    </div>
+
+    <!-- Basaltemperatur -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">
+      <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:6px">🌡 Basaltemperatur</div>
+      <div id="messw-temp-entries" style="margin-bottom:8px"></div>
+      <div class="chip-row" id="messw-temp-chips" style="margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="mi" id="messw-temp-input" type="tel" inputmode="numeric" maxlength="4"
+          placeholder="z.B. 365 → 36,5"
+          style="margin:0;flex:1;font-size:12px"
+          oninput="window.messw_tempInputFormat(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();window.messw_addTempFromInput()}">
+        <input class="mi" id="messw-temp-time" type="time" style="margin:0;width:95px;font-size:11px">
+        <button class="bp" style="padding:6px 12px;font-size:11px" onclick="window.messw_addTempFromInput()">+</button>
+      </div>
+    </div>
+
+    <!-- Blutdruck -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:0">🩸 Blutdruck</div>
+        <button onclick="window.messw_openBpInfo()"
+          style="background:none;border:1px solid var(--border);border-radius:50%;width:22px;height:22px;font-size:11px;color:var(--muted);cursor:pointer;padding:0;line-height:1">ⓘ</button>
+      </div>
+      <div id="messw-bp-entries" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px">
+        <input class="mi" id="messw-bp-syst" type="tel" inputmode="numeric" maxlength="3"
+          placeholder="syst" style="margin:0;flex:1;font-size:12px;text-align:center"
+          oninput="this.value=this.value.replace(/\\D/g,'').slice(0,3)">
+        <span style="color:var(--muted);font-size:14px">/</span>
+        <input class="mi" id="messw-bp-diast" type="tel" inputmode="numeric" maxlength="3"
+          placeholder="diast" style="margin:0;flex:1;font-size:12px;text-align:center"
+          oninput="this.value=this.value.replace(/\\D/g,'').slice(0,3)">
+        <span style="color:var(--muted);font-size:11px;margin:0 2px">♥</span>
+        <input class="mi" id="messw-bp-puls" type="tel" inputmode="numeric" maxlength="3"
+          placeholder="puls" style="margin:0;flex:1;font-size:12px;text-align:center"
+          oninput="this.value=this.value.replace(/\\D/g,'').slice(0,3)">
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="mi" id="messw-bp-time" type="time" style="margin:0;width:95px;font-size:11px">
+        <button class="bp" style="padding:6px 12px;font-size:11px;flex:1" onclick="window.messw_addBp()">Speichern</button>
+      </div>
+    </div>
+
+    <!-- Gewicht -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">
+      <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:6px">⚖️ Gewicht</div>
+      <div id="messw-weight-entries" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="mi" id="messw-weight-input" type="tel" inputmode="numeric" maxlength="4"
+          placeholder="z.B. 824 → 82,4 kg"
+          style="margin:0;flex:1;font-size:12px"
+          oninput="this.value=this.value.replace(/\\D/g,'').slice(0,4)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();window.messw_addWeightFromInput()}">
+        <input class="mi" id="messw-weight-time" type="time" style="margin:0;width:95px;font-size:11px">
+        <button class="bp" style="padding:6px 12px;font-size:11px" onclick="window.messw_addWeightFromInput()">+</button>
+      </div>
+    </div>
+  </div>`;
+  host.dataset.injected='1';
+}
+
+// ── BASALTEMPERATUR ──────────────────────
+function renderTemp(){
+  const chipEl=document.getElementById('messw-temp-chips');
+  if(chipEl){
+    chipEl.innerHTML=TEMP_CHIPS.map(t=>
+      `<button class="chip" style="font-size:11px"
+        onclick="window.messw_addTempChip(${t})">${fmt1(t)}</button>`
+    ).join('');
+  }
+  const el=document.getElementById('messw-temp-entries');
+  if(el){
+    if(!tempEntries.length){
+      el.innerHTML='';
+    } else {
+      el.innerHTML=[...tempEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
+        <div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
+          <div class="entry-header">
+            <span style="font-size:13px">🌡</span>
+            <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.temp)} °C</span>
+            <span class="entry-time">${e.time}</span>
+            <button class="entry-del" onclick="window.messw_deleteTempEntry('${e.id}')" style="margin-left:6px">✕</button>
+          </div>
+        </div>`).join('');
+    }
+  }
+  const tEl=document.getElementById('messw-temp-time');
+  if(tEl && !tEl.value) tEl.value=nowTime();
+}
+
+function addTemp(temp){
+  if(temp==null||isNaN(temp)) return;
+  if(temp<30||temp>45){ showToast('Bitte realistische Temperatur eingeben'); return; }
+  const timeEl=document.getElementById('messw-temp-time');
+  const time=(timeEl&&timeEl.value)||nowTime();
+  tempEntries.push({id:uid(),time,temp:Math.round(temp*10)/10});
+  renderTemp();
+  showToast(`🌡 ${fmt1(temp)} °C um ${time} ✓`);
+}
+
+function addTempChip(t){ addTemp(t); }
+
+function tempInputFormat(input){
+  const digits=input.value.replace(/\D/g,'').slice(0,4);
+  input.value=digits;
+}
+
+function addTempFromInput(){
+  const input=document.getElementById('messw-temp-input');
+  if(!input) return;
+  const raw=input.value.replace(/\D/g,'');
+  if(!raw){ showToast('Bitte Wert eingeben'); return; }
+  let temp;
+  if(raw.length<=2) temp=parseInt(raw,10);
+  else temp=parseInt(raw,10)/Math.pow(10,raw.length-2);
+  addTemp(temp);
+  input.value='';
+}
+
+function deleteTempEntry(id){
+  tempEntries=tempEntries.filter(e=>e.id!==id);
+  renderTemp();
+}
+
+// ── BLUTDRUCK ────────────────────────────
+function bpCategory(syst, diast){
+  if(syst>=140 || diast>=90) return {label:'Hyperton',color:'var(--delete)'};
+  if(syst>=130 || diast>=85) return {label:'Hochnormal',color:'var(--warn)'};
+  if(syst>=120 || diast>=80) return {label:'Normal',color:'var(--gold)'};
+  return {label:'Optimal',color:'var(--accent2)'};
+}
+
+function renderBp(){
+  const el=document.getElementById('messw-bp-entries');
+  if(el){
+    if(!bpEntries.length){
+      el.innerHTML='';
+    } else {
+      el.innerHTML=[...bpEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>{
+        const cat=bpCategory(e.syst,e.diast);
+        return `<div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
+          <div class="entry-header">
+            <span style="font-size:13px">🩸</span>
+            <span style="font-size:12px;font-weight:600;margin-left:6px">${e.syst}/${e.diast}</span>
+            ${e.puls?`<span style="font-size:11px;color:var(--muted);margin-left:6px">♥ ${e.puls}</span>`:''}
+            <span style="font-size:9px;color:${cat.color};margin-left:8px;font-weight:600">${cat.label}</span>
+            <span style="flex:1"></span>
+            <span class="entry-time">${e.time}</span>
+            <button class="entry-del" onclick="window.messw_deleteBpEntry('${e.id}')" style="margin-left:6px">✕</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+  const tEl=document.getElementById('messw-bp-time');
+  if(tEl && !tEl.value) tEl.value=nowTime();
+}
+
+function addBp(){
+  const systEl=document.getElementById('messw-bp-syst');
+  const diastEl=document.getElementById('messw-bp-diast');
+  const pulsEl=document.getElementById('messw-bp-puls');
+  const timeEl=document.getElementById('messw-bp-time');
+  const syst=parseInt(systEl.value,10);
+  const diast=parseInt(diastEl.value,10);
+  const puls=parseInt(pulsEl.value,10);
+  if(!syst||!diast||!puls){ showToast('Syst, Diast und Puls eingeben'); return; }
+  if(syst<60||syst>260){ showToast('Systolischer Wert unplausibel'); return; }
+  if(diast<30||diast>180){ showToast('Diastolischer Wert unplausibel'); return; }
+  if(syst<=diast){ showToast('Systolisch muss größer als diastolisch sein'); return; }
+  if(puls<20||puls>240){ showToast('Pulswert unplausibel'); return; }
+  const time=(timeEl&&timeEl.value)||nowTime();
+  bpEntries.push({id:uid(),time,syst,diast,puls});
+  systEl.value=''; diastEl.value=''; pulsEl.value='';
+  renderBp();
+  showToast(`🩸 ${syst}/${diast} ♥${puls} um ${time} ✓`);
+  systEl.focus();
+}
+
+function deleteBpEntry(id){
+  bpEntries=bpEntries.filter(e=>e.id!==id);
+  renderBp();
+}
+
+function openBpInfo(){ openModal('messw-m-bp-info'); }
+
+// ── GEWICHT ──────────────────────────────
+function renderWeight(){
+  const el=document.getElementById('messw-weight-entries');
+  if(el){
+    if(!weightEntries.length){
+      el.innerHTML='';
+    } else {
+      el.innerHTML=[...weightEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
+        <div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
+          <div class="entry-header">
+            <span style="font-size:13px">⚖️</span>
+            <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.weight)} kg</span>
+            <span class="entry-time">${e.time}</span>
+            <button class="entry-del" onclick="window.messw_deleteWeightEntry('${e.id}')" style="margin-left:6px">✕</button>
+          </div>
+        </div>`).join('');
+    }
+  }
+  const tEl=document.getElementById('messw-weight-time');
+  if(tEl && !tEl.value) tEl.value=nowTime();
+}
+
+function addWeightFromInput(){
+  const input=document.getElementById('messw-weight-input');
+  if(!input) return;
+  const raw=input.value.replace(/\D/g,'');
+  if(!raw){ showToast('Bitte Wert eingeben'); return; }
+  // 2-3 digits = whole kg (e.g. "82" -> 82.0), 4 digits = "824" -> 82.4
+  let w;
+  if(raw.length<=3) w=parseInt(raw,10);
+  else w=parseInt(raw,10)/10;
+  if(w<20||w>300){ showToast('Gewichtswert unplausibel'); return; }
+  const timeEl=document.getElementById('messw-weight-time');
+  const time=(timeEl&&timeEl.value)||nowTime();
+  weightEntries.push({id:uid(),time,weight:Math.round(w*10)/10});
+  input.value='';
+  renderWeight();
+  showToast(`⚖️ ${fmt1(w)} kg um ${time} ✓`);
+}
+
+function deleteWeightEntry(id){
+  weightEntries=weightEntries.filter(e=>e.id!==id);
+  renderWeight();
+}
+
+// ── MAIN RENDER ──────────────────────────
+function render(){
+  injectUI();
+  renderTemp();
+  renderBp();
+  renderWeight();
+}
+
+// Exports
+window.messw_render = render;
+window.messw_addTempChip = addTempChip;
+window.messw_addTempFromInput = addTempFromInput;
+window.messw_tempInputFormat = tempInputFormat;
+window.messw_deleteTempEntry = deleteTempEntry;
+window.messw_addBp = addBp;
+window.messw_deleteBpEntry = deleteBpEntry;
+window.messw_openBpInfo = openBpInfo;
+window.messw_addWeightFromInput = addWeightFromInput;
+window.messw_deleteWeightEntry = deleteWeightEntry;
 })();
 
 (function() {
@@ -7240,7 +7344,7 @@ window.renderTimeline = renderTimeline;
 
 function initAllModules(){
   injectModules();
-  ['med','supp','haut','bef','entz','get','ern','schmerz','stuhl','akt','regen','fam','hyp'].forEach(function(m){
+  ['med','supp','haut','bef','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+':',e.message);}
   });
