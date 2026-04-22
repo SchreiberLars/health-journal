@@ -1228,6 +1228,8 @@ function injectModules() {
     <label class="modal-field-label">Einheit</label>
     <select class="modal-select unit-select" id="med-take-unit-input" onchange="updateTakeDoseQuick()"></select>
 
+    <div id="med-take-sub-options" style="display:none"></div>
+
     <label class="modal-field-label">Dosis</label>
     <div class="dose-quick" id="med-take-dose-quick"></div>
     <input class="modal-input" id="med-take-dose-input" placeholder="Andere Dosis..." type="number" min="0" step="any">
@@ -2625,6 +2627,20 @@ function renderMedListChips() {
         </div>
       </div>`;
     }
+    // Med with subOptions: render one chip per sub-option side-by-side
+    if (med.subOptions && med.subOptions.length) {
+      const SHORT = {Links:'L', Rechts:'R', Beide:'L+R'};
+      return med.subOptions.map(opt => `
+        <button class="chip chip-med-list${ivs&&!ivs.due?' not-due':''}"
+          data-medid="${med.id}" data-subopt="${opt}"
+          onclick="window.med_quickTakeSub('${med.id}','${opt}')"
+          style="flex-direction:column;align-items:flex-start;padding:6px 11px">
+          <div style="display:flex;align-items:center;gap:5px">
+            💊 ${med.name} <span class="chip-dose">${SHORT[opt]||opt}</span>
+            <span class="chip-hint">⋯</span>
+          </div>
+        </button>`).join('');
+    }
     return `<button class="chip chip-med-list${ivs&&!ivs.due?' not-due':''}"
       data-medid="${med.id}"
       onclick="window.med_quickTake('${med.id}')"
@@ -2799,6 +2815,17 @@ function quickTake(medId) {
   render();
   const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
   showToast(`${med.name}${doseStr} um ${t} ✓`);
+}
+
+function quickTakeSub(medId, subOption) {
+  const med = medList.find(m => m.id === medId);
+  if (!med) return;
+  const now = new Date();
+  const t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  medEntries.push({ id: uid(), medId: med.id, name: med.name, dose: med.defaultDose, unit: med.unit, time: t, comment: '', subOption });
+  render();
+  const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
+  showToast(`${med.name} ${subOption}${doseStr} um ${t} ✓`);
 }
 
 function openTake(medId) {
@@ -3037,6 +3064,7 @@ window.med_lpEntryAction=function(el){if(typeof editEntry==='function')editEntry
   window.med_openNewMed = openNewMed;
   window.med_pickSubOpt = pickSubOpt;
   window.med_quickTake = quickTake;
+  window.med_quickTakeSub = quickTakeSub;
   window.med_selectDosePreset = selectDosePreset;
   window.med_addUnit = addUnit;
   window.med_confirmTake = confirmTake;
