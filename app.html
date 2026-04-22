@@ -430,6 +430,33 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
   background:var(--surface2);color:var(--text)}
 .export-btn.primary{background:var(--accent);border-color:var(--accent);color:#f5f0e8}
 
+/* ── NOTE FAB ──────────────────────────── */
+.note-fab{position:fixed;right:16px;bottom:calc(72px + var(--safe));z-index:99;
+  width:48px;height:48px;border-radius:50%;border:none;background:var(--accent);
+  color:#f5f0e8;font-size:22px;line-height:1;cursor:pointer;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);transition:transform .12s}
+.note-fab:active{transform:scale(0.92)}
+.note-cat-btn{flex:1;padding:8px 6px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface2);font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--muted);cursor:pointer;transition:all .12s}
+.note-cat-btn.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface2));
+  color:var(--accent);font-weight:600}
+.note-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 12px;margin-bottom:6px;position:relative}
+.note-card .nc-meta{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;display:flex;gap:8px;align-items:center}
+.note-card .nc-cat{padding:1px 7px;border-radius:8px;font-weight:600}
+.note-card .nc-cat.beob{background:color-mix(in srgb,var(--accent2) 18%,transparent);color:var(--accent2)}
+.note-card .nc-cat.hyp{background:color-mix(in srgb,var(--accent3) 18%,transparent);color:var(--accent3)}
+.note-card .nc-cat.frage{background:color-mix(in srgb,var(--gold) 22%,transparent);color:var(--gold)}
+.note-card .nc-text{font-size:12px;line-height:1.4;color:var(--text);white-space:pre-wrap}
+.note-card .nc-del{position:absolute;top:8px;right:8px;background:none;border:none;
+  color:var(--muted);font-size:13px;cursor:pointer;padding:0 4px}
+.note-filter-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
+.note-filter-btn{padding:4px 10px;border-radius:14px;border:1px solid var(--border);
+  background:var(--surface);font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted);cursor:pointer}
+.note-filter-btn.sel{background:var(--accent);border-color:var(--accent);color:#f5f0e8}
+
 /* ── TOAST ──────────────────────────────── */
 .toast{position:fixed;bottom:calc(80px + var(--safe));left:50%;
   transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
@@ -834,6 +861,23 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 
 <!-- ── TAB: HYPOTHESEN ── -->
 <div id="tab-hyp" style="display:none">
+
+<!-- Notizen-Sektion -->
+<div class="section" style="border-left-color:var(--gold);border-bottom:none">
+  <div class="section-body">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span class="section-label">📝 Notizen</span>
+      <button class="btn-ghost" onclick="window.notes_openCapture()">+ Notiz</button>
+    </div>
+    <div style="font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:10px">
+      Schnelle Beobachtungen, Hypothesen und Fragen — über den runden Button rechts unten von überall erreichbar.
+    </div>
+    <div class="note-filter-row" id="notes-filter-row"></div>
+    <div id="notes-list"></div>
+  </div>
+</div>
+
+<!-- Hypothesen-Sektion (unverändert) -->
 <div class="section" style="border-left-color:var(--c-hyp);border-bottom:none">
   <div class="section-body">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -883,7 +927,7 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
       📋 Journal
     </button>
     <button class="fnav-tab" id="tab-btn-hyp" onclick="switchTab('hyp')">
-      💡 Hypothesen
+      📝 Notizen
     </button>
     <button class="fnav-tab" id="tab-btn-timeline" onclick="switchTab('timeline')">
       📅 Zeitachse
@@ -931,6 +975,36 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
     <div class="mbr">
       <button class="bs" onclick="closeModal('m-import')">Abbrechen</button>
       <button class="bp" onclick="confirmImport()">Importieren</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notes Floating Action Button (visible on all tabs) -->
+<button class="note-fab" id="note-fab" onclick="window.notes_openCapture()" title="Notiz erfassen">📝</button>
+
+<!-- Notes Capture Modal -->
+<div class="modal-overlay" id="notes-m-capture">
+  <div class="modal-sheet">
+    <div class="mt">📝 Notiz erfassen</div>
+    <div class="mt-sub">Schnell raus, später einsortieren</div>
+
+    <label class="ml">Kategorie</label>
+    <div style="display:flex;gap:6px;margin-top:4px;margin-bottom:10px">
+      <button class="note-cat-btn" data-cat="beob" onclick="window.notes_pickCat('beob',this)">👁 Beobachtung</button>
+      <button class="note-cat-btn" data-cat="hyp"  onclick="window.notes_pickCat('hyp',this)">💡 Hypothese</button>
+      <button class="note-cat-btn" data-cat="frage" onclick="window.notes_pickCat('frage',this)">❓ Frage</button>
+    </div>
+
+    <label class="ml">Text</label>
+    <textarea class="mi" id="notes-m-text" rows="4" placeholder="Was fällt dir gerade auf?"
+      style="margin-top:4px;resize:vertical;min-height:80px"></textarea>
+
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="notes-m-time" type="time" style="margin-top:4px">
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('notes-m-capture')">Abbrechen</button>
+      <button class="bp" onclick="window.notes_save()">Speichern</button>
     </div>
   </div>
 </div>
@@ -7504,6 +7578,119 @@ function showToast(msg){
 })();
 
 // ═══════════════════════════════════════════
+// NOTES MODULE
+// ═══════════════════════════════════════════
+(function() {
+const CATS = {
+  beob:  {label:'Beobachtung', icon:'👁', short:'Beob.'},
+  hyp:   {label:'Hypothese',   icon:'💡', short:'Hyp.'},
+  frage: {label:'Frage',       icon:'❓', short:'Frage'},
+};
+let notes = []; // [{id, time, cat, text}]
+let activeFilter = 'all';
+let pickedCat = 'beob';
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function openCapture(){
+  pickedCat = 'beob';
+  document.getElementById('notes-m-text').value = '';
+  document.getElementById('notes-m-time').value = nowTime();
+  // Reset cat buttons
+  document.querySelectorAll('#notes-m-capture .note-cat-btn').forEach(b=>{
+    b.classList.toggle('sel', b.dataset.cat==='beob');
+  });
+  openModal('notes-m-capture');
+  setTimeout(()=>{
+    const t = document.getElementById('notes-m-text');
+    if(t) t.focus();
+  }, 100);
+}
+
+function pickCat(cat, btn){
+  pickedCat = cat;
+  btn.closest('div').querySelectorAll('.note-cat-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function save(){
+  const text = document.getElementById('notes-m-text').value.trim();
+  const time = document.getElementById('notes-m-time').value || nowTime();
+  if(!text){ showToast('Text fehlt'); return; }
+  notes.unshift({id:uid(), time, cat:pickedCat, text});
+  closeModal('notes-m-capture');
+  render();
+  const c = CATS[pickedCat];
+  showToast(`${c.icon} ${c.label} ${time} ✓`);
+}
+
+function deleteNote(id){
+  notes = notes.filter(n=>n.id!==id);
+  render();
+}
+
+function setFilter(f){
+  activeFilter = f;
+  render();
+}
+
+function renderFilters(){
+  const el = document.getElementById('notes-filter-row');
+  if(!el) return;
+  const counts = {all: notes.length, beob:0, hyp:0, frage:0};
+  notes.forEach(n=>{ if(counts[n.cat]!=null) counts[n.cat]++; });
+  const items = [
+    {f:'all',   label:'Alle'},
+    {f:'beob',  label:'👁 Beobachtungen'},
+    {f:'hyp',   label:'💡 Hypothesen'},
+    {f:'frage', label:'❓ Fragen'},
+  ];
+  el.innerHTML = items.map(it=>
+    `<button class="note-filter-btn${activeFilter===it.f?' sel':''}"
+      onclick="window.notes_setFilter('${it.f}')">${it.label} ${counts[it.f]||0}</button>`
+  ).join('');
+}
+
+function renderList(){
+  const el = document.getElementById('notes-list');
+  if(!el) return;
+  const filtered = activeFilter==='all' ? notes : notes.filter(n=>n.cat===activeFilter);
+  if(!filtered.length){
+    el.innerHTML = `<div style="font-size:11px;color:var(--muted);font-style:italic;padding:8px 2px">
+      ${activeFilter==='all' ? 'Noch keine Notizen — tippe rechts unten auf 📝' : 'Keine Einträge in dieser Kategorie'}
+    </div>`;
+    return;
+  }
+  el.innerHTML = filtered.map(n=>{
+    const c = CATS[n.cat] || CATS.beob;
+    return `<div class="note-card">
+      <div class="nc-meta">
+        <span class="nc-cat ${n.cat}">${c.icon} ${c.short}</span>
+        <span>${n.time}</span>
+      </div>
+      <div class="nc-text">${escHtml(n.text)}</div>
+      <button class="nc-del" onclick="window.notes_deleteNote('${n.id}')" title="Löschen">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function render(){
+  renderFilters();
+  renderList();
+}
+
+// Exports
+window.notes_openCapture = openCapture;
+window.notes_pickCat = pickCat;
+window.notes_save = save;
+window.notes_deleteNote = deleteNote;
+window.notes_setFilter = setFilter;
+window.notes_render = render;
+})();
+
+// ═══════════════════════════════════════════
 // TIMELINE v2 - proportional + zones
 // ═══════════════════════════════════════════
 
@@ -7694,7 +7881,7 @@ window.renderTimeline = renderTimeline;
 
 function initAllModules(){
   injectModules();
-  ['med','supp','haut','bef','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp'].forEach(function(m){
+  ['med','supp','haut','bef','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+':',e.message);}
   });
