@@ -2232,6 +2232,32 @@ function injectModules() {
     </div>
   </div>
 
+  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:0">🩸 Blutdruck</div>
+      <button onclick="window.regen_openBpInfo()"
+        style="background:none;border:1px solid var(--border);border-radius:50%;width:22px;height:22px;font-size:11px;color:var(--muted);cursor:pointer;padding:0;line-height:1">ⓘ</button>
+    </div>
+    <div id="regen-bp-entries" style="margin-bottom:8px"></div>
+    <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px">
+      <input class="mi" id="regen-bp-syst" type="tel" inputmode="numeric" maxlength="3"
+        placeholder="syst" style="margin:0;flex:1;font-size:12px;text-align:center"
+        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
+      <span style="color:var(--muted);font-size:14px">/</span>
+      <input class="mi" id="regen-bp-diast" type="tel" inputmode="numeric" maxlength="3"
+        placeholder="diast" style="margin:0;flex:1;font-size:12px;text-align:center"
+        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
+      <span style="color:var(--muted);font-size:11px;margin:0 2px">♥</span>
+      <input class="mi" id="regen-bp-puls" type="tel" inputmode="numeric" maxlength="3"
+        placeholder="puls" style="margin:0;flex:1;font-size:12px;text-align:center"
+        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input class="mi" id="regen-bp-time" type="time" style="margin:0;width:95px;font-size:11px">
+      <button class="bp" style="padding:6px 12px;font-size:11px;flex:1" onclick="window.regen_addBp()">Speichern</button>
+    </div>
+  </div>
+
   <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px">Heute erfasst</div>
   <div id="regen-entries" style="margin-bottom:12px"></div>
   <div style="border-top:1px solid var(--border);padding-top:12px">
@@ -2254,6 +2280,57 @@ function injectModules() {
     <div class="mbr">
       <button class="bs" onclick="window.regen_cancelDauer()">Abbrechen</button>
       <button class="bp" onclick="window.regen_confirmDauer()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="regen-m-bp-info">
+  <div class="modal-sheet">
+    <div class="mt">🩸 Blutdruck richtig messen</div>
+    <div class="mt-sub">Leitlinien der Deutschen Hochdruckliga / ESH</div>
+
+    <div style="font-size:12px;line-height:1.6;color:var(--text);margin-top:10px">
+      <div style="font-weight:600;color:var(--accent);margin-top:10px;margin-bottom:4px">Vorbereitung</div>
+      <div style="color:var(--muted);padding-left:2px">
+        • 30 Min vorher: kein Kaffee, Tee, Alkohol<br>
+        • Kein Sport, nicht rauchen, nicht essen<br>
+        • Vor dem Messen 5 Min ruhig sitzen
+      </div>
+
+      <div style="font-weight:600;color:var(--accent);margin-top:14px;margin-bottom:4px">Körperhaltung</div>
+      <div style="color:var(--muted);padding-left:2px">
+        • Rücken angelehnt, beide Füße flach am Boden<br>
+        • Beine nicht überschlagen<br>
+        • Arm locker auf den Tisch legen<br>
+        • Manschette auf Herzhöhe
+      </div>
+
+      <div style="font-weight:600;color:var(--accent);margin-top:14px;margin-bottom:4px">Während der Messung</div>
+      <div style="color:var(--muted);padding-left:2px">
+        • Ruhig atmen, nicht sprechen<br>
+        • 2 Messungen im Abstand von 1–2 Min<br>
+        • Zweiten Wert erfassen (oder Mittelwert)<br>
+        • Immer am gleichen Arm (dem mit höherem Wert)
+      </div>
+
+      <div style="font-weight:600;color:var(--accent);margin-top:14px;margin-bottom:4px">Wann messen?</div>
+      <div style="color:var(--muted);padding-left:2px">
+        • Morgens: vor Medikamenten, vor Frühstück<br>
+        • Abends: vor dem Essen<br>
+        • Idealerweise 2×/Tag zur gleichen Zeit
+      </div>
+
+      <div style="font-weight:600;color:var(--accent);margin-top:14px;margin-bottom:4px">Orientierungswerte</div>
+      <div style="color:var(--muted);padding-left:2px">
+        • Optimal: &lt;120 / &lt;80<br>
+        • Normal: 120–129 / 80–84<br>
+        • Hochnormal: 130–139 / 85–89<br>
+        • Hypertonie ab: ≥140 / ≥90
+      </div>
+    </div>
+
+    <div class="mbr" style="margin-top:14px">
+      <button class="bp" onclick="closeModal('regen-m-bp-info')">Verstanden</button>
     </div>
   </div>
 </div>
@@ -6305,6 +6382,7 @@ let regenItems=[
 regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
 let entries=[];
 let tempEntries=[];
+let bpEntries=[];
 const TEMP_CHIPS=[35.8,35.9,36.0,36.1,36.2,36.3,36.4,36.5];
 let delMode=false,editMode=false,addCtx=null,editCtx=null;
 function uid(){return Math.random().toString(36).slice(2,9)}
@@ -6379,6 +6457,69 @@ function deleteTempEntry(id){
   renderTemp();
 }
 
+// ── BLUTDRUCK ────────────────────────────
+function bpCategory(syst, diast){
+  // Higher category of the two wins (worst case)
+  if(syst>=140 || diast>=90) return {label:'Hyperton',color:'var(--delete)'};
+  if(syst>=130 || diast>=85) return {label:'Hochnormal',color:'var(--warn)'};
+  if(syst>=120 || diast>=80) return {label:'Normal',color:'var(--gold)'};
+  return {label:'Optimal',color:'var(--accent2)'};
+}
+
+function renderBp(){
+  const el=document.getElementById('regen-bp-entries');
+  if(el){
+    if(!bpEntries.length){
+      el.innerHTML='';
+    } else {
+      el.innerHTML=[...bpEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>{
+        const cat=bpCategory(e.syst,e.diast);
+        return `<div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
+          <div class="entry-header">
+            <span style="font-size:13px">🩸</span>
+            <span style="font-size:12px;font-weight:600;margin-left:6px">${e.syst}/${e.diast}</span>
+            ${e.puls?`<span style="font-size:11px;color:var(--muted);margin-left:6px">♥ ${e.puls}</span>`:''}
+            <span style="font-size:9px;color:${cat.color};margin-left:8px;font-weight:600">${cat.label}</span>
+            <span style="flex:1"></span>
+            <span class="entry-time">${e.time}</span>
+            <button class="entry-del" onclick="window.regen_deleteBpEntry('${e.id}')" style="margin-left:6px">✕</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+  const tEl=document.getElementById('regen-bp-time');
+  if(tEl && !tEl.value) tEl.value=nowTime();
+}
+
+function addBp(){
+  const systEl=document.getElementById('regen-bp-syst');
+  const diastEl=document.getElementById('regen-bp-diast');
+  const pulsEl=document.getElementById('regen-bp-puls');
+  const timeEl=document.getElementById('regen-bp-time');
+  const syst=parseInt(systEl.value,10);
+  const diast=parseInt(diastEl.value,10);
+  const puls=parseInt(pulsEl.value,10);
+  if(!syst||!diast||!puls){ showToast('Syst, Diast und Puls eingeben'); return; }
+  if(syst<60||syst>260){ showToast('Systolischer Wert unplausibel'); return; }
+  if(diast<30||diast>180){ showToast('Diastolischer Wert unplausibel'); return; }
+  if(syst<=diast){ showToast('Systolisch muss größer als diastolisch sein'); return; }
+  if(puls<20||puls>240){ showToast('Pulswert unplausibel'); return; }
+  const time=(timeEl&&timeEl.value)||nowTime();
+  bpEntries.push({id:uid(),time,syst,diast,puls});
+  systEl.value=''; diastEl.value=''; pulsEl.value='';
+  renderBp();
+  showToast(`🩸 ${syst}/${diast} ♥${puls} um ${time} ✓`);
+  systEl.focus();
+}
+
+function deleteBpEntry(id){
+  bpEntries=bpEntries.filter(e=>e.id!==id);
+  renderBp();
+}
+
+function openBpInfo(){ openModal('regen-m-bp-info'); }
+
 function render(){
   // entries list
   const el=document.getElementById('regen-entries');
@@ -6414,6 +6555,8 @@ function render(){
   }).join('')+(!delMode&&!editMode?`<button class="chip-add" onclick="window.regen_openNewItem()" style="display:inline-flex;align-items:center;border-radius:20px;padding:4px 10px;font-size:16px;border:1px dashed var(--border);color:var(--muted);cursor:pointer;background:none">+</button>`:'');
   // basal temperature section
   renderTemp();
+  // blood pressure section
+  renderBp();
 }
 
 // ── ADD MODAL ─────────────────────────────
@@ -6533,6 +6676,9 @@ window.regen_lpAction=function(card){if(typeof entries==='undefined'||!entries)r
   window.regen_addTempFromInput = addTempFromInput;
   window.regen_tempInputFormat = tempInputFormat;
   window.regen_deleteTempEntry = deleteTempEntry;
+  window.regen_addBp = addBp;
+  window.regen_deleteBpEntry = deleteBpEntry;
+  window.regen_openBpInfo = openBpInfo;
 })();
 
 (function() {
