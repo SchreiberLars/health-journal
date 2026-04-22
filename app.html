@@ -2438,6 +2438,63 @@ function injectModules() {
   </div>
 </div>
 
+<!-- Edit Basaltemperatur -->
+<div class="modal-overlay" id="messw-m-edit-temp">
+  <div class="modal-sheet">
+    <div class="mt">🌡 Basaltemperatur bearbeiten</div>
+    <label class="ml">Wert (°C)</label>
+    <input class="mi" id="messw-m-edit-temp-val" type="tel" inputmode="decimal" placeholder="z.B. 36.5" style="margin-top:4px">
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="messw-m-edit-temp-time" type="time" style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('messw-m-edit-temp')">Abbrechen</button>
+      <button class="bp" onclick="window.messw_saveEditTemp()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Blutdruck -->
+<div class="modal-overlay" id="messw-m-edit-bp">
+  <div class="modal-sheet">
+    <div class="mt">🩸 Blutdruck bearbeiten</div>
+    <label class="ml">Werte</label>
+    <div style="display:flex;gap:5px;align-items:center;margin-top:4px">
+      <input class="mi" id="messw-m-edit-bp-syst" type="tel" inputmode="numeric" maxlength="3"
+        placeholder="syst" style="margin:0;flex:1;font-size:12px;text-align:center"
+        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
+      <span style="color:var(--muted);font-size:14px">/</span>
+      <input class="mi" id="messw-m-edit-bp-diast" type="tel" inputmode="numeric" maxlength="3"
+        placeholder="diast" style="margin:0;flex:1;font-size:12px;text-align:center"
+        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
+      <span style="color:var(--muted);font-size:11px;margin:0 2px">♥</span>
+      <input class="mi" id="messw-m-edit-bp-puls" type="tel" inputmode="numeric" maxlength="3"
+        placeholder="puls" style="margin:0;flex:1;font-size:12px;text-align:center"
+        oninput="this.value=this.value.replace(/\D/g,'').slice(0,3)">
+    </div>
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="messw-m-edit-bp-time" type="time" style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('messw-m-edit-bp')">Abbrechen</button>
+      <button class="bp" onclick="window.messw_saveEditBp()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Gewicht -->
+<div class="modal-overlay" id="messw-m-edit-weight">
+  <div class="modal-sheet">
+    <div class="mt">⚖️ Gewicht bearbeiten</div>
+    <label class="ml">Wert (kg)</label>
+    <input class="mi" id="messw-m-edit-weight-val" type="tel" inputmode="decimal" placeholder="z.B. 82.4" style="margin-top:4px">
+    <label class="ml">Uhrzeit</label>
+    <input class="mi" id="messw-m-edit-weight-time" type="time" style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('messw-m-edit-weight')">Abbrechen</button>
+      <button class="bp" onclick="window.messw_saveEditWeight()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 
 <div class="modal-overlay" id="regen-m-edit">
   <div class="modal-sheet">
@@ -7038,7 +7095,8 @@ function renderTemp(){
             <span style="font-size:13px">🌡</span>
             <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.temp)} °C</span>
             <span class="entry-time">${e.time}</span>
-            <button class="entry-del" onclick="window.messw_deleteTempEntry('${e.id}')" style="margin-left:6px">✕</button>
+            <button class="entry-del" onclick="window.messw_openEditTemp('${e.id}')" style="margin-left:6px;color:var(--muted)" title="Bearbeiten">✎</button>
+            <button class="entry-del" onclick="window.messw_deleteTempEntry('${e.id}')" style="margin-left:2px">✕</button>
           </div>
         </div>`).join('');
     }
@@ -7105,7 +7163,8 @@ function renderBp(){
             <span style="font-size:9px;color:${cat.color};margin-left:8px;font-weight:600">${cat.label}</span>
             <span style="flex:1"></span>
             <span class="entry-time">${e.time}</span>
-            <button class="entry-del" onclick="window.messw_deleteBpEntry('${e.id}')" style="margin-left:6px">✕</button>
+            <button class="entry-del" onclick="window.messw_openEditBp('${e.id}')" style="margin-left:6px;color:var(--muted)" title="Bearbeiten">✎</button>
+            <button class="entry-del" onclick="window.messw_deleteBpEntry('${e.id}')" style="margin-left:2px">✕</button>
           </div>
         </div>`;
       }).join('');
@@ -7156,7 +7215,8 @@ function renderWeight(){
             <span style="font-size:13px">⚖️</span>
             <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.weight)} kg</span>
             <span class="entry-time">${e.time}</span>
-            <button class="entry-del" onclick="window.messw_deleteWeightEntry('${e.id}')" style="margin-left:6px">✕</button>
+            <button class="entry-del" onclick="window.messw_openEditWeight('${e.id}')" style="margin-left:6px;color:var(--muted)" title="Bearbeiten">✎</button>
+            <button class="entry-del" onclick="window.messw_deleteWeightEntry('${e.id}')" style="margin-left:2px">✕</button>
           </div>
         </div>`).join('');
     }
@@ -7196,6 +7256,103 @@ function render(){
   renderWeight();
 }
 
+// ── EDIT-FUNKTIONEN ──────────────────────
+function openEditTemp(id){
+  const e = tempEntries.find(x=>x.id===id);
+  if(!e) return;
+  document.getElementById('messw-m-edit-temp-val').value = String(e.temp).replace('.',',');
+  document.getElementById('messw-m-edit-temp-time').value = e.time;
+  document.getElementById('messw-m-edit-temp-val').dataset.eid = id;
+  openModal('messw-m-edit-temp');
+}
+function saveEditTemp(){
+  const valEl = document.getElementById('messw-m-edit-temp-val');
+  const timeEl = document.getElementById('messw-m-edit-temp-time');
+  const id = valEl.dataset.eid;
+  const e = tempEntries.find(x=>x.id===id);
+  if(!e){ closeModal('messw-m-edit-temp'); return; }
+  // Parse value - accept "36,5" or "36.5" or "365"
+  const raw = valEl.value.replace(',','.').trim();
+  let temp;
+  if(/^\d+\.\d+$/.test(raw)) temp = parseFloat(raw);
+  else if(/^\d+$/.test(raw)){
+    const digits = raw;
+    if(digits.length<=2) temp = parseInt(digits,10);
+    else temp = parseInt(digits,10)/Math.pow(10,digits.length-2);
+  } else { showToast('Ungültiger Wert'); return; }
+  if(temp<30||temp>45){ showToast('Bitte realistische Temperatur eingeben'); return; }
+  const time = timeEl.value || nowTime();
+  e.temp = Math.round(temp*10)/10;
+  e.time = time;
+  closeModal('messw-m-edit-temp');
+  renderTemp();
+  showToast(`🌡 ${fmt1(e.temp)} °C ✓`);
+}
+
+function openEditBp(id){
+  const e = bpEntries.find(x=>x.id===id);
+  if(!e) return;
+  document.getElementById('messw-m-edit-bp-syst').value = e.syst;
+  document.getElementById('messw-m-edit-bp-diast').value = e.diast;
+  document.getElementById('messw-m-edit-bp-puls').value = e.puls||'';
+  document.getElementById('messw-m-edit-bp-time').value = e.time;
+  document.getElementById('messw-m-edit-bp-syst').dataset.eid = id;
+  openModal('messw-m-edit-bp');
+}
+function saveEditBp(){
+  const systEl = document.getElementById('messw-m-edit-bp-syst');
+  const diastEl = document.getElementById('messw-m-edit-bp-diast');
+  const pulsEl = document.getElementById('messw-m-edit-bp-puls');
+  const timeEl = document.getElementById('messw-m-edit-bp-time');
+  const id = systEl.dataset.eid;
+  const e = bpEntries.find(x=>x.id===id);
+  if(!e){ closeModal('messw-m-edit-bp'); return; }
+  const syst = parseInt(systEl.value,10);
+  const diast = parseInt(diastEl.value,10);
+  const puls = parseInt(pulsEl.value,10);
+  if(!syst||!diast||!puls){ showToast('Syst, Diast und Puls eingeben'); return; }
+  if(syst<60||syst>260){ showToast('Systolischer Wert unplausibel'); return; }
+  if(diast<30||diast>180){ showToast('Diastolischer Wert unplausibel'); return; }
+  if(syst<=diast){ showToast('Systolisch muss größer als diastolisch sein'); return; }
+  if(puls<20||puls>240){ showToast('Pulswert unplausibel'); return; }
+  const time = timeEl.value || nowTime();
+  e.syst = syst; e.diast = diast; e.puls = puls; e.time = time;
+  closeModal('messw-m-edit-bp');
+  renderBp();
+  showToast(`🩸 ${syst}/${diast} ♥${puls} ✓`);
+}
+
+function openEditWeight(id){
+  const e = weightEntries.find(x=>x.id===id);
+  if(!e) return;
+  document.getElementById('messw-m-edit-weight-val').value = String(e.weight).replace('.',',');
+  document.getElementById('messw-m-edit-weight-time').value = e.time;
+  document.getElementById('messw-m-edit-weight-val').dataset.eid = id;
+  openModal('messw-m-edit-weight');
+}
+function saveEditWeight(){
+  const valEl = document.getElementById('messw-m-edit-weight-val');
+  const timeEl = document.getElementById('messw-m-edit-weight-time');
+  const id = valEl.dataset.eid;
+  const e = weightEntries.find(x=>x.id===id);
+  if(!e){ closeModal('messw-m-edit-weight'); return; }
+  const raw = valEl.value.replace(',','.').trim();
+  let w;
+  if(/^\d+\.\d+$/.test(raw)) w = parseFloat(raw);
+  else if(/^\d+$/.test(raw)){
+    const digits = raw;
+    if(digits.length<=3) w = parseInt(digits,10);
+    else w = parseInt(digits,10)/10;
+  } else { showToast('Ungültiger Wert'); return; }
+  if(w<20||w>300){ showToast('Gewichtswert unplausibel'); return; }
+  const time = timeEl.value || nowTime();
+  e.weight = Math.round(w*10)/10;
+  e.time = time;
+  closeModal('messw-m-edit-weight');
+  renderWeight();
+  showToast(`⚖️ ${fmt1(e.weight)} kg ✓`);
+}
+
 // Exports
 window.messw_render = render;
 window.messw_addTempChip = addTempChip;
@@ -7207,6 +7364,12 @@ window.messw_deleteBpEntry = deleteBpEntry;
 window.messw_openBpInfo = openBpInfo;
 window.messw_addWeightFromInput = addWeightFromInput;
 window.messw_deleteWeightEntry = deleteWeightEntry;
+window.messw_openEditTemp = openEditTemp;
+window.messw_saveEditTemp = saveEditTemp;
+window.messw_openEditBp = openEditBp;
+window.messw_saveEditBp = saveEditBp;
+window.messw_openEditWeight = openEditWeight;
+window.messw_saveEditWeight = saveEditWeight;
 })();
 
 (function() {
