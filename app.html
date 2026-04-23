@@ -2199,10 +2199,15 @@ function injectModules() {
   document.getElementById('stuhl-content').innerHTML = `<div class="form-section">
   <div class="section-row">
     <div class="section-title">Stuhlgang</div>
-    <button onclick="window.stuhl_openLegend()"
-      style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer">ⓘ Legende</button>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button onclick="window.stuhl_toggleComment()" title="Kommentar zum Tag"
+        style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px 4px">💬</button>
+      <button onclick="window.stuhl_openLegend()"
+        style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer">ⓘ Legende</button>
+    </div>
   </div>
 
+  <div id="stuhl-comment-area"></div>
   <div id="stuhl-entries-list"></div>
 
   <button onclick="window.stuhl_addEntry()"
@@ -2239,11 +2244,14 @@ function injectModules() {
   document.getElementById('akt-content').innerHTML = `<div class="form-section">
   <div class="section-row">
     <div class="section-title">🏃 Aktivität</div>
-    <div style="display:flex;gap:6px">
+    <div style="display:flex;gap:6px;align-items:center">
+      <button onclick="window.akt_toggleComment()" title="Kommentar zum Tag"
+        style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px 4px">💬</button>
       <button class="btn-del" id="akt-btn-del" onclick="window.akt_toggleDelMode()">🗑 Löschen</button>
       <button class="btn-edit-mode" id="akt-btn-edit" onclick="window.akt_toggleEditMode()">✎ Bearbeiten</button>
     </div>
   </div>
+  <div id="akt-comment-area"></div>
   <div class="sublabel">Heute erfasst</div>
   <div id="akt-entries"></div>
   <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
@@ -2316,12 +2324,15 @@ function injectModules() {
   document.getElementById('regen-content').innerHTML = `<div class="form-section">
   <div class="section-row">
     <div class="section-title">🔋 Regeneration</div>
-    <div style="display:flex;gap:6px">
+    <div style="display:flex;gap:6px;align-items:center">
+      <button onclick="window.regen_toggleComment()" title="Kommentar zum Tag"
+        style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px 4px">💬</button>
       <button class="btn-del" id="regen-btn-del" onclick="window.regen_toggleDelMode()">🗑 Löschen</button>
       <button class="btn-edit-mode" id="regen-btn-edit" onclick="window.regen_toggleEditMode()">✎ Bearbeiten</button>
     </div>
   </div>
 
+  <div id="regen-comment-area"></div>
   <div class="sublabel" style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:8px">Heute erfasst</div>
   <div id="regen-entries" style="margin-bottom:12px"></div>
   <div style="border-top:1px solid var(--border);padding-top:12px">
@@ -6528,16 +6539,55 @@ function bristolBase(v){ return Math.ceil(v); }
 // entries: [{id, time, bristol, infoOpen}]
 let entries = [];
 let infoOpen = {}; // entryId -> bool
+let dayComment = '';
+let commentOpen = false;
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function nowTime(){
   const n=new Date();
   return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
 }
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 // ── RENDER ────────────────────────────────
 function render(){
+  renderCommentArea();
   renderEntries();
+}
+
+function renderCommentArea(){
+  const container = document.getElementById('stuhl-comment-area');
+  if(!container) return;
+  if(commentOpen){
+    container.innerHTML = `
+      <textarea class="comment-textarea" id="ta-stuhl-day"
+        placeholder="Kommentar zum heutigen Stuhlgang...">${escHtml(dayComment)}</textarea>
+      <div class="comment-actions">
+        <button class="comment-clear" onclick="document.getElementById('ta-stuhl-day').value=''">Leeren</button>
+        <button class="comment-save" onclick="window.stuhl_saveComment()">Speichern</button>
+      </div>`;
+    setTimeout(()=>{
+      const ta=document.getElementById('ta-stuhl-day');
+      if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+    },50);
+  } else if(dayComment){
+    container.innerHTML = `<div class="comment-preview" onclick="window.stuhl_toggleComment()">${escHtml(dayComment)}</div>`;
+  } else {
+    container.innerHTML = '';
+  }
+}
+
+function toggleComment(){
+  commentOpen = !commentOpen;
+  renderCommentArea();
+}
+
+function saveComment(){
+  const ta = document.getElementById('ta-stuhl-day');
+  dayComment = ta ? ta.value.trim() : '';
+  commentOpen = false;
+  renderCommentArea();
+  showToast('Kommentar gespeichert ✓');
 }
 
 function renderEntries(){
@@ -6636,7 +6686,8 @@ function showToast(msg){
   window.stuhl_toggleInfo = toggleInfo;
   window.stuhl_addEntry = addEntry;
   window.stuhl_openLegend = openLegend;
-  window.stuhl_render = render;
+  window.stuhl_toggleComment = toggleComment;
+  window.stuhl_saveComment = saveComment;
   window.stuhl_render = render;
 })();
 
@@ -6648,8 +6699,46 @@ let entries = [];
 let addCtx = null, editCtx = null, currentInt = 'mittel';
 let delMode = false, editMode = false;
 let lpTimer = null, lpFired = false;
+let dayComment = '';
+let commentOpen = false;
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function renderCommentArea(){
+  const container = document.getElementById('akt-comment-area');
+  if(!container) return;
+  if(commentOpen){
+    container.innerHTML = `
+      <textarea class="comment-textarea" id="ta-akt-day"
+        placeholder="Kommentar zu den Aktivitäten heute...">${escHtml(dayComment)}</textarea>
+      <div class="comment-actions">
+        <button class="comment-clear" onclick="document.getElementById('ta-akt-day').value=''">Leeren</button>
+        <button class="comment-save" onclick="window.akt_saveComment()">Speichern</button>
+      </div>`;
+    setTimeout(()=>{
+      const ta=document.getElementById('ta-akt-day');
+      if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+    },50);
+  } else if(dayComment){
+    container.innerHTML = `<div class="comment-preview" onclick="window.akt_toggleComment()">${escHtml(dayComment)}</div>`;
+  } else {
+    container.innerHTML = '';
+  }
+}
+
+function toggleComment(){
+  commentOpen = !commentOpen;
+  renderCommentArea();
+}
+
+function saveComment(){
+  const ta = document.getElementById('ta-akt-day');
+  dayComment = ta ? ta.value.trim() : '';
+  commentOpen = false;
+  renderCommentArea();
+  showToast('Kommentar gespeichert ✓');
+}
 
 function setInt(v,btn){
   currentInt=v;
@@ -6658,6 +6747,7 @@ function setInt(v,btn){
 }
 
 function render(){
+  renderCommentArea();
   // entries
   const el=document.getElementById('akt-entries');
   if(!entries.length){
@@ -6839,6 +6929,8 @@ window.akt_lpAction=function(card){if(typeof openEditEntry==='function')openEdit
   window.akt_setInt = setInt;
   window.akt_toggleDelMode = toggleDelMode;
   window.akt_toggleEditMode = toggleEditMode;
+  window.akt_toggleComment = toggleComment;
+  window.akt_saveComment = saveComment;
   window.akt_updateIconPreview = updateIconPreview;
   window.akt_render = render;
 })();
@@ -6856,10 +6948,49 @@ let regenItems=[
 regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
 let entries=[];
 let delMode=false,editMode=false,addCtx=null,editCtx=null;
+let dayComment = '';
+let commentOpen = false;
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function renderCommentArea(){
+  const container = document.getElementById('regen-comment-area');
+  if(!container) return;
+  if(commentOpen){
+    container.innerHTML = `
+      <textarea class="comment-textarea" id="ta-regen-day"
+        placeholder="Kommentar zur Regeneration heute...">${escHtml(dayComment)}</textarea>
+      <div class="comment-actions">
+        <button class="comment-clear" onclick="document.getElementById('ta-regen-day').value=''">Leeren</button>
+        <button class="comment-save" onclick="window.regen_saveComment()">Speichern</button>
+      </div>`;
+    setTimeout(()=>{
+      const ta=document.getElementById('ta-regen-day');
+      if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+    },50);
+  } else if(dayComment){
+    container.innerHTML = `<div class="comment-preview" onclick="window.regen_toggleComment()">${escHtml(dayComment)}</div>`;
+  } else {
+    container.innerHTML = '';
+  }
+}
+
+function toggleComment(){
+  commentOpen = !commentOpen;
+  renderCommentArea();
+}
+
+function saveComment(){
+  const ta = document.getElementById('ta-regen-day');
+  dayComment = ta ? ta.value.trim() : '';
+  commentOpen = false;
+  renderCommentArea();
+  showToast('Kommentar gespeichert ✓');
+}
 
 function render(){
+  renderCommentArea();
   // entries list
   const el=document.getElementById('regen-entries');
   if(el){
@@ -7005,6 +7136,8 @@ window.regen_lpAction=function(card){if(typeof entries==='undefined'||!entries)r
   window.regen_selectRegenIcon = selectRegenIcon;
   window.regen_toggleDelMode = toggleDelMode;
   window.regen_toggleEditMode = toggleEditMode;
+  window.regen_toggleComment = toggleComment;
+  window.regen_saveComment = saveComment;
   window.regen_updateRegenIconPreview = updateRegenIconPreview;
   window.regen_render = render;
 })();
@@ -7014,11 +7147,49 @@ window.regen_lpAction=function(card){if(typeof entries==='undefined'||!entries)r
 let tempEntries=[];
 let bpEntries=[];
 let weightEntries=[];
+let dayComment = '';
+let commentOpen = false;
 const TEMP_CHIPS=[35.8,35.9,36.0,36.1,36.2,36.3,36.4,36.5];
 
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
 function fmt1(n){ return n.toFixed(1).replace('.',','); }
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function renderCommentArea(){
+  const container = document.getElementById('messw-comment-area');
+  if(!container) return;
+  if(commentOpen){
+    container.innerHTML = `
+      <textarea class="comment-textarea" id="ta-messw-day"
+        placeholder="Kommentar zu den Messwerten heute...">${escHtml(dayComment)}</textarea>
+      <div class="comment-actions">
+        <button class="comment-clear" onclick="document.getElementById('ta-messw-day').value=''">Leeren</button>
+        <button class="comment-save" onclick="window.messw_saveComment()">Speichern</button>
+      </div>`;
+    setTimeout(()=>{
+      const ta=document.getElementById('ta-messw-day');
+      if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
+    },50);
+  } else if(dayComment){
+    container.innerHTML = `<div class="comment-preview" onclick="window.messw_toggleComment()">${escHtml(dayComment)}</div>`;
+  } else {
+    container.innerHTML = '';
+  }
+}
+
+function toggleComment(){
+  commentOpen = !commentOpen;
+  renderCommentArea();
+}
+
+function saveComment(){
+  const ta = document.getElementById('ta-messw-day');
+  dayComment = ta ? ta.value.trim() : '';
+  commentOpen = false;
+  renderCommentArea();
+  showToast('Kommentar gespeichert ✓');
+}
 
 // ── INJECT UI ────────────────────────────
 function injectUI(){
@@ -7028,7 +7199,11 @@ function injectUI(){
   host.innerHTML=`<div class="form-section">
     <div class="section-row">
       <div class="section-title">📊 Messwerte</div>
+      <button onclick="window.messw_toggleComment()" title="Kommentar zum Tag"
+        style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px 4px">💬</button>
     </div>
+
+    <div id="messw-comment-area"></div>
 
     <!-- Basaltemperatur -->
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px">
@@ -7267,6 +7442,7 @@ function deleteWeightEntry(id){
 // ── MAIN RENDER ──────────────────────────
 function render(){
   injectUI();
+  renderCommentArea();
   renderTemp();
   renderBp();
   renderWeight();
@@ -7386,6 +7562,8 @@ window.messw_openEditBp = openEditBp;
 window.messw_saveEditBp = saveEditBp;
 window.messw_openEditWeight = openEditWeight;
 window.messw_saveEditWeight = saveEditWeight;
+window.messw_toggleComment = toggleComment;
+window.messw_saveComment = saveComment;
 })();
 
 (function() {
