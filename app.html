@@ -5476,22 +5476,18 @@ function renderZutatenChips(){
     return `<button class="chip" style="background:${BW_COLOR[bw]};border-color:${BW_BORDER[bw]}"
       onclick="window.ern_toggleZutat('${l.id}')">${l.name}</button>`;
   }).join('');
-  // Auto bewertung
+  // Auto bewertung als reine Info (nie override)
   const autoBw = selectedZutaten.size > 0 ? (
     [...selectedZutaten.keys()].some(id=>{const i=bibliothek.find(x=>x.id===id);return i?.bewertung==='schlecht';}) ? 'schlecht' :
     [...selectedZutaten.keys()].some(id=>{const i=bibliothek.find(x=>x.id===id);return i?.bewertung==='unklar';}) ? 'unklar' : 'gut'
   ) : null;
-  // Apply auto-suggestion to manual bewertung if user hasn't overridden yet
-  if(autoBw && !bewertungUserSet){
-    setBewertung(autoBw);
-  }
   const autoBwEl = document.getElementById('ern-auto-bewertung');
   if(autoBwEl && autoBw) {
     autoBwEl.style.display = 'block';
     autoBwEl.style.background = BW_COLOR[autoBw];
     autoBwEl.style.borderColor = BW_BORDER[autoBw];
     const lbl = autoBw==='gut'?'✅ Gut':autoBw==='unklar'?'❓ Unklar':'❌ Schlecht';
-    autoBwEl.textContent = `Vorschlag aus Zutaten: ${lbl} — Bewertung unten überschreiben falls anders`;
+    autoBwEl.textContent = `Hinweis: Zutaten zusammen wären ${lbl} — du entscheidest unten`;
   } else if(autoBwEl) {
     autoBwEl.style.display = 'none';
   }
@@ -5673,7 +5669,7 @@ function renderBibliothek(){
         <button class="chip-edit-btn" onclick="event.stopPropagation();window.ern_openEditItem('${item.id}')">✎</button>
       </button>`;
     }
-    const bw = item.type==='gericht' ? gerichtBewertung(item) : (item.bewertung||'unklar');
+    const bw = item.bewertung || 'unklar';
     return `<button class="chip" data-iid="${item.id}"
       onclick="window.ern_quickAdd('${item.id}')"
       style="background:${BW_COLOR[bw]};border-color:${BW_BORDER[bw]}">${item.name}</button>`;
