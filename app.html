@@ -4175,7 +4175,7 @@ function renderCommentArea(anker){
         <button class="comment-save" onclick="window.bef_saveComment('${anker}')">Speichern</button>
       </div>`;
     setTimeout(()=>{
-      const ta=document.getElementById('bef-ta-'+anker);
+      const ta=document.getElementById('ta-'+anker);
       if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
     },50);
   } else if(comment){
@@ -4250,7 +4250,7 @@ function toggleComment(anker){
 }
 
 function saveComment(anker){
-  const ta=document.getElementById('bef-ta-'+anker);
+  const ta=document.getElementById('ta-'+anker);
   ankerComments[anker]=ta?ta.value.trim():'';
   ankerCommentOpen[anker]=false;
   showToast(ankerComments[anker]?'Kommentar gespeichert ✓':'Kommentar entfernt');
@@ -4750,7 +4750,7 @@ function renderCommentArea(anker){
         <button class="comment-clear" onclick="document.getElementById('ta-${anker}').value=''">Leeren</button>
         <button class="comment-save" onclick="window.entz_saveComment('${anker}')">Speichern</button>
       </div>`;
-    setTimeout(()=>{const ta=document.getElementById('entz-ta-'+anker);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}},50);
+    setTimeout(()=>{const ta=document.getElementById('ta-'+anker);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}},50);
   } else if(comment){
     container.innerHTML=`<div class="comment-preview" onclick="window.entz_toggleComment('${anker}')">${escHtml(comment)}</div>`;
   } else {
@@ -4794,7 +4794,7 @@ function toggleComment(anker){
   render();
 }
 function saveComment(anker){
-  const ta=document.getElementById('entz-ta-'+anker);
+  const ta=document.getElementById('ta-'+anker);
   ankerComments[anker]=ta?ta.value.trim():'';
   ankerCommentOpen[anker]=false;
   showToast(ankerComments[anker]?'Kommentar gespeichert ✓':'Kommentar entfernt');
@@ -6095,7 +6095,7 @@ function renderCommentArea(anker){
         <button class="comment-clear" onclick="document.getElementById('ta-${anker}').value=''">Leeren</button>
         <button class="comment-save" onclick="window.schmerz_saveComment('${anker}')">Speichern</button>
       </div>`;
-    setTimeout(()=>{const ta=document.getElementById('schmerz-ta-'+anker);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}},50);
+    setTimeout(()=>{const ta=document.getElementById('ta-'+anker);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}},50);
   } else if(comment){
     container.innerHTML=`<div class="comment-preview" onclick="window.schmerz_toggleComment('${anker}')">${escHtml(comment)}</div>`;
   } else {
@@ -6159,7 +6159,7 @@ function toggleComment(anker){
   render();
 }
 function saveComment(anker){
-  const ta=document.getElementById('schmerz-ta-'+anker);
+  const ta=document.getElementById('ta-'+anker);
   ankerComments[anker]=ta?ta.value.trim():'';
   ankerCommentOpen[anker]=false;
   showToast(ankerComments[anker]?'Kommentar gespeichert ✓':'Kommentar entfernt');
