@@ -5494,12 +5494,6 @@ function renderZutatenChips(){
     `<div style="display:flex;flex-wrap:wrap;gap:5px">${availableHtml||'<span style="font-size:11px;color:var(--muted)">Alle bereits ausgewählt</span>'}</div>`;
 }
 
-function toggleZutat(id){
-  if(selectedZutaten.has(id)) selectedZutaten.delete(id);
-  else selectedZutaten.add(id);
-  renderZutatenChips();
-}
-
 function cycleBewertung(){
   const idx = BW_CYCLE.indexOf(currentBewertung);
   currentBewertung = BW_CYCLE[(idx+1) % BW_CYCLE.length];
