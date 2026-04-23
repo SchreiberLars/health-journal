@@ -2597,10 +2597,7 @@ function injectModules() {
     Formuliere es als These — das Tracking liefert die Antwort.
   </div>
 
-  <div id="hyp-list"></div>
-</div>
-
-
+  <div id="hyp-list-cards"></div>
 </div>
 
 
@@ -7778,7 +7775,8 @@ let expandedIds = new Set(['h1']); // first one open by default
 
 // ── RENDER ────────────────────────────────
 function render(){
-  const container = document.getElementById('hyp-list');
+  const container = document.getElementById('hyp-list-cards');
+  if(!container) return;
   if(!hypothesen.length){
     container.innerHTML=`<div style="font-size:11px;color:var(--muted);font-style:italic;padding:8px 0">
       Noch keine Hypothesen. Formuliere deine erste These!</div>`;
