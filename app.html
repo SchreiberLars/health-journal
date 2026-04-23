@@ -5391,6 +5391,7 @@ let spontanEntries = [];
 let spontanSelected = new Set();
 let addCtx = null, editCtx = null;
 let currentBewertung = 'gut';
+let bewertungUserSet = false;
 let lpTimer = null, lpFired = false;
 let bibliFilter = '';
 
@@ -5479,15 +5480,19 @@ function renderZutatenChips(){
     [...selectedZutaten.keys()].some(id=>{const i=bibliothek.find(x=>x.id===id);return i?.bewertung==='schlecht';}) ? 'schlecht' :
     [...selectedZutaten.keys()].some(id=>{const i=bibliothek.find(x=>x.id===id);return i?.bewertung==='unklar';}) ? 'unklar' : 'gut'
   ) : null;
-  // Hide manual bewertung for gerichte
-  const bwSection = document.getElementById('ern-bewertung-section');
-  if(bwSection) bwSection.style.display = 'none';
+  // Apply auto-suggestion to manual bewertung if user hasn't overridden yet
+  if(autoBw && !bewertungUserSet){
+    setBewertung(autoBw);
+  }
   const autoBwEl = document.getElementById('ern-auto-bewertung');
   if(autoBwEl && autoBw) {
     autoBwEl.style.display = 'block';
     autoBwEl.style.background = BW_COLOR[autoBw];
     autoBwEl.style.borderColor = BW_BORDER[autoBw];
-    autoBwEl.textContent = 'Bewertung: ' + (autoBw==='gut'?'✅ Gut':autoBw==='unklar'?'❓ Unklar':'❌ Schlecht');
+    const lbl = autoBw==='gut'?'✅ Gut':autoBw==='unklar'?'❓ Unklar':'❌ Schlecht';
+    autoBwEl.textContent = `Vorschlag aus Zutaten: ${lbl} — Bewertung unten überschreiben falls anders`;
+  } else if(autoBwEl) {
+    autoBwEl.style.display = 'none';
   }
   container.innerHTML = (selectedHtml ? `<div style="margin-bottom:8px">${selectedHtml}</div>` : '') +
     `<div style="font-size:9px;color:var(--muted);margin-bottom:4px">HINZUFÜGEN</div>` +
@@ -5497,6 +5502,7 @@ function renderZutatenChips(){
 function cycleBewertung(){
   const idx = BW_CYCLE.indexOf(currentBewertung);
   currentBewertung = BW_CYCLE[(idx+1) % BW_CYCLE.length];
+  bewertungUserSet = true;
   const btn = document.getElementById('ern-bw-btn');
   btn.textContent = BW_LABEL[currentBewertung];
   btn.className = `bw-btn ${currentBewertung}`;
@@ -5786,7 +5792,8 @@ function confirmAdd(){
 // ── BIBLIOTHEK CRUD ───────────────────────
 function openNewItem(){
   editCtx=null;
-  selectedZutaten = new Set();
+  selectedZutaten = new Map();
+  bewertungUserSet = false;
   document.getElementById('ern-m-new-title').textContent='Lebensmittel anlegen';
   document.getElementById('ern-m-new-name').value='';
   document.getElementById('ern-m-new-type').value='lebensmittel';
@@ -5801,6 +5808,7 @@ function openEditItem(itemId){
   if(!item) return;
   editCtx={itemId};
   selectedZutaten = new Map();
+  bewertungUserSet = true; // existing item: keep stored bewertung, don't auto-overwrite
   const rawZ = Array.isArray(item.zutaten) ? item.zutaten : [];
   rawZ.forEach(z => {
     if(typeof z === 'string') selectedZutaten.set(z, '');
