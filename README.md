@@ -1,51 +1,91 @@
 # health-journal
 
-Persönliche Gesundheits-Tracking-App — in Entwicklung.
+Persönliches Gesundheits-Tracking zur Selbstbeobachtung chronischer Entzündungen — in Entwicklung.
 
-Langfristige Vision: konfigurierbares, template-basiertes **Personal Health Intelligence Framework** (Open Source ~2027).
+Langfristige Vision: konfigurierbares, template-basiertes **Personal Health Intelligence Framework** (Open Source ~2027). Später optional als Hosted Service mit KI-Analyse und B2B-Lizenzierung für Coaches und Nutritionisten.
+
+> Hinweis: Template-Namen beschreiben Behavior, nicht Krankheiten (MDR-Vermeidung in Deutschland).
 
 ## Aktueller Stand
 
-**Phase 1 (laufend):** Integration aller 13 Module in eine lauffähige Single-File-App
+**Phase 1 — Integration aller 14 Module: weitgehend abgeschlossen.** Alle Module sind in `app.html` integriert und funktional. Polish-Punkte teilweise noch offen.
 
-- Alle 13 Modul-Prototypen funktionieren einzeln (siehe `/prototypes`)
-- Integration in `app.html` läuft — einige Modals öffnen, Styling noch im Feinschliff
-- Daten liegen aktuell in localStorage (Wechsel zu Supabase in Phase 2)
+**Phase 2 — Persistenz & Backend** (anstehend): Wechsel von `localStorage` zu Supabase (Frankfurt-Region, GDPR), Auth, Schema-Design, Migration.
 
-**Phase 2–4 (geplant):** Supabase-Backend (DE, GDPR) · PWA · Claude Vision Foto-Scanner für Nährwerte
+**Phase 3 — PWA**: Manifest, Service Worker, iPhone-Installation.
 
-## Dateien
+**Phase 4 — Foto-Scanner für Zutatenlisten**: Claude Vision Integration für automatische Nährwert-Extraktion.
 
-- `app.html` — aktueller Integrations-Stand (v61)
-- `modules_v8.json` — Konfiguration aller 13 Module
-- `global_lp.js` — globaler Long-Press-Dispatcher
-- `prototypes/` — Einzelmodul-Prototypen für Referenz und Neuaufbau
+## Module (14)
 
-## Module
+| Key | Modul | Besonderheit |
+|-----|-------|--------------|
+| med | Medikamente | Einnahme, Dosis, Uhrzeit; Sub-Optionen (z.B. Nasenspray L/R/Beide) |
+| supp | Supplements | Stack-basiert nach Tageszeit |
+| haut | Hautzustand | 0–5 Skala pro Körperstelle, Pflegeprodukte |
+| bef | Befinden | Energie, Stimmung, Konzentration, Brain Fog — Episoden mit Start/Endzeit |
+| entz | Entzündungsmarker | Finger, Gelenke; Spontan-Erfassung |
+| get | Getränke | Wasser, Kaffee, Tee, Alkohol — Menge & Uhrzeit |
+| ern | Ernährung | Chips-System mit Suchfeld, Trigger-Tags, Zutaten-Tracking |
+| schmerz | Schmerz | Region, Intensität, Allodynie pro Region, Episoden mit Start/Endzeit |
+| stuhl | Stuhlgang | Bristol-Skala 1–7 in 0.5er-Schritten |
+| akt | Aktivität/Bewegung | Art, Dauer, Intensität |
+| regen | Regeneration | Meditation, Atemübungen, Nurosym etc. |
+| **messw** | **Messwerte** | **Basaltemperatur, Blutdruck (mit ESH-Kategorisierung), Gewicht** |
+| fam | Familie/Soziales | Stimmung im Umfeld |
+| hyp | Hypothesen | Hypothesen-Lifecycle (offen/bestätigt/widerlegt/angepasst) |
 
-| Key | Modul |
-|-----|-------|
-| haut | Hautzustand pro Körperstelle, Foto, Pflege |
-| med | Medikamente — Einnahme, Dosis, Uhrzeit |
-| supp | Supplements-Stack |
-| bef | Befinden — Energie, Stimmung, Konzentration, Brain Fog |
-| entz | Entzündungsmarker (Finger, Gelenke, etc.) |
-| get | Getränke — Wasser, Kaffee, Tee, Alkohol |
-| ern | Ernährung mit Chips-System, Trigger-Tags |
-| schmerz | Schmerz (Stelle, Intensität, Dauer) |
-| stuhl | Stuhlgang (Bristol-Skala, Uhrzeit) |
-| akt | Bewegung |
-| regen | Regeneration, Schlaf |
-| fam | Familie, soziales Umfeld |
-| hyp | Hypothesen-Tracking |
+Plus übergreifend:
 
-## Offene nächste Schritte
+- **Notizen-System** mit Floating Action Button (📝): Beobachtung / Hypothese / Frage — Quick-Capture von überall, eigener Tab "Notizen"
 
-1. Alle 13 Module im `app.html` vollständig integrieren (Modals, Styling, Long-Press-Aktionen)
-2. **Einheitliche Import/Export-Logik** auf Tagesbasis (JSON) — wird implementiert wenn alle Module fertig sind
-3. Lösch-/Korrekturfunktion für Einträge
-4. Nasenspray-Tracking mit Links/Rechts/Beide
-5. Dauer als Eingabetyp (manuell oder Start/Stop-Timer)
+## Highlights der UX
+
+- **Recall-Bias-Schutz** bei Episoden (Schmerz/Befinden): Beim Beenden ist nicht "jetzt" der Default, sondern "vor 30 Min" — weil das Verschwinden meist später bemerkt wird als das tatsächliche Ende
+- **Live-Counter** für offene Episoden ("läuft seit 2h 14min")
+- **Smart-Eingabe** für Messwerte: "365" → 36,5°C; "824" → 82,4 kg
+- **Editierbare Einträge**: Bleistift-Icon (✎) bei jedem Eintrag öffnet Edit-Modal
+- **iOS-PWA-Support**: Safe-Area-Inset für Statusleiste
+
+## Repo-Struktur
+
+```
+health-journal/
+├── README.md                    # dieses Dokument
+├── app.html                     # Haupt-App (Single-File HTML/JS/CSS)
+├── modules_v8.json              # Modul-Konfiguration (Referenz)
+├── global_lp.js                 # globaler Long-Press-Dispatcher
+├── robots.txt                   # Disallow all
+├── .gitignore
+└── prototypes/                  # Einzelmodul-Prototypen
+```
+
+## Tech-Stack
+
+- **Frontend:** Single-File HTML/JS/CSS (bewusste Wahl für Einfachheit)
+- **Styling:** Vanilla CSS mit CSS-Variablen für Theming (Light/Dark)
+- **Daten:** aktuell `localStorage`, Migration zu Supabase in Phase 2
+- **Hosting:** GitHub Pages (privates Repo)
+- **Wearable:** geplant via Garmin (Python-Pipeline lokal, keine Apple Health — Privacy)
+
+## Wissenschaftliche Grundannahmen (für Tracking-Design)
+
+- **Linker kleiner Finger** als zuverlässiger systemischer Entzündungsmarker
+- **Knie-Unbehagen im Schneidersitz** als Inflammationsindikator (nicht Alter)
+- **Muskelkrämpfe bei Belastung** als Entzündungssignal (nicht Fitness-/Elektrolyt-Problem)
+- **Omega-3 braucht Fett-Co-Einnahme** für Bioverfügbarkeit
+- **Post-Terzolin-Rötung** ist Herxheimer-artige Die-off-Reaktion
+
+## Offene Phase-1-Punkte
+
+- Konsistenz weiterer UI-Elemente (Modal-Buttons, Listen-Layouts)
+- Selection-Felder als Custom-Eingabe (Tag-Manager-Pattern auf alle Module ausweiten — bei Getränke bereits vorhanden)
+
+## Workflow-Regeln
+
+- **Kein Push ohne explizite Absprache**
+- Kein Deploy auf GitHub Pages ohne Absprache
+- Session-basiertes Arbeiten
 
 ## Autor
 
