@@ -2211,7 +2211,7 @@ function injectModules() {
   </div>
 </div>
   <div class="modal-sheet">
-    <div class="mt">Schmerz erfassen</div>
+    <div class="mt" id="schmerz-m-spontan-title">Schmerz erfassen</div>
     <div class="mt-sub">Spontaner Eintrag — wähle betroffene Regionen</div>
     <div id="schmerz-m-spontan-regions"></div>
 
@@ -4257,6 +4257,7 @@ function renderSpontan(){
         const s=SCALES[m?.scale||'energie'].find(x=>x.v===val);
         return `<span style="font-size:11px;margin-right:10px">${m?.name||mid}: ${s?.emoji||val} ${val}</span>`;
       }).join('')}
+      <button class="spontan-del" onclick="window.bef_openEditSpontan('${e.id}')" style="right:36px;color:var(--muted)" title="Bearbeiten">✎</button>
       <button class="spontan-del" onclick="window.bef_delSpontan('${e.id}')">✕</button>
     </div>`;
   }).join('');
@@ -4318,8 +4319,12 @@ function minToHm(min){
 }
 function fmtRange(s,e){ return e ? `${s}–${e}` : s; }
 
+let editingSpontanId = null;
+
 function openSpontan(){
+  editingSpontanId = null;
   spontanCtx = { editId: null };
+  spontanVals = {};
   const now = new Date();
   document.getElementById('bef-m-spontan-time').value =
     `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -4328,6 +4333,22 @@ function openSpontan(){
   document.getElementById('bef-m-spontan-title').textContent='Befinden erfassen';
   document.getElementById('bef-m-spontan-sub').textContent='Spontaner Eintrag — wähle nur was relevant ist';
   renderSpontanMetrics({});
+  renderTimeChips('bef-m-spontan-start-chips','bef-m-spontan-time',true);
+  renderTimeChips('bef-m-spontan-end-chips','bef-m-spontan-endtime',false);
+  openModal('bef-m-spontan');
+}
+
+function openEditSpontan(id){
+  const e = spontanList.find(x=>x.id===id);
+  if(!e) return;
+  editingSpontanId = id;
+  spontanVals = {...e.values};
+  document.getElementById('bef-m-spontan-time').value = e.time;
+  document.getElementById('bef-m-spontan-endtime').value = e.endtime || '';
+  document.getElementById('bef-m-spontan-label').value = e.label || '';
+  document.getElementById('bef-m-spontan-title').textContent='Episode bearbeiten';
+  document.getElementById('bef-m-spontan-sub').textContent='Werte und Zeiten anpassen';
+  renderSpontanMetrics(spontanVals);
   renderTimeChips('bef-m-spontan-start-chips','bef-m-spontan-time',true);
   renderTimeChips('bef-m-spontan-end-chips','bef-m-spontan-endtime',false);
   openModal('bef-m-spontan');
@@ -4410,7 +4431,16 @@ function saveSpontan(){
   if(endtime && timeToMin(endtime) <= timeToMin(time)){
     showToast('Endzeit muss nach Startzeit liegen'); return;
   }
-  spontanList.push({ id:uid(), time, endtime, label, values:{...spontanVals} });
+  if(editingSpontanId){
+    const e = spontanList.find(x=>x.id===editingSpontanId);
+    if(e){
+      e.time = time; e.endtime = endtime; e.label = label;
+      e.values = {...spontanVals};
+    }
+    editingSpontanId = null;
+  } else {
+    spontanList.push({ id:uid(), time, endtime, label, values:{...spontanVals} });
+  }
   spontanList.sort((a,b)=>a.time.localeCompare(b.time));
   spontanVals={};
   closeModal('bef-m-spontan');
@@ -4630,6 +4660,7 @@ function showToast(msg){
   window.bef_endOpenEntry = endOpenEntry;
   window.bef_pickEndChip = pickEndChip;
   window.bef_confirmEnd = confirmEnd;
+  window.bef_openEditSpontan = openEditSpontan;
 
   // Live-update offene Episoden alle 60s
   setInterval(()=>{
@@ -6142,6 +6173,7 @@ function renderSpontan(){
           return `<span class="region-pill ${cls}">${r?.name||rid}: ${val}</span>`;
         }).join('')}
       </div>
+      <button class="spontan-del" onclick="window.schmerz_openEditSpontan('${e.id}')" style="right:36px;color:var(--muted)" title="Bearbeiten">✎</button>
       <button class="spontan-del" onclick="window.schmerz_delSpontan('${e.id}')">✕</button>
     </div>`;
   }).join('');
@@ -6244,11 +6276,30 @@ function deleteRegion(rid){
 }
 
 // ── SPONTAN ───────────────────────────────
+let editingSpontanId = null;
+
 function openSpontan(){
+  editingSpontanId = null;
   spontanVals={};
+  document.getElementById('schmerz-m-spontan-title').textContent='Schmerz erfassen';
   document.getElementById('schmerz-m-spontan-time').value=nowTime();
   document.getElementById('schmerz-m-spontan-endtime').value='';
   document.getElementById('schmerz-m-spontan-note').value='';
+  renderSpontanRegions();
+  renderTimeChips('schmerz-m-spontan-start-chips','schmerz-m-spontan-time',true);
+  renderTimeChips('schmerz-m-spontan-end-chips','schmerz-m-spontan-endtime',false);
+  openModal('schmerz-m-spontan');
+}
+
+function openEditSpontan(id){
+  const e = spontanList.find(x=>x.id===id);
+  if(!e) return;
+  editingSpontanId = id;
+  spontanVals = {...e.values};
+  document.getElementById('schmerz-m-spontan-title').textContent='Episode bearbeiten';
+  document.getElementById('schmerz-m-spontan-time').value = e.time;
+  document.getElementById('schmerz-m-spontan-endtime').value = e.endtime || '';
+  document.getElementById('schmerz-m-spontan-note').value = e.note || '';
   renderSpontanRegions();
   renderTimeChips('schmerz-m-spontan-start-chips','schmerz-m-spontan-time',true);
   renderTimeChips('schmerz-m-spontan-end-chips','schmerz-m-spontan-endtime',false);
@@ -6349,11 +6400,19 @@ function saveSpontan(){
   const endtime=endtimeRaw||null;
   const note=document.getElementById('schmerz-m-spontan-note').value.trim();
   if(!Object.keys(spontanVals).length){showToast('Mindestens eine Region wählen');return}
-  // Plausi: end must be after start (if set)
   if(endtime && timeToMin(endtime) <= timeToMin(time)){
     showToast('Endzeit muss nach Startzeit liegen'); return;
   }
-  spontanList.push({id:uid(),time,endtime,note,values:{...spontanVals}});
+  if(editingSpontanId){
+    const e = spontanList.find(x=>x.id===editingSpontanId);
+    if(e){
+      e.time = time; e.endtime = endtime; e.note = note;
+      e.values = {...spontanVals};
+    }
+    editingSpontanId = null;
+  } else {
+    spontanList.push({id:uid(),time,endtime,note,values:{...spontanVals}});
+  }
   spontanList.sort((a,b)=>a.time.localeCompare(b.time));
   closeModal('schmerz-m-spontan');render();
   const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
@@ -6455,6 +6514,7 @@ setInterval(()=>{
   window.schmerz_pickTimeChip = pickTimeChip;
   window.schmerz_endOpenEntry = endOpenEntry;
   window.schmerz_pickEndChip = pickEndChip;
+  window.schmerz_openEditSpontan = openEditSpontan;
   window.schmerz_confirmEnd = confirmEnd;
   window.schmerz_render = render;
   window.schmerz_toggleAllodynie = toggleAllodynie;
@@ -7752,16 +7812,23 @@ const CATS = {
 let notes = []; // [{id, time, cat, text}]
 let activeFilter = 'all';
 let pickedCat = 'beob';
+let editingId = null;
 
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
+function setModalTitle(text){
+  const el = document.querySelector('#notes-m-capture .mt');
+  if(el) el.textContent = text;
+}
+
 function openCapture(){
+  editingId = null;
   pickedCat = 'beob';
+  setModalTitle('📝 Notiz erfassen');
   document.getElementById('notes-m-text').value = '';
   document.getElementById('notes-m-time').value = nowTime();
-  // Reset cat buttons
   document.querySelectorAll('#notes-m-capture .note-cat-btn').forEach(b=>{
     b.classList.toggle('sel', b.dataset.cat==='beob');
   });
@@ -7769,6 +7836,24 @@ function openCapture(){
   setTimeout(()=>{
     const t = document.getElementById('notes-m-text');
     if(t) t.focus();
+  }, 100);
+}
+
+function openEdit(id){
+  const n = notes.find(x=>x.id===id);
+  if(!n) return;
+  editingId = id;
+  pickedCat = n.cat;
+  setModalTitle('📝 Notiz bearbeiten');
+  document.getElementById('notes-m-text').value = n.text;
+  document.getElementById('notes-m-time').value = n.time;
+  document.querySelectorAll('#notes-m-capture .note-cat-btn').forEach(b=>{
+    b.classList.toggle('sel', b.dataset.cat===n.cat);
+  });
+  openModal('notes-m-capture');
+  setTimeout(()=>{
+    const t = document.getElementById('notes-m-text');
+    if(t){ t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
   }, 100);
 }
 
@@ -7782,7 +7867,13 @@ function save(){
   const text = document.getElementById('notes-m-text').value.trim();
   const time = document.getElementById('notes-m-time').value || nowTime();
   if(!text){ showToast('Text fehlt'); return; }
-  notes.unshift({id:uid(), time, cat:pickedCat, text});
+  if(editingId){
+    const n = notes.find(x=>x.id===editingId);
+    if(n){ n.text = text; n.time = time; n.cat = pickedCat; }
+    editingId = null;
+  } else {
+    notes.unshift({id:uid(), time, cat:pickedCat, text});
+  }
   closeModal('notes-m-capture');
   render();
   const c = CATS[pickedCat];
@@ -7834,6 +7925,7 @@ function renderList(){
         <span>${n.time}</span>
       </div>
       <div class="nc-text">${escHtml(n.text)}</div>
+      <button class="nc-del" onclick="window.notes_openEdit('${n.id}')" title="Bearbeiten" style="right:32px;color:var(--muted)">✎</button>
       <button class="nc-del" onclick="window.notes_deleteNote('${n.id}')" title="Löschen">✕</button>
     </div>`;
   }).join('');
@@ -7846,6 +7938,7 @@ function render(){
 
 // Exports
 window.notes_openCapture = openCapture;
+window.notes_openEdit = openEdit;
 window.notes_pickCat = pickCat;
 window.notes_save = save;
 window.notes_deleteNote = deleteNote;
