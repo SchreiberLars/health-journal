@@ -778,7 +778,7 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
     </div>
   </div>
   <div class="section-body" id="body-stuhl" style="display:none">
-    <div id="stuhl-content"><div class="form-section"><div class="section-row"><div class="section-title">Stuhlgang</div><button class="legend-toggle" onclick="window.stuhl_openLegend()">? Legende</button></div><div id="stuhl-entries-list"></div><button class="btn-add" onclick="window.stuhl_addEntry()"><span style="font-size:16px">+</span><span>Jetzt erfassen</span><span style="font-size:10px;color:var(--muted);margin-left:auto">Uhrzeit wird gesetzt</span></button></div></div>
+    <div id="stuhl-content"><!-- stuhl JS --></div>
   </div>
 </div>
 
@@ -1460,19 +1460,6 @@ function injectModules() {
     </div>
 </div>`;
   document.getElementById('haut-content').innerHTML = `
-<div style="background:color-mix(in srgb,var(--gold) 12%,var(--surface));
-  border-bottom:1px solid color-mix(in srgb,var(--gold) 30%,var(--border));
-  padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-  <span style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--gold)">🗓 Datum simulieren</span>
-  
-  <span id="haut-sim-date-label"
-    style="font-size:10px;color:var(--muted);font-style:italic">Heute (echt)</span>
-  <button onclick="window.haut_setSimDate(null);document.getElementById('sim-date-input').value=''"
-    style="background:none;border:1px solid var(--border);border-radius:8px;
-      padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;
-      color:var(--muted);cursor:pointer">Reset</button>
-</div>
-
 <div class="form-section">
   <div class="section-row">
     <div class="section-title">Hautpflege</div>
@@ -2227,28 +2214,25 @@ function injectModules() {
   document.getElementById('stuhl-content').innerHTML = `<div class="form-section">
   <div class="section-row">
     <div class="section-title">Stuhlgang</div>
-    <button class="legend-toggle" onclick="window.stuhl_openLegend()">? Legende</button>
+    <button onclick="window.stuhl_openLegend()"
+      style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer">ⓘ Legende</button>
   </div>
 
   <div id="stuhl-entries-list"></div>
 
-  <button class="btn-add" onclick="window.stuhl_addEntry()">
-    <span style="font-size:16px">+</span>
+  <button onclick="window.stuhl_addEntry()"
+    style="width:100%;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px">
+    <span style="font-size:14px">+</span>
     <span>Jetzt erfassen</span>
-    <span style="font-size:10px;color:var(--muted);margin-left:auto">Uhrzeit wird gesetzt</span>
+    <span style="font-size:9px;opacity:0.75">· Uhrzeit wird gesetzt</span>
   </button>
 </div>
-
-
-</div>
-
 
 <div class="modal-overlay" id="stuhl-m-legend">
   <div class="modal-sheet">
     <div class="mt">Bristol-Skala</div>
     <div class="mt-sub">Typ 4 ist das Optimum — nach beiden Seiten wird es schlechter</div>
 
-    
     <div style="display:flex;gap:3px;margin-bottom:16px;padding:10px;
       background:var(--surface2);border-radius:8px;align-items:center">
       <div style="font-size:9px;color:var(--red);text-align:center;flex:1">1<br>schlecht</div>
@@ -2263,8 +2247,9 @@ function injectModules() {
     <div id="stuhl-legend-items"></div>
 
     <div class="mbr">
-      <button class="bs-close" onclick="closeModal('stuhl-m-legend')">Schließen</button>
+      <button class="bs" onclick="closeModal('stuhl-m-legend')">Schließen</button>
     </div>
+  </div>
 </div>`;
   document.getElementById('akt-content').innerHTML = `<div class="form-section">
   <div class="section-row">
@@ -3666,18 +3651,8 @@ let lpTimer = null, lpFired = false;
 // ── HELPERS ───────────────────────────────
 function uid(){return Math.random().toString(36).slice(2,9)}
 // ── DATUM-SIMULATOR ──────────────────────
-let simDate = null; // null = echter heutiger Tag
-
 function today(){
-  if(simDate) return simDate;
   return new Date().toISOString().slice(0,10);
-}
-
-function setSimDate(val){
-  simDate = val || null;
-  render();
-  const lbl = document.getElementById('haut-sim-date-label');
-  if(lbl) lbl.textContent = simDate ? `Simuliert: ${simDate}` : 'Heute (echt)';
 }
 
 function isDone(pid,grp){return !!(doneMap[pid+'__'+grp]?.done)}
@@ -4067,7 +4042,6 @@ window.haut_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==un
   window.haut_render = render;
   window.haut_saveEdit = saveEdit;
   window.haut_saveNew = saveNew;
-  window.haut_setSimDate = setSimDate;
   window.haut_toggleDelMode = toggleDelMode;
   window.haut_toggleEditIntervalInput = toggleEditIntervalInput;
   window.haut_toggleIntervalInput = toggleIntervalInput;
