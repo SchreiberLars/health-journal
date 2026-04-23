@@ -491,8 +491,6 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .modal-select,.ms{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);outline:none;margin-bottom:12px;-webkit-appearance:none}
 .modal-btn-row,.mb-row{display:flex;gap:8px;margin-top:4px}
 .mt-sub{font-size:10px;color:var(--muted);margin-bottom:14px}
-.btn-primary{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;padding:11px;font-family:'JetBrains Mono',monospace;font-size:13px;cursor:pointer}
-.btn-secondary{flex:1;background:none;border:1px solid var(--border);border-radius:10px;padding:11px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);cursor:pointer}
 
 
 .scale-chip.en-1.selected{border-color:#c0392b;background:color-mix(in srgb,#c0392b 18%,var(--surface2))}
@@ -534,8 +532,6 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .act-chip.sel{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 15%,var(--surface2));color:var(--text)}
 .act-chip:active{transform:scale(0.95)}
 .btn-alle.all-taken{background:var(--accent2);border-color:var(--accent2);color:#f5f0e8}
-.btn-primary{flex: 1; background: var(--accent); color: #f5f0e8; border: none; border-radius: 10px; padding: 11px; font-family: 'JetBrains Mono', monospace; font-size: 12px; cursor: pointer;}
-.btn-secondary{background: none; border: 1px solid var(--border); border-radius: 10px; padding: 11px 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); cursor: pointer;}
 .btn-sm.danger:active{border-color:var(--delete);color:var(--delete)}
 .btn-sm:active{border-color:var(--accent);color:var(--accent)}
 .chip-add:active{border-color: var(--accent); color: var(--accent);}
@@ -911,8 +907,8 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
     <label class="ml">Kommentar (optional)</label>
     <input class="mi" id="get-edit-ml-kommentar" placeholder="z.B. Zwicken, Milchprodukt...">
     <div class="modal-btn-row">
-      <button class="btn-secondary" onclick="document.getElementById('get-edit-ml-modal').style.display='none'">Abbrechen</button>
-      <button class="btn-primary" onclick="window.get_saveEditMl()">Speichern</button>
+      <button class="bs" onclick="document.getElementById('get-edit-ml-modal').style.display='none'">Abbrechen</button>
+      <button class="bp" onclick="window.get_saveEditMl()">Speichern</button>
     </div>
   </div>
 </div>
@@ -1281,8 +1277,8 @@ function injectModules() {
     <input class="modal-input" id="med-new-med-dose" placeholder="Dosis eingeben..." type="number" min="0" step="any">
 
     <div class="modal-btn-row">
-      <button class="btn-secondary" onclick="closeModal('med-modal-new-med')">Abbrechen</button>
-      <button class="btn-primary" onclick="window.med_saveMed()">Speichern</button>
+      <button class="bs" onclick="closeModal('med-modal-new-med')">Abbrechen</button>
+      <button class="bp" onclick="window.med_saveMed()">Speichern</button>
     </div>
   </div>
 </div>
@@ -1309,8 +1305,8 @@ function injectModules() {
     <input class="modal-input" id="med-take-comment" placeholder="z.B. Kopfschmerzen, Allergie...">
 
     <div class="modal-btn-row">
-      <button class="btn-secondary" onclick="closeModal('med-modal-take-med')">Abbrechen</button>
-      <button class="btn-primary" onclick="window.med_confirmTake()">Einnahme eintragen</button>
+      <button class="bs" onclick="closeModal('med-modal-take-med')">Abbrechen</button>
+      <button class="bp" onclick="window.med_confirmTake()">Einnahme eintragen</button>
     </div>
   </div>
 </div>
@@ -1324,11 +1320,11 @@ function injectModules() {
     <div style="display:flex;gap:8px;margin-bottom:4px">
       <input class="modal-input" id="med-new-unit-input" placeholder="Neue Einheit..." style="margin-bottom:0;flex:1"
         onkeydown="if(event.key==='Enter'){addUnit();event.preventDefault()}">
-      <button class="btn-primary" style="flex:none;padding:9px 16px" onclick="window.med_addUnit()">+</button>
+      <button class="bp" style="flex:none;padding:9px 16px" onclick="window.med_addUnit()">+</button>
     </div>
     <div style="font-size:9px;color:var(--muted);margin-top:6px">z.B. Pumps · Beutel · EL · TL · Sprühstoß</div>
     <div class="modal-btn-row" style="margin-top:16px">
-      <button class="btn-primary" onclick="closeModal('med-modal-units-lib');window.med_populateUnitSelects()">Fertig</button>
+      <button class="bp" onclick="closeModal('med-modal-units-lib');window.med_populateUnitSelects()">Fertig</button>
     </div>
   </div>
 </div>
@@ -1367,8 +1363,8 @@ function injectModules() {
     </div>
 
     <div class="modal-btn-row">
-      <button class="btn-secondary" onclick="closeModal('med-modal-edit-med')">Abbrechen</button>
-      <button class="btn-primary" onclick="window.med_saveEditMed()">Speichern</button>
+      <button class="bs" onclick="closeModal('med-modal-edit-med')">Abbrechen</button>
+      <button class="bp" onclick="window.med_saveEditMed()">Speichern</button>
     </div>
   </div>
 </div>`;
@@ -2093,8 +2089,8 @@ function injectModules() {
     </div>
     <div id="ern-edit-gericht-section" style="display:none"></div>
     <div class="modal-btn-row">
-      <button class="btn-secondary" onclick="closeModal('ern-m-edit')">Abbrechen</button>
-      <button class="btn-primary" onclick="window.ern_saveEditItem()">Speichern</button>
+      <button class="bs" onclick="closeModal('ern-m-edit')">Abbrechen</button>
+      <button class="bp" onclick="window.ern_saveEditItem()">Speichern</button>
     </div>
   </div>
 </div>`;
