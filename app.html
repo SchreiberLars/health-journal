@@ -156,6 +156,7 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 
 /* ── ENTRY CARD ─────────────────────────── */
 .entry-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;margin-bottom:6px}
+.entry-card.compact{padding:6px 10px;margin-bottom:4px}
 .entry-header{display:flex;align-items:center;gap:6px}
 .entry-time{font-size:10px;color:var(--gold)}
 
@@ -204,8 +205,8 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .rp-345{background:color-mix(in srgb,var(--delete) 15%,transparent);border-color:var(--delete);color:var(--delete)}
 
 /* ── SPONTAN ────────────────────────────── */
-.spontan-entry{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
-  padding:10px 12px;margin-bottom:8px}
+.spontan-entry{background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 13px;margin-bottom:6px}
 .spontan-time{font-size:9px;color:var(--gold);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px}
 
 /* ── STIMMUNG ───────────────────────────── */
@@ -446,7 +447,7 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .note-cat-btn.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface2));
   color:var(--accent);font-weight:600}
 .note-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;
-  padding:10px 12px;margin-bottom:6px}
+  padding:10px 13px;margin-bottom:6px}
 .note-card .nc-meta{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;display:flex;gap:8px;align-items:center}
 .note-card .nc-cat{padding:1px 7px;border-radius:8px;font-weight:600}
 .note-card .nc-cat.beob{background:color-mix(in srgb,var(--accent2) 18%,transparent);color:var(--accent2)}
@@ -7146,7 +7147,7 @@ function renderTemp(){
       el.innerHTML='';
     } else {
       el.innerHTML=[...tempEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
-        <div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
+        <div class="entry-card compact">
           <div class="entry-header">
             <span style="font-size:13px">🌡</span>
             <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.temp)} °C</span>
@@ -7211,7 +7212,7 @@ function renderBp(){
     } else {
       el.innerHTML=[...bpEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>{
         const cat=bpCategory(e.syst,e.diast);
-        return `<div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
+        return `<div class="entry-card compact">
           <div class="entry-header">
             <span style="font-size:13px">🩸</span>
             <span style="font-size:12px;font-weight:600;margin-left:6px">${e.syst}/${e.diast}</span>
@@ -7266,7 +7267,7 @@ function renderWeight(){
       el.innerHTML='';
     } else {
       el.innerHTML=[...weightEntries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
-        <div class="entry-card" style="padding:6px 10px;margin-bottom:4px">
+        <div class="entry-card compact">
           <div class="entry-header">
             <span style="font-size:13px">⚖️</span>
             <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.weight)} kg</span>
