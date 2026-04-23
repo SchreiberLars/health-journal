@@ -1207,19 +1207,6 @@ document.addEventListener('click',function(e){
 
 function injectModules() {
   document.getElementById('med-content').innerHTML = `
-<div style="background:color-mix(in srgb,var(--gold) 12%,var(--surface));
-  border-bottom:1px solid color-mix(in srgb,var(--gold) 30%,var(--border));
-  padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-  <span style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--gold)">🗓 Datum simulieren</span>
-  
-  <span id="med-sim-lbl" style="font-size:10px;color:var(--muted);font-style:italic">Heute (echt)</span>
-  <button onclick="simDate=null;document.getElementById('sim-date-input').value='';document.getElementById('sim-lbl').textContent='window.med_Heute(echt)';window.med_render()"
-    style="background:none;border:1px solid var(--border);border-radius:8px;
-      padding:3px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;
-      color:var(--muted);cursor:pointer">Reset</button>
-</div>
-
-
 <div class="form-section" id="med-section">
 
   
@@ -2188,6 +2175,9 @@ function injectModules() {
     </div>
   </div>
 </div>
+
+
+<div class="modal-overlay" id="schmerz-m-spontan">
   <div class="modal-sheet">
     <div class="mt" id="schmerz-m-spontan-title">Schmerz erfassen</div>
     <div class="mt-sub">Spontaner Eintrag — wähle betroffene Regionen</div>
