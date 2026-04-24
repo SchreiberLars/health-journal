@@ -1041,11 +1041,8 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
     <label class="ml">Wo / Details (optional)</label>
     <input class="mi" id="stress-m-akut-detail" placeholder="z.B. Augenlid links, oder Herzklopfen beim Aufstehen">
 
-    <label class="ml">Startzeit</label>
+    <label class="ml">Zeit</label>
     <input class="mi" id="stress-m-akut-time" type="time" style="margin-top:4px">
-
-    <label class="ml">Endzeit (optional, leer = läuft noch)</label>
-    <input class="mi" id="stress-m-akut-endtime" type="time" style="margin-top:4px">
 
     <label class="ml">Notiz (optional)</label>
     <input class="mi" id="stress-m-akut-note" placeholder="z.B. nach Mail vom Chef">
@@ -8460,7 +8457,6 @@ function openAkut(){
   document.getElementById('stress-m-akut-type').value = 'muskelzucken';
   document.getElementById('stress-m-akut-detail').value = '';
   document.getElementById('stress-m-akut-time').value = nowTime();
-  document.getElementById('stress-m-akut-endtime').value = '';
   document.getElementById('stress-m-akut-note').value = '';
   openModal('stress-m-akut');
 }
@@ -8473,7 +8469,6 @@ function openEditAkut(id){
   document.getElementById('stress-m-akut-type').value = a.type;
   document.getElementById('stress-m-akut-detail').value = a.detail||'';
   document.getElementById('stress-m-akut-time').value = a.time;
-  document.getElementById('stress-m-akut-endtime').value = a.endtime||'';
   document.getElementById('stress-m-akut-note').value = a.note||'';
   openModal('stress-m-akut');
 }
@@ -8482,20 +8477,14 @@ function saveAkut(){
   const type    = document.getElementById('stress-m-akut-type').value;
   const detail  = document.getElementById('stress-m-akut-detail').value.trim();
   const time    = document.getElementById('stress-m-akut-time').value || nowTime();
-  const endRaw  = document.getElementById('stress-m-akut-endtime').value;
-  const endtime = endRaw || null;
   const note    = document.getElementById('stress-m-akut-note').value.trim();
-
-  if(endtime && timeToMin(endtime) <= timeToMin(time)){
-    showToast('Endzeit muss nach Startzeit liegen'); return;
-  }
 
   if(editingAkutId){
     const a = akutList.find(x=>x.id===editingAkutId);
-    if(a){ a.type=type; a.detail=detail; a.time=time; a.endtime=endtime; a.note=note; }
+    if(a){ a.type=type; a.detail=detail; a.time=time; a.note=note; }
     editingAkutId = null;
   } else {
-    akutList.push({ id:uid(), type, detail, time, endtime, note });
+    akutList.push({ id:uid(), type, detail, time, note });
   }
   akutList.sort((a,b)=>a.time.localeCompare(b.time));
   closeModal('stress-m-akut');
@@ -8515,19 +8504,10 @@ function renderAkut(){
     el.innerHTML = '<div style="font-size:11px;color:var(--muted);font-style:italic">Keine Akut-Signale heute</div>';
     return;
   }
-  const now = nowTime();
   el.innerHTML = akutList.map(a=>{
     const t = AKUT_TYPES[a.type] || AKUT_TYPES.andere;
-    let durHtml;
-    if(a.endtime){
-      const dur = minToHm(timeToMin(a.endtime)-timeToMin(a.time));
-      durHtml = `<span style="font-size:10px;color:var(--gold)">${a.time}–${a.endtime} · ${dur}</span>`;
-    } else {
-      const livDur = minToHm(Math.max(0, timeToMin(now)-timeToMin(a.time)));
-      durHtml = `<span style="font-size:10px;color:var(--accent)">${a.time} · läuft seit ${livDur}</span>`;
-    }
     return `<div class="spontan-entry">
-      <div class="spontan-time">${durHtml}${a.note?' · '+escHtml(a.note):''}</div>
+      <div class="spontan-time">${a.time}${a.note?' · '+escHtml(a.note):''}</div>
       <div style="font-size:12px">${t.icon} ${t.label}${a.detail?': '+escHtml(a.detail):''}</div>
       <div style="display:flex;justify-content:flex-end;gap:5px;margin-top:6px">
         <button class="entry-action edit" onclick="window.stress_openEditAkut('${a.id}')" title="Bearbeiten">✎</button>
@@ -8542,18 +8522,13 @@ function updateBadge(){
   const badge = document.getElementById('badge-stress');
   if(!badge) return;
   const allVals = ANKER.flatMap(a=>Object.values(ankerData[a.id])).filter(v=>typeof v==='number' && v>0);
-  const runningAkut = akutList.filter(a=>!a.endtime).length;
   if(!allVals.length && !akutList.length){ badge.textContent='—'; return; }
   const max = allVals.length ? Math.max(...allVals) : 0;
   const parts = [];
   if(max>0) parts.push('max '+max);
   if(akutList.length) parts.push(akutList.length+'×');
-  if(runningAkut) parts.push('●');
   badge.textContent = parts.join(' · ');
 }
-
-// Live-Timer alle 60 s (für laufende Akut-Signale)
-setInterval(()=>{ if(akutList.some(a=>!a.endtime)) renderAkut(); }, 60000);
 
 // ── EXPORTS ───────────────────────────────
 window.stress_render = render;
