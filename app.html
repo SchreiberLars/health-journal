@@ -1030,13 +1030,8 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
     <div class="mt-sub">Etwas, was gerade passiert oder gerade eben war</div>
 
     <label class="ml">Art</label>
-    <select class="ms" id="stress-m-akut-type">
-      <option value="muskelzucken">💢 Muskelzucken</option>
-      <option value="herzklopfen">💓 Herzklopfen in Ruhe</option>
-      <option value="schweiss">💦 Schweißausbruch</option>
-      <option value="unruhe">🌀 Innere Unruhe</option>
-      <option value="andere">📌 Andere</option>
-    </select>
+    <div id="stress-m-akut-type-chips" class="chip-row" style="margin-top:4px"></div>
+    <input type="hidden" id="stress-m-akut-type">
 
     <label class="ml">Wo / Details (optional)</label>
     <input class="mi" id="stress-m-akut-detail" placeholder="z.B. Augenlid links, oder Herzklopfen beim Aufstehen">
@@ -1050,6 +1045,26 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
     <div class="mbr">
       <button class="bs" onclick="closeModal('stress-m-akut')">Abbrechen</button>
       <button class="bp" onclick="window.stress_saveAkut()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Stress: Neuen Akut-Typ anlegen -->
+<div class="modal-overlay" id="stress-m-new-type">
+  <div class="modal-sheet">
+    <div class="mt">Neuen Typ anlegen</div>
+    <div class="mt-sub">Akut-Signal-Art, die du öfter erfassen willst</div>
+
+    <label class="ml">Emoji</label>
+    <input class="mi" id="stress-m-new-type-emoji" placeholder="z.B. 🥴" maxlength="4">
+
+    <label class="ml">Name</label>
+    <input class="mi" id="stress-m-new-type-name" placeholder="z.B. Kribbeln">
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('stress-m-new-type')">Abbrechen</button>
+      <button class="bp" onclick="window.stress_saveNewType()">Anlegen</button>
     </div>
   </div>
 </div>
@@ -8336,14 +8351,16 @@ let metriken = [
   {id:'geraeusch', name:'Geräuschempfindlichkeit', pflicht:false},
 ];
 
-// Typen für Akut-Signale
-const AKUT_TYPES = {
+// Typen für Akut-Signale - erweiterbar
+let AKUT_TYPES = {
   muskelzucken: {icon:'💢', label:'Muskelzucken'},
   herzklopfen:  {icon:'💓', label:'Herzklopfen'},
   schweiss:     {icon:'💦', label:'Schweißausbruch'},
   unruhe:       {icon:'🌀', label:'Innere Unruhe'},
   andere:       {icon:'📌', label:'Andere'}
 };
+let akutTypeOrder = ['muskelzucken','herzklopfen','schweiss','unruhe','andere'];
+let currentAkutType = 'muskelzucken';
 
 // Tages-Daten: { morgen: { stress:3, licht:2, ... }, mittag:{}, abend:{} }
 let ankerData = { morgen:{}, mittag:{}, abend:{} };
@@ -8451,13 +8468,56 @@ function toggleAnker(ankerId){
 }
 
 // ── AKUT-SIGNALE ──────────────────────────
+function renderTypeChips(){
+  const host = document.getElementById('stress-m-akut-type-chips');
+  if(!host) return;
+  const chips = akutTypeOrder.map(id=>{
+    const t = AKUT_TYPES[id];
+    if(!t) return '';
+    const sel = currentAkutType===id ? 'sel' : '';
+    return `<button class="act-chip ${sel}" onclick="window.stress_selectType('${id}')">${t.icon} ${escHtml(t.label)}</button>`;
+  }).join('');
+  host.innerHTML = chips + `<button class="chip-add" onclick="window.stress_openNewType()" title="Typ anlegen">+</button>`;
+}
+
+function selectType(id){
+  if(!AKUT_TYPES[id]) return;
+  currentAkutType = id;
+  renderTypeChips();
+}
+
+function openNewType(){
+  document.getElementById('stress-m-new-type-emoji').value = '';
+  document.getElementById('stress-m-new-type-name').value = '';
+  openModal('stress-m-new-type');
+  setTimeout(()=>{
+    const inp=document.getElementById('stress-m-new-type-emoji');
+    if(inp) inp.focus();
+  },50);
+}
+
+function saveNewType(){
+  const emoji = document.getElementById('stress-m-new-type-emoji').value.trim();
+  const name  = document.getElementById('stress-m-new-type-name').value.trim();
+  if(!name){ showToast('Name fehlt'); return; }
+  if(!emoji){ showToast('Emoji fehlt'); return; }
+  const id = 't_'+uid();
+  AKUT_TYPES[id] = { icon:emoji, label:name };
+  akutTypeOrder.push(id);
+  currentAkutType = id;
+  closeModal('stress-m-new-type');
+  renderTypeChips();
+  showToast(`${emoji} ${name} ✓`);
+}
+
 function openAkut(){
   editingAkutId = null;
+  currentAkutType = akutTypeOrder[0] || 'muskelzucken';
   document.getElementById('stress-m-akut-title').textContent = 'Akut-Signal erfassen';
-  document.getElementById('stress-m-akut-type').value = 'muskelzucken';
   document.getElementById('stress-m-akut-detail').value = '';
   document.getElementById('stress-m-akut-time').value = nowTime();
   document.getElementById('stress-m-akut-note').value = '';
+  renderTypeChips();
   openModal('stress-m-akut');
 }
 
@@ -8465,19 +8525,22 @@ function openEditAkut(id){
   const a = akutList.find(x=>x.id===id);
   if(!a) return;
   editingAkutId = id;
+  currentAkutType = AKUT_TYPES[a.type] ? a.type : akutTypeOrder[0];
   document.getElementById('stress-m-akut-title').textContent = 'Akut-Signal bearbeiten';
-  document.getElementById('stress-m-akut-type').value = a.type;
   document.getElementById('stress-m-akut-detail').value = a.detail||'';
   document.getElementById('stress-m-akut-time').value = a.time;
   document.getElementById('stress-m-akut-note').value = a.note||'';
+  renderTypeChips();
   openModal('stress-m-akut');
 }
 
 function saveAkut(){
-  const type    = document.getElementById('stress-m-akut-type').value;
+  const type    = currentAkutType;
   const detail  = document.getElementById('stress-m-akut-detail').value.trim();
   const time    = document.getElementById('stress-m-akut-time').value || nowTime();
   const note    = document.getElementById('stress-m-akut-note').value.trim();
+
+  if(!AKUT_TYPES[type]){ showToast('Bitte Art wählen'); return; }
 
   if(editingAkutId){
     const a = akutList.find(x=>x.id===editingAkutId);
@@ -8538,6 +8601,9 @@ window.stress_openAkut = openAkut;
 window.stress_saveAkut = saveAkut;
 window.stress_openEditAkut = openEditAkut;
 window.stress_deleteAkut = deleteAkut;
+window.stress_selectType = selectType;
+window.stress_openNewType = openNewType;
+window.stress_saveNewType = saveNewType;
 })();
 
 
