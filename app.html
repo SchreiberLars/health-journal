@@ -698,6 +698,23 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
   </div>
 </div>
 
+<!-- 4b. STRESS & NERVENSYSTEM -->
+<div class="section" id="sec-stress" style="border-left-color:var(--c-bef)">
+  <div class="section-header" onclick="toggleSection('stress')">
+    <div class="section-left">
+      <span>⚡</span>
+      <span class="section-label">Stress & Nervensystem</span>
+      <span class="section-badge" id="badge-stress">—</span>
+    </div>
+    <div class="section-right">
+      <span class="section-chevron" id="chev-stress">▼</span>
+    </div>
+  </div>
+  <div class="section-body" id="body-stress" style="display:none">
+    <div id="stress-content"><!-- stress JS --></div>
+  </div>
+</div>
+
 <!-- 5. ENTZÜNDUNG & HAUT -->
 <div class="section" id="sec-entz" style="border-left-color:var(--c-entz)">
   <div class="section-header" onclick="toggleSection('entz')">
@@ -1004,6 +1021,41 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 </div>
 
 <div class="toast" id="toast"></div>
+
+
+<!-- ── STRESS & NERVENSYSTEM: Akut-Signal Modal ── -->
+<div class="modal-overlay" id="stress-m-akut">
+  <div class="modal-sheet">
+    <div class="mt" id="stress-m-akut-title">Akut-Signal erfassen</div>
+    <div class="mt-sub">Etwas, was gerade passiert oder gerade eben war</div>
+
+    <label class="ml">Art</label>
+    <select class="ms" id="stress-m-akut-type">
+      <option value="muskelzucken">💢 Muskelzucken</option>
+      <option value="herzklopfen">💓 Herzklopfen in Ruhe</option>
+      <option value="schweiss">💦 Schweißausbruch</option>
+      <option value="unruhe">🌀 Innere Unruhe</option>
+      <option value="andere">📌 Andere</option>
+    </select>
+
+    <label class="ml">Wo / Details (optional)</label>
+    <input class="mi" id="stress-m-akut-detail" placeholder="z.B. Augenlid links, oder Herzklopfen beim Aufstehen">
+
+    <label class="ml">Startzeit</label>
+    <input class="mi" id="stress-m-akut-time" type="time" style="margin-top:4px">
+
+    <label class="ml">Endzeit (optional, leer = läuft noch)</label>
+    <input class="mi" id="stress-m-akut-endtime" type="time" style="margin-top:4px">
+
+    <label class="ml">Notiz (optional)</label>
+    <input class="mi" id="stress-m-akut-note" placeholder="z.B. nach Mail vom Chef">
+
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('stress-m-akut')">Abbrechen</button>
+      <button class="bp" onclick="window.stress_saveAkut()">Speichern</button>
+    </div>
+  </div>
+</div>
 
 
 <script>
@@ -8268,9 +8320,255 @@ function renderTimeline() {
 window.renderTimeline = renderTimeline;
 
 
+(function() {
+// ═══════════════════════════════════════════
+// STRESS & NERVENSYSTEM
+// Tages-Metriken (0-5, Morgen/Mittag/Abend) + Akut-Signale (Episoden mit Zeit)
+// ═══════════════════════════════════════════
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function timeToMin(t){if(!t)return null;const[h,m]=t.split(':').map(Number);return h*60+m}
+function minToHm(mins){if(mins<0)mins=0;const h=Math.floor(mins/60),m=mins%60;return h?`${h}h ${String(m).padStart(2,'0')}min`:`${m}min`}
+
+// Metriken für Tages-Tracking (0-5, 0 = nicht erfasst = nichts gehabt)
+let metriken = [
+  {id:'stress',  name:'Gefühlter Stress',  pflicht:false},
+  {id:'licht',   name:'Lichtempfindlichkeit', pflicht:false},
+  {id:'geraeusch', name:'Geräuschempfindlichkeit', pflicht:false},
+];
+
+// Typen für Akut-Signale
+const AKUT_TYPES = {
+  muskelzucken: {icon:'💢', label:'Muskelzucken'},
+  herzklopfen:  {icon:'💓', label:'Herzklopfen'},
+  schweiss:     {icon:'💦', label:'Schweißausbruch'},
+  unruhe:       {icon:'🌀', label:'Innere Unruhe'},
+  andere:       {icon:'📌', label:'Andere'}
+};
+
+// Tages-Daten: { morgen: { stress:3, licht:2, ... }, mittag:{}, abend:{} }
+let ankerData = { morgen:{}, mittag:{}, abend:{} };
+let ankerOpen = { morgen:true, mittag:false, abend:false };
+
+// Akut-Signale: [{id, type, detail, time, endtime, note}]
+let akutList = [];
+let editingAkutId = null;
+
+// ── INJECT UI ─────────────────────────────
+function injectUI(){
+  const host = document.getElementById('stress-content');
+  if(!host) return;
+  if(host.dataset.injected==='1') return;
+  host.dataset.injected='1';
+
+  host.innerHTML = `<div class="form-section">
+    <div class="section-row">
+      <div class="section-title">⚡ Stress & Nervensystem</div>
+    </div>
+
+    <div class="sublabel" style="margin-bottom:8px">Tages-Einstufung (0 = nichts · 5 = massiv)</div>
+    <div id="stress-anker-container"></div>
+
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+      <div class="section-row">
+        <div class="sublabel" style="margin:0">Akut-Signale heute</div>
+        <button class="btn-ghost" onclick="window.stress_openAkut()">+ Jetzt erfassen</button>
+      </div>
+      <div id="stress-akut-list" style="margin-top:8px"></div>
+    </div>
+  </div>`;
+}
+
+// ── RENDER ────────────────────────────────
+function render(){
+  injectUI();
+  renderAnker();
+  renderAkut();
+  updateBadge();
+}
+
+const ANKER = [
+  {id:'morgen', label:'🌅 Morgen'},
+  {id:'mittag', label:'☀️ Mittag'},
+  {id:'abend',  label:'🌆 Abend'}
+];
+
+function renderAnker(){
+  const host = document.getElementById('stress-anker-container');
+  if(!host) return;
+  host.innerHTML = ANKER.map(a=>{
+    const open = ankerOpen[a.id];
+    const arrow = open ? '▲' : '▼';
+    const body = open ? `
+      <div class="anker-body">
+        ${metriken.map(m=>renderMetricRow(a.id, m)).join('')}
+      </div>` : '';
+    const badge = ankerBadge(a.id);
+    return `<div class="anker-card">
+      <div class="anker-header" onclick="window.stress_toggleAnker('${a.id}')">
+        <span class="anker-label">${a.label}</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="anker-badge">${badge}</span>
+          <span style="color:var(--muted);font-size:12px">${arrow}</span>
+        </span>
+      </div>
+      <div style="display:${open?'block':'none'}">${body}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderMetricRow(ankerId, m){
+  const val = ankerData[ankerId][m.id];
+  const chips = [0,1,2,3,4,5].map(v=>{
+    const sel = val===v ? 'selected' : '';
+    return `<button class="scale-chip ${sel}" data-v="${v}"
+      onclick="window.stress_setMetric('${ankerId}','${m.id}',${v})">${v}</button>`;
+  }).join('');
+  return `<div style="margin-bottom:12px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${escHtml(m.name)}</div>
+    <div style="display:flex;gap:4px">${chips}</div>
+  </div>`;
+}
+
+function ankerBadge(ankerId){
+  const vals = Object.values(ankerData[ankerId]).filter(v=>typeof v==='number' && v>0);
+  if(!vals.length) return '—';
+  const max = Math.max(...vals);
+  return max.toString();
+}
+
+function setMetric(ankerId, metricId, val){
+  if(ankerData[ankerId][metricId] === val){
+    delete ankerData[ankerId][metricId];
+  } else {
+    ankerData[ankerId][metricId] = val;
+  }
+  render();
+}
+
+function toggleAnker(ankerId){
+  ankerOpen[ankerId] = !ankerOpen[ankerId];
+  render();
+}
+
+// ── AKUT-SIGNALE ──────────────────────────
+function openAkut(){
+  editingAkutId = null;
+  document.getElementById('stress-m-akut-title').textContent = 'Akut-Signal erfassen';
+  document.getElementById('stress-m-akut-type').value = 'muskelzucken';
+  document.getElementById('stress-m-akut-detail').value = '';
+  document.getElementById('stress-m-akut-time').value = nowTime();
+  document.getElementById('stress-m-akut-endtime').value = '';
+  document.getElementById('stress-m-akut-note').value = '';
+  openModal('stress-m-akut');
+}
+
+function openEditAkut(id){
+  const a = akutList.find(x=>x.id===id);
+  if(!a) return;
+  editingAkutId = id;
+  document.getElementById('stress-m-akut-title').textContent = 'Akut-Signal bearbeiten';
+  document.getElementById('stress-m-akut-type').value = a.type;
+  document.getElementById('stress-m-akut-detail').value = a.detail||'';
+  document.getElementById('stress-m-akut-time').value = a.time;
+  document.getElementById('stress-m-akut-endtime').value = a.endtime||'';
+  document.getElementById('stress-m-akut-note').value = a.note||'';
+  openModal('stress-m-akut');
+}
+
+function saveAkut(){
+  const type    = document.getElementById('stress-m-akut-type').value;
+  const detail  = document.getElementById('stress-m-akut-detail').value.trim();
+  const time    = document.getElementById('stress-m-akut-time').value || nowTime();
+  const endRaw  = document.getElementById('stress-m-akut-endtime').value;
+  const endtime = endRaw || null;
+  const note    = document.getElementById('stress-m-akut-note').value.trim();
+
+  if(endtime && timeToMin(endtime) <= timeToMin(time)){
+    showToast('Endzeit muss nach Startzeit liegen'); return;
+  }
+
+  if(editingAkutId){
+    const a = akutList.find(x=>x.id===editingAkutId);
+    if(a){ a.type=type; a.detail=detail; a.time=time; a.endtime=endtime; a.note=note; }
+    editingAkutId = null;
+  } else {
+    akutList.push({ id:uid(), type, detail, time, endtime, note });
+  }
+  akutList.sort((a,b)=>a.time.localeCompare(b.time));
+  closeModal('stress-m-akut');
+  render();
+  showToast(`${AKUT_TYPES[type].icon} ${AKUT_TYPES[type].label} ✓`);
+}
+
+function deleteAkut(id){
+  akutList = akutList.filter(a=>a.id!==id);
+  render();
+}
+
+function renderAkut(){
+  const el = document.getElementById('stress-akut-list');
+  if(!el) return;
+  if(!akutList.length){
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted);font-style:italic">Keine Akut-Signale heute</div>';
+    return;
+  }
+  const now = nowTime();
+  el.innerHTML = akutList.map(a=>{
+    const t = AKUT_TYPES[a.type] || AKUT_TYPES.andere;
+    let durHtml;
+    if(a.endtime){
+      const dur = minToHm(timeToMin(a.endtime)-timeToMin(a.time));
+      durHtml = `<span style="font-size:10px;color:var(--gold)">${a.time}–${a.endtime} · ${dur}</span>`;
+    } else {
+      const livDur = minToHm(Math.max(0, timeToMin(now)-timeToMin(a.time)));
+      durHtml = `<span style="font-size:10px;color:var(--accent)">${a.time} · läuft seit ${livDur}</span>`;
+    }
+    return `<div class="spontan-entry">
+      <div class="spontan-time">${durHtml}${a.note?' · '+escHtml(a.note):''}</div>
+      <div style="font-size:12px">${t.icon} ${t.label}${a.detail?': '+escHtml(a.detail):''}</div>
+      <div style="display:flex;justify-content:flex-end;gap:5px;margin-top:6px">
+        <button class="entry-action edit" onclick="window.stress_openEditAkut('${a.id}')" title="Bearbeiten">✎</button>
+        <button class="entry-action del" onclick="window.stress_deleteAkut('${a.id}')" title="Löschen">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── BADGE ─────────────────────────────────
+function updateBadge(){
+  const badge = document.getElementById('badge-stress');
+  if(!badge) return;
+  const allVals = ANKER.flatMap(a=>Object.values(ankerData[a.id])).filter(v=>typeof v==='number' && v>0);
+  const runningAkut = akutList.filter(a=>!a.endtime).length;
+  if(!allVals.length && !akutList.length){ badge.textContent='—'; return; }
+  const max = allVals.length ? Math.max(...allVals) : 0;
+  const parts = [];
+  if(max>0) parts.push('max '+max);
+  if(akutList.length) parts.push(akutList.length+'×');
+  if(runningAkut) parts.push('●');
+  badge.textContent = parts.join(' · ');
+}
+
+// Live-Timer alle 60 s (für laufende Akut-Signale)
+setInterval(()=>{ if(akutList.some(a=>!a.endtime)) renderAkut(); }, 60000);
+
+// ── EXPORTS ───────────────────────────────
+window.stress_render = render;
+window.stress_toggleAnker = toggleAnker;
+window.stress_setMetric = setMetric;
+window.stress_openAkut = openAkut;
+window.stress_saveAkut = saveAkut;
+window.stress_openEditAkut = openEditAkut;
+window.stress_deleteAkut = deleteAkut;
+})();
+
+
 function initAllModules(){
   injectModules();
-  ['med','supp','haut','bef','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
+  ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+':',e.message);}
   });
