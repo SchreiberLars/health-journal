@@ -7818,35 +7818,160 @@ window.messw_saveComment = saveComment;
 (function() {
 // ── FAMILIE ───────────────────────────────
 const FAM_ICONS = {harmonisch:'😌',neutral:'😐',angespannt:'😤'};
+const TYPE_ICONS = {telefon:'📞',nachricht:'💬',treffen:'🤝'};
+
+// State
 let famData = {morgen:{stimmung:null,kommentar:''},abend:{stimmung:null,kommentar:''}};
 let famAnkerOpen = {morgen:true,abend:false};
 let famCommentOpen = {morgen:false,abend:false};
+let kontakte = [];
+let currentKontaktType = 'treffen';
+let currentKontaktQual = 'gut';
+
+// IDs der DB-Eintraege (zum Update statt Insert wenn schon existiert)
+let famEintragIds = {morgen:null, abend:null};
+
+// Helpers
+function uid(){return Math.random().toString(36).slice(2,9)}
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ── DB SYNC ───────────────────────────────
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  const iso = getActiveISO();
+  try {
+    // Anker-Eintraege (Stimmung + Kommentar)
+    const { data: rows, error } = await window.sb
+      .from('fam_eintraege')
+      .select('id, anker, stimmung, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(error) throw error;
+
+    // Reset
+    famData = {morgen:{stimmung:null,kommentar:''},abend:{stimmung:null,kommentar:''}};
+    famEintragIds = {morgen:null, abend:null};
+    (rows||[]).forEach(r => {
+      if(famData[r.anker]){
+        famData[r.anker].stimmung = r.stimmung;
+        famData[r.anker].kommentar = r.kommentar || '';
+        famEintragIds[r.anker] = r.id;
+      }
+    });
+
+    // Kontakte
+    const { data: kRows, error: kErr } = await window.sb
+      .from('fam_kontakte')
+      .select('id, typ, person, qualitaet')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso)
+      .order('created_at', { ascending: true });
+    if(kErr) throw kErr;
+    kontakte = (kRows||[]).map(k => ({
+      id: k.id,
+      type: k.typ,
+      person: k.person || undefined,
+      qualitaet: k.qualitaet
+    }));
+  } catch(err) {
+    console.error('Fam load error:', err);
+    if(typeof showToast === 'function') showToast('Fam-Lade-Fehler: ' + err.message);
+  }
+  renderFam();
+  renderSozial();
+}
+
+async function upsertAnker(anker){
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  const d = famData[anker];
+  // Wenn nichts gesetzt UND DB-Eintrag existiert -> loeschen
+  if(!d.stimmung && !d.kommentar){
+    if(famEintragIds[anker]){
+      await window.sb.from('fam_eintraege').delete().eq('id', famEintragIds[anker]);
+      famEintragIds[anker] = null;
+    }
+    return;
+  }
+  try {
+    const { data, error } = await window.sb
+      .from('fam_eintraege')
+      .upsert({
+        user_id: window.sbUser.id,
+        tagesdatum: iso,
+        anker: anker,
+        stimmung: d.stimmung,
+        kommentar: d.kommentar || null
+      }, { onConflict: 'user_id,tagesdatum,anker' })
+      .select()
+      .single();
+    if(error) throw error;
+    famEintragIds[anker] = data.id;
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
 
 function toggleAnker(id){famAnkerOpen[id]=!famAnkerOpen[id];renderFam();}
 
-function setFamStimmung(anker,val,btn){
+async function setFamStimmung(anker,val,btn){
   famData[anker].stimmung = famData[anker].stimmung===val?null:val;
   const row=btn.closest('.stimmung-row');
   row.querySelectorAll('.stim-btn').forEach(b=>b.className='stim-btn');
   if(famData[anker].stimmung) btn.className=`stim-btn sel-${val}`;
-  updateFamBadge(anker);renderDbg();
+  updateFamBadge(anker);
   if(famData[anker].stimmung) showToast(`Familie ${anker}: ${FAM_ICONS[val]} ${val}`);
+  await upsertAnker(anker);
 }
 
 function updateFamBadge(anker){
   const s=famData[anker].stimmung;
-  document.getElementById('fam-badge-'+anker).textContent=s?FAM_ICONS[s]:'';
-  document.getElementById('fam-cbtn-'+anker).classList.toggle('has-comment',!!famData[anker].kommentar);
+  const b1=document.getElementById('fam-badge-'+anker);
+  const b2=document.getElementById('fam-cbtn-'+anker);
+  if(b1) b1.textContent=s?FAM_ICONS[s]:'';
+  if(b2) b2.classList.toggle('has-comment',!!famData[anker].kommentar);
 }
 
+let lastLoadedISO = null;
 function renderFam(){
+  // Auto-reload on day change
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
   ['morgen','abend'].forEach(a=>{
     const body=document.getElementById('fam-body-'+a);
     const arr=document.getElementById('fam-arr-'+a);
-    if(famAnkerOpen[a]){body.style.display='block';arr.textContent='▲';}
-    else{body.style.display='none';arr.textContent='▼';}
+    if(body && arr){
+      if(famAnkerOpen[a]){body.style.display='block';arr.textContent='▲';}
+      else{body.style.display='none';arr.textContent='▼';}
+    }
     updateFamBadge(a);
     renderFamComment(a);
+    // Update stim-btn highlight (after re-render)
+    const stimRow = document.querySelector(`#fam-body-${a} .stimmung-row`);
+    if(stimRow){
+      const sel = famData[a].stimmung;
+      stimRow.querySelectorAll('.stim-btn').forEach(b=>{
+        b.className = 'stim-btn';
+        if(sel && b.textContent.toLowerCase().includes(sel.charAt(0))){
+          // primitive heuristic - rely on order instead
+        }
+      });
+      // Better: by index match (Harmonisch/Neutral/Angespannt = 0/1/2)
+      const idx = sel==='harmonisch'?0:sel==='neutral'?1:sel==='angespannt'?2:-1;
+      const btns = stimRow.querySelectorAll('.stim-btn');
+      btns.forEach((b,i)=>{ b.className='stim-btn'; if(i===idx) b.className='stim-btn sel-'+sel; });
+    }
   });
 }
 
@@ -7871,21 +7996,16 @@ function renderFamComment(anker){
     container.innerHTML=`<div class="comment-preview" onclick="window.fam_toggleFamComment('${anker}')">${comment}</div>`;
   } else container.innerHTML='';
 }
-function saveFamComment(anker){
+async function saveFamComment(anker){
   const ta=document.getElementById('ta-fam-'+anker);
   famData[anker].kommentar=ta?ta.value.trim():'';
   famCommentOpen[anker]=false;
   showToast(famData[anker].kommentar?'Kommentar gespeichert ✓':'Kommentar entfernt');
-  renderFam();renderDbg();
+  renderFam();
+  await upsertAnker(anker);
 }
 
 // ── SOZIALE KONTAKTE ──────────────────────
-const TYPE_ICONS = {telefon:'📞',nachricht:'💬',treffen:'🤝'};
-let kontakte = [];
-let currentKontaktType = 'treffen';
-let currentKontaktQual = 'gut';
-
-function uid(){return Math.random().toString(36).slice(2,9)}
 
 function setKontaktType(v,btn){
   currentKontaktType=v;
@@ -7898,16 +8018,13 @@ function setKontaktQual(v,btn){
   btn.className=`qual-btn sel-${v}`;
 }
 
-// ── LONG PRESS ON KONTAKT ────────────────
-let kontaktLpTimer=null, kontaktLpFired=false;
-
 let editKontaktCtx=null;
 
 function openEditKontakt(id){
   const k=kontakte.find(x=>x.id===id);if(!k)return;
   editKontaktCtx={id};
-  setKontaktType(k.type, document.querySelector(`#kontakt-type-row .type-btn:nth-child(${k.type==='telefon'?1:k.type==='nachricht'?2:3})`));
-  setKontaktQual(k.qualitaet, document.querySelector(`#kontakt-qual-row .qual-btn:nth-child(${k.qualitaet==='oberflächlich'?1:k.qualitaet==='gut'?2:3})`));
+  setKontaktType(k.type, document.querySelector(`#fam-kontakt-type-row .type-btn:nth-child(${k.type==='telefon'?1:k.type==='nachricht'?2:3})`));
+  setKontaktQual(k.qualitaet, document.querySelector(`#fam-kontakt-qual-row .qual-btn:nth-child(${k.qualitaet==='oberflächlich'?1:k.qualitaet==='gut'?2:3})`));
   document.getElementById('fam-kontakt-person').value=k.person||'';
   openModal('fam-m-kontakt');
   setTimeout(()=>document.getElementById('fam-kontakt-person').focus(),50);
@@ -7923,23 +8040,48 @@ function openAddKontakt(){
   setTimeout(()=>document.getElementById('fam-kontakt-person').focus(),50);
 }
 
-function saveKontakt(){
+async function saveKontakt(){
+  if(!window.sbUser){ showToast('Nicht eingeloggt'); return; }
   const person=document.getElementById('fam-kontakt-person').value.trim();
-  if(editKontaktCtx){
-    const k=kontakte.find(x=>x.id===editKontaktCtx.id);
-    if(k){k.type=currentKontaktType;k.qualitaet=currentKontaktQual;k.person=person||undefined;}
-    editKontaktCtx=null;
-    closeModal('fam-m-kontakt');renderSozial();renderDbg();
-    showToast('Kontakt aktualisiert ✓');
-  } else {
-    kontakte.push({id:uid(),type:currentKontaktType,qualitaet:currentKontaktQual,...(person?{person}:{})});
-    closeModal('fam-m-kontakt');renderSozial();renderDbg();
-    showToast(`${TYPE_ICONS[currentKontaktType]} Kontakt erfasst ✓`);
+  const iso = getActiveISO();
+  try {
+    if(editKontaktCtx){
+      const { error } = await window.sb
+        .from('fam_kontakte')
+        .update({ typ: currentKontaktType, qualitaet: currentKontaktQual, person: person || null })
+        .eq('id', editKontaktCtx.id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const k=kontakte.find(x=>x.id===editKontaktCtx.id);
+      if(k){k.type=currentKontaktType;k.qualitaet=currentKontaktQual;k.person=person||undefined;}
+      editKontaktCtx=null;
+      closeModal('fam-m-kontakt');renderSozial();
+      showToast('Kontakt aktualisiert ✓');
+    } else {
+      const { data, error } = await window.sb
+        .from('fam_kontakte')
+        .insert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          typ: currentKontaktType,
+          qualitaet: currentKontaktQual,
+          person: person || null
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      kontakte.push({id:data.id,type:currentKontaktType,qualitaet:currentKontaktQual,...(person?{person}:{})});
+      closeModal('fam-m-kontakt');renderSozial();
+      showToast(`${TYPE_ICONS[currentKontaktType]} Kontakt erfasst ✓`);
+    }
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
   }
 }
 
 function renderSozial(){
   const el=document.getElementById('fam-sozial-list');
+  if(!el) return;
   if(!kontakte.length){el.innerHTML='<div style="font-size:11px;color:var(--muted);font-style:italic">Noch keine Kontakte erfasst</div>';return;}
   el.innerHTML=kontakte.map(k=>`
     <div class="sozial-entry" data-kid="${k.id}">
@@ -7955,11 +8097,24 @@ function renderSozial(){
     </div>`).join('');
 }
 
-function deleteKontakt(id){kontakte=kontakte.filter(k=>k.id!==id);renderSozial();renderDbg();}
+async function deleteKontakt(id){
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('fam_kontakte')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    kontakte=kontakte.filter(k=>k.id!==id);
+    renderSozial();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
 
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
-// modal listeners: global
 let tt;function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);}
 
 // Exports
@@ -7973,6 +8128,7 @@ window.fam_lpAction=function(entry){if(typeof openEditKontakt==='function')openE
   window.fam_setKontaktType = setKontaktType;
   window.fam_toggleAnker = toggleAnker;
   window.fam_toggleFamComment = toggleFamComment;
+  window.fam_render = renderFam;
 })();
 
 (function() {
