@@ -4185,28 +4185,216 @@ const SCALES = {
   ]
 };
 
-// ── METRIKEN (konfigurierbar) ─────────────
-let metriken = [
-  {id:'energie',  name:'Energie',    scale:'energie',  pflicht:true},
-  {id:'stimmung', name:'Stimmung',   scale:'stimmung', pflicht:true},
-];
+// ── METRIKEN (aus DB geladen) ─────────────
+let metriken = []; // [{id, name, scale, pflicht, aktiv, sortierung}]
 
 function uid(){return Math.random().toString(36).slice(2,9)}
 
 // ── STATE ─────────────────────────────────
-// ankerData: { morgen: { energie:3, stimmung:4, entz:null, ... }, abend:{...} }
+// ankerData: { morgen: { metrikId:wert, ... }, abend:{...} }
 let ankerData = { morgen:{}, abend:{} };
 let ankerOpen = { morgen:true, abend:false };
 let ankerComments = { morgen:'', abend:'' };
 let ankerCommentOpen = { morgen:false, abend:false };
-// which optional metriken are active per anker
+// which optional metriken are active per anker (only those with data show automatically)
 let activeOptional = { morgen: new Set(), abend: new Set() };
-// spontaneous entries
+// spontaneous entries (NOCH NICHT MIGRIERT — bleibt lokal vorerst)
 let spontanList = [];
 let krankData = { aktiv: false, kommentar: '' };
 
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+let metrikenLoaded = false;
+async function loadMetriken(){
+  if(!window.sbUser || !window.sb || metrikenLoaded) return;
+  try {
+    const { data, error } = await window.sb
+      .from('bef_metriken')
+      .select('id, name, skala_id, pflicht, aktiv, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true });
+    if(error) throw error;
+    metriken = (data||[]).map(m => ({
+      id: m.id,
+      name: m.name,
+      scale: m.skala_id,
+      pflicht: m.pflicht,
+      sortierung: m.sortierung
+    }));
+    metrikenLoaded = true;
+  } catch(err) {
+    console.error('Befinden Metriken-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Metriken-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadMetriken();
+  const iso = getActiveISO();
+  // Reset
+  ankerData = { morgen:{}, abend:{} };
+  ankerComments = { morgen:'', abend:'' };
+  activeOptional = { morgen: new Set(), abend: new Set() };
+  krankData = { aktiv: false, kommentar: '' };
+
+  try {
+    // Metric values for active day
+    const { data: vRows, error: vErr } = await window.sb
+      .from('bef_metric_values')
+      .select('metrik_id, anker, wert')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(vErr) throw vErr;
+    (vRows||[]).forEach(r => {
+      if(ankerData[r.anker]){
+        ankerData[r.anker][r.metrik_id] = parseFloat(r.wert);
+        // Optional-Metriken sichtbar machen, falls Werte da sind
+        const m = metriken.find(x=>x.id===r.metrik_id);
+        if(m && !m.pflicht) activeOptional[r.anker].add(r.metrik_id);
+      }
+    });
+
+    // Anker-Kommentare
+    const { data: kRows, error: kErr } = await window.sb
+      .from('bef_anker_kommentare')
+      .select('anker, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(kErr) throw kErr;
+    (kRows||[]).forEach(r => {
+      if(ankerComments[r.anker] !== undefined) ankerComments[r.anker] = r.kommentar || '';
+    });
+
+    // Krank
+    const { data: krRow, error: krErr } = await window.sb
+      .from('bef_krank')
+      .select('aktiv, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso)
+      .maybeSingle();
+    if(krErr) throw krErr;
+    if(krRow){
+      krankData.aktiv = !!krRow.aktiv;
+      krankData.kommentar = krRow.kommentar || '';
+    }
+  } catch(err) {
+    console.error('Befinden load error:', err);
+    if(typeof showToast === 'function') showToast('Befinden-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
+// Set/clear a metric value in DB
+async function persistMetricValue(anker, metrikId, wert){
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(wert === null || wert === undefined){
+      const { error } = await window.sb
+        .from('bef_metric_values')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('anker', anker)
+        .eq('metrik_id', metrikId);
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('bef_metric_values')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          anker,
+          metrik_id: metrikId,
+          wert
+        }, { onConflict: 'user_id,metrik_id,tagesdatum,anker' });
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('Speichern-Fehler: ' + err.message);
+  }
+}
+
+async function persistAnkerKommentar(anker){
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  const text = ankerComments[anker] || '';
+  try {
+    if(text){
+      const { error } = await window.sb
+        .from('bef_anker_kommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          anker,
+          kommentar: text
+        }, { onConflict: 'user_id,tagesdatum,anker' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('bef_anker_kommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('anker', anker);
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('Kommentar-Fehler: ' + err.message);
+  }
+}
+
+async function persistKrank(){
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(krankData.aktiv || krankData.kommentar){
+      const { error } = await window.sb
+        .from('bef_krank')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          aktiv: krankData.aktiv,
+          kommentar: krankData.kommentar || null
+        }, { onConflict: 'user_id,tagesdatum' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('bef_krank')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso);
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('Krank-Fehler: ' + err.message);
+  }
+}
+
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
+  // Auto-reload on day change or first time
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
   // Krank toggle UI
   var kBtn=document.getElementById('bef-krank-btn');
   var kArea=document.getElementById('bef-krank-area');
@@ -4351,22 +4539,31 @@ function renderSpontan(){
 // ── INTERACTIONS ──────────────────────────
 function toggleAnker(id){
   ankerOpen[id]=!ankerOpen[id];
-  render();
+  renderUI();
 }
 
-function setMetric(anker, metrikId, val){
+async function setMetric(anker, metrikId, val){
   // Toggle: tap same value again = deselect
-  if(ankerData[anker][metrikId]===val) ankerData[anker][metrikId]=null;
-  else ankerData[anker][metrikId]=val;
+  let newVal;
+  if(ankerData[anker][metrikId]===val){
+    ankerData[anker][metrikId]=null;
+    newVal = null;
+  } else {
+    ankerData[anker][metrikId]=val;
+    newVal = val;
+  }
   renderMetrics(anker);
   renderBadge(anker);
+  await persistMetricValue(anker, metrikId, newVal);
 }
 
-function toggleOptional(anker, metrikId){
+async function toggleOptional(anker, metrikId){
   const s = activeOptional[anker];
   if(s.has(metrikId)){
     s.delete(metrikId);
+    const hadVal = ankerData[anker][metrikId] != null;
     delete ankerData[anker][metrikId];
+    if(hadVal) await persistMetricValue(anker, metrikId, null);
   } else {
     s.add(metrikId);
   }
@@ -4379,15 +4576,16 @@ function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(
 function toggleComment(anker){
   ankerCommentOpen[anker]=!ankerCommentOpen[anker];
   if(ankerCommentOpen[anker]) ankerOpen[anker]=true;
-  render();
+  renderUI();
 }
 
-function saveComment(anker){
+async function saveComment(anker){
   const ta=document.getElementById('ta-'+anker);
   ankerComments[anker]=ta?ta.value.trim():'';
   ankerCommentOpen[anker]=false;
+  await persistAnkerKommentar(anker);
   showToast(ankerComments[anker]?'Kommentar gespeichert ✓':'Kommentar entfernt');
-  render();
+  renderUI();
 }
 
 // ── SPONTAN ───────────────────────────────
@@ -4529,7 +4727,7 @@ function saveSpontan(){
   spontanList.sort((a,b)=>a.time.localeCompare(b.time));
   spontanVals={};
   closeModal('bef-m-spontan');
-  render();
+  renderUI();
   const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
   showToast(`Befinden ${time}${dur} ✓`);
 }
@@ -4582,29 +4780,32 @@ function confirmEnd(){
   e.endtime = t;
   endingEntryId = null;
   closeModal('bef-m-end');
-  render();
+  renderUI();
   showToast(`Beendet · Dauer ${minToHm(timeToMin(t)-startMin)} ✓`);
 }
 
 
 // ── KRANK-TOGGLE ──────────────────────────
-function toggleKrank() {
+async function toggleKrank() {
   krankData.aktiv = !krankData.aktiv;
   if(!krankData.aktiv) krankData.kommentar = '';
-  render();
+  renderUI();
+  await persistKrank();
 }
 
-function saveKrankKommentar(){
+async function saveKrankKommentar(){
   const val = document.getElementById('bef-krank-kommentar')?.value||'';
   krankData.kommentar = val;
+  await persistKrank();
   showToast('Gespeichert ✓');
 }
 function setKrankKommentar(val) {
   krankData.kommentar = val;
+  // Persist debounced - keep simple: update only on explicit save
 }
 function delSpontan(id){
   spontanList=spontanList.filter(e=>e.id!==id);
-  render();
+  renderUI();
 }
 
 // ── METRIKEN MANAGER ─────────────────────
@@ -4672,14 +4873,14 @@ function saveEditMetrik(){
   // reopen manager
   openMetrikMgr();
   showToast(`${name} gespeichert ✓`);
-  render();
+  renderUI();
 }
 
 function togglePflicht(id){
   const m=metriken.find(x=>x.id===id);
   if(m) m.pflicht=!m.pflicht;
   renderMgrList();
-  render();
+  renderUI();
 }
 
 function delMetrik(id){
@@ -4687,7 +4888,7 @@ function delMetrik(id){
   // Clean up data
   Object.keys(ankerData).forEach(a=>delete ankerData[a][id]);
   renderMgrList();
-  render();
+  renderUI();
 }
 
 function addMetrik(){
