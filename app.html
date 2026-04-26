@@ -7364,6 +7364,99 @@ function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+let aktivitaetenLoaded = false;
+async function loadAktivitaeten(){
+  if(!window.sbUser || !window.sb || aktivitaetenLoaded) return;
+  try {
+    const { data, error } = await window.sb
+      .from('akt_arten')
+      .select('id, name, emoji, standard_dauer_min, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true })
+      .order('name', { ascending: true });
+    if(error) throw error;
+    aktivitaeten = (data||[]).map(a => ({
+      id: a.id,
+      name: a.name,
+      icon: a.emoji || '🏅',
+      standardDauer: a.standard_dauer_min || null,
+      sortierung: a.sortierung || 0
+    }));
+    aktivitaetenLoaded = true;
+  } catch(err) {
+    console.error('Akt-Stammdaten-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Akt-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadAktivitaeten();
+  const iso = getActiveISO();
+  // Reset
+  entries = [];
+  dayComment = '';
+  try {
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: eRows, error: e1 } = await window.sb
+      .from('akt_eintraege')
+      .select('id, art_id, erfasst_am, dauer_min, intensitaet, notiz')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', dayStart)
+      .lte('erfasst_am', dayEnd)
+      .order('erfasst_am', { ascending: true });
+    if(e1) throw e1;
+    entries = (eRows||[]).map(r => {
+      const art = aktivitaeten.find(a=>a.id===r.art_id);
+      return {
+        id: r.id,
+        aid: r.art_id,
+        name: art?.name || '?',
+        icon: art?.icon || '❓',
+        dauer: r.dauer_min,
+        intensitaet: r.intensitaet || 'mittel',
+        time: timeFromTimestamp(r.erfasst_am)
+      };
+    });
+
+    const { data: kRow, error: k1 } = await window.sb
+      .from('tageskommentare')
+      .select('kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('modul', 'akt')
+      .eq('tagesdatum', iso)
+      .maybeSingle();
+    if(k1) throw k1;
+    dayComment = kRow?.kommentar || '';
+  } catch(err) {
+    console.error('Akt load error:', err);
+    if(typeof showToast === 'function') showToast('Akt-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
 function renderCommentArea(){
   const container = document.getElementById('akt-comment-area');
   if(!container) return;
@@ -7391,12 +7484,37 @@ function toggleComment(){
   renderCommentArea();
 }
 
-function saveComment(){
+async function saveComment(){
   const ta = document.getElementById('ta-akt-day');
   dayComment = ta ? ta.value.trim() : '';
   commentOpen = false;
   renderCommentArea();
-  showToast('Kommentar gespeichert ✓');
+  if(!window.sbUser){ showToast('Kommentar gespeichert ✓'); return; }
+  const iso = getActiveISO();
+  try {
+    if(dayComment){
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          modul: 'akt',
+          tagesdatum: iso,
+          kommentar: dayComment
+        }, { onConflict: 'user_id,modul,tagesdatum' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('modul', 'akt')
+        .eq('tagesdatum', iso);
+      if(error) throw error;
+    }
+    showToast('Kommentar gespeichert ✓');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function setInt(v,btn){
@@ -7405,7 +7523,18 @@ function setInt(v,btn){
   btn.className=`int-btn sel-${v}`;
 }
 
+let lastLoadedISO = null;
 function render(){
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
   renderCommentArea();
   // entries
   const el=document.getElementById('akt-entries');
@@ -7472,9 +7601,9 @@ function openAddModal(aid){
   addCtx={aid:a.id};
   document.getElementById('akt-m-add-title').textContent=`${a.icon} ${a.name}`;
   document.getElementById('akt-m-add-time').value=nowTime();
-  document.getElementById('akt-m-add-dauer').value='';
+  document.getElementById('akt-m-add-dauer').value=a.standardDauer||'';
   document.getElementById('akt-m-add-type').innerHTML=aktivitaeten.map(x=>`<option value="${x.id}"${x.id===aid?' selected':''}>${x.icon} ${x.name}</option>`).join('');
-  document.getElementById('akt-m-add-quick').innerHTML=DAUER_QUICK.map(v=>`<button class="db" onclick="window.akt_pickDauer(${v},this)">${v} min</button>`).join('');
+  document.getElementById('akt-m-add-quick').innerHTML=DAUER_QUICK.map(v=>`<button class="db${a.standardDauer===v?' sel':''}" onclick="window.akt_pickDauer(${v},this)">${v} min</button>`).join('');
   setInt('mittel',document.querySelectorAll('#akt-m-add-int .int-btn')[1]);
   openModal('akt-m-add');
 }
@@ -7483,33 +7612,84 @@ function pickDauer(v,btn){
   btn.closest('.dauer-row').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
 }
-function confirmAdd(){
+async function confirmAdd(){
   const aid=document.getElementById('akt-m-add-type').value;
   const a=aktivitaeten.find(x=>x.id===aid);if(!a)return;
   const dauer=parseInt(document.getElementById('akt-m-add-dauer').value)||null;
   if(!dauer){showToast('Bitte Dauer eingeben');document.getElementById('akt-m-add-dauer').focus();return;}
   const time=document.getElementById('akt-m-add-time').value||nowTime();
-  if(addCtx?.editId){
-    const idx=entries.findIndex(x=>x.id===addCtx.editId);
-    if(idx!==-1){entries[idx]={...entries[idx],aid:a.id,name:a.name,icon:a.icon,dauer,intensitaet:currentInt,time};}
-    closeModal('akt-m-add');addCtx=null;render();
-    showToast(`${a.icon} ${a.name} aktualisiert ✓`);
-  } else {
-    entries.push({id:uid(),aid,name:a.name,icon:a.icon,dauer,intensitaet:currentInt,time});
-    closeModal('akt-m-add');addCtx=null;render();
-    showToast(`${a.icon} ${a.name} · ${dauer} min ✓`);
+  if(!window.sbUser){
+    if(addCtx?.editId){
+      const idx=entries.findIndex(x=>x.id===addCtx.editId);
+      if(idx!==-1){entries[idx]={...entries[idx],aid:a.id,name:a.name,icon:a.icon,dauer,intensitaet:currentInt,time};}
+      closeModal('akt-m-add');addCtx=null;renderUI();
+      showToast(`${a.icon} ${a.name} aktualisiert ✓`);
+    } else {
+      entries.push({id:uid(),aid,name:a.name,icon:a.icon,dauer,intensitaet:currentInt,time});
+      closeModal('akt-m-add');addCtx=null;renderUI();
+      showToast(`${a.icon} ${a.name} · ${dauer} min ✓`);
+    }
+    return;
+  }
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    if(addCtx?.editId){
+      const { error } = await window.sb
+        .from('akt_eintraege')
+        .update({ art_id: a.id, erfasst_am: ts, dauer_min: dauer, intensitaet: currentInt })
+        .eq('id', addCtx.editId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const idx=entries.findIndex(x=>x.id===addCtx.editId);
+      if(idx!==-1){entries[idx]={...entries[idx],aid:a.id,name:a.name,icon:a.icon,dauer,intensitaet:currentInt,time};}
+      closeModal('akt-m-add');addCtx=null;renderUI();
+      showToast(`${a.icon} ${a.name} aktualisiert ✓`);
+    } else {
+      const { data, error } = await window.sb
+        .from('akt_eintraege')
+        .insert({
+          user_id: window.sbUser.id,
+          art_id: a.id,
+          erfasst_am: ts,
+          dauer_min: dauer,
+          intensitaet: currentInt
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      entries.push({id:data.id,aid:a.id,name:a.name,icon:a.icon,dauer,intensitaet:currentInt,time});
+      closeModal('akt-m-add');addCtx=null;renderUI();
+      showToast(`${a.icon} ${a.name} · ${dauer} min ✓`);
+    }
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
   }
 }
-function deleteEntry(id){entries=entries.filter(e=>e.id!==id);render();}
+async function deleteEntry(id){
+  if(!window.sbUser){ entries=entries.filter(e=>e.id!==id); renderUI(); return; }
+  try {
+    const { error } = await window.sb
+      .from('akt_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    entries=entries.filter(e=>e.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
 function toggleDelMode(){
   delMode=!delMode;
   if(delMode)editMode=false;
-  updateModeBtns();render();
+  updateModeBtns();renderUI();
 }
 function toggleEditMode(){
   editMode=!editMode;
   if(editMode)delMode=false;
-  updateModeBtns();render();
+  updateModeBtns();renderUI();
 }
 function updateModeBtns(){
   const d=document.getElementById('akt-btn-del');
@@ -7541,7 +7721,23 @@ function updateIconPreview(){
     document.querySelectorAll('#akt-icon-picker .icon-opt').forEach(b=>b.classList.remove('sel'));
   }
 }
-function deleteAkt(id){aktivitaeten=aktivitaeten.filter(x=>x.id!==id);render();}
+async function deleteAkt(id){
+  // Soft-delete: aktiv=false, damit historische Eintraege ihre Verknuepfung behalten
+  if(!confirm('Aktivität wirklich entfernen? Bisherige Einträge bleiben in der Datenbank.')) return;
+  if(!window.sbUser){ aktivitaeten=aktivitaeten.filter(x=>x.id!==id); renderUI(); return; }
+  try {
+    const { error } = await window.sb
+      .from('akt_arten')
+      .update({ aktiv: false })
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    aktivitaeten=aktivitaeten.filter(x=>x.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
 function openNew(){
   editCtx=null;
   document.getElementById('akt-m-new-title').textContent='Aktivität anlegen';
@@ -7552,21 +7748,60 @@ function openNew(){
   openModal('akt-m-new');
   setTimeout(()=>document.getElementById('akt-m-new-name').focus(),50);
 }
-function saveNew(){
+async function saveNew(){
   const name=document.getElementById('akt-m-new-name').value.trim();
   const icon=document.getElementById('akt-selected-icon-preview')?.textContent||document.getElementById('akt-m-new-icon').value.trim()||'🏅';
   if(!name){showToast('Name fehlt');return;}
-  if(editCtx?.id){
-    const a=aktivitaeten.find(x=>x.id===editCtx.id);
-    if(a){a.name=name;a.icon=icon;}
-    showToast(`${icon} ${name} gespeichert ✓`);
-  } else {
-    aktivitaeten.push({id:uid(),name,icon});
-    aktivitaeten.sort((a,b)=>a.name.localeCompare(b.name,'de'));
-    showToast(`${icon} ${name} hinzugefügt`);
+  if(!window.sbUser){
+    if(editCtx?.id){
+      const a=aktivitaeten.find(x=>x.id===editCtx.id);
+      if(a){a.name=name;a.icon=icon;}
+      showToast(`${icon} ${name} gespeichert ✓`);
+    } else {
+      aktivitaeten.push({id:uid(),name,icon});
+      aktivitaeten.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+      showToast(`${icon} ${name} hinzugefügt`);
+    }
+    editCtx=null;
+    closeModal('akt-m-new');renderUI();
+    return;
   }
-  editCtx=null;
-  closeModal('akt-m-new');render();
+  try {
+    if(editCtx?.id){
+      const { error } = await window.sb
+        .from('akt_arten')
+        .update({ name, emoji: icon })
+        .eq('id', editCtx.id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const a=aktivitaeten.find(x=>x.id===editCtx.id);
+      if(a){a.name=name;a.icon=icon;}
+      // Update entries (icon/name in local cache)
+      entries.forEach(e => { if(e.aid===editCtx.id){ e.name=name; e.icon=icon; } });
+      showToast(`${icon} ${name} gespeichert ✓`);
+    } else {
+      const sortMax = aktivitaeten.reduce((m,x)=>Math.max(m, x.sortierung||0), 0);
+      const { data, error } = await window.sb
+        .from('akt_arten')
+        .insert({
+          user_id: window.sbUser.id,
+          name,
+          emoji: icon,
+          aktiv: true,
+          sortierung: sortMax + 10
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      aktivitaeten.push({id:data.id,name:data.name,icon:data.emoji||'🏅',sortierung:data.sortierung});
+      aktivitaeten.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+      showToast(`${icon} ${name} hinzugefügt`);
+    }
+    editCtx=null;
+    closeModal('akt-m-new');renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
@@ -7591,7 +7826,6 @@ window.akt_lpAction=function(card){if(typeof openEditEntry==='function')openEdit
   window.akt_toggleComment = toggleComment;
   window.akt_saveComment = saveComment;
   window.akt_updateIconPreview = updateIconPreview;
-  window.akt_render = render;
 })();
 
 (function() {
