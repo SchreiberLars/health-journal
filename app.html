@@ -7884,7 +7884,7 @@ async function loadFromDb(){
     console.error('Fam load error:', err);
     if(typeof showToast === 'function') showToast('Fam-Lade-Fehler: ' + err.message);
   }
-  renderFam();
+  renderFamUI();
   renderSozial();
 }
 
@@ -7919,7 +7919,7 @@ async function upsertAnker(anker){
   }
 }
 
-function toggleAnker(id){famAnkerOpen[id]=!famAnkerOpen[id];renderFam();}
+function toggleAnker(id){famAnkerOpen[id]=!famAnkerOpen[id];renderFamUI();}
 
 async function setFamStimmung(anker,val,btn){
   famData[anker].stimmung = famData[anker].stimmung===val?null:val;
@@ -7940,14 +7940,20 @@ function updateFamBadge(anker){
 }
 
 let lastLoadedISO = null;
+
+// Wrapper: nur fuer initialen Render und Tag-Wechsel
 function renderFam(){
-  // Auto-reload on day change
   const iso = getActiveISO();
   if(window.sbUser && lastLoadedISO !== iso){
     lastLoadedISO = iso;
     loadFromDb();
     return;
   }
+  renderFamUI();
+}
+
+// Pure render: zeichnet UI ohne DB-Reload
+function renderFamUI(){
   ['morgen','abend'].forEach(a=>{
     const body=document.getElementById('fam-body-'+a);
     const arr=document.getElementById('fam-arr-'+a);
@@ -7957,17 +7963,10 @@ function renderFam(){
     }
     updateFamBadge(a);
     renderFamComment(a);
-    // Update stim-btn highlight (after re-render)
+    // Stim-Btn-Highlight wiederherstellen
     const stimRow = document.querySelector(`#fam-body-${a} .stimmung-row`);
     if(stimRow){
       const sel = famData[a].stimmung;
-      stimRow.querySelectorAll('.stim-btn').forEach(b=>{
-        b.className = 'stim-btn';
-        if(sel && b.textContent.toLowerCase().includes(sel.charAt(0))){
-          // primitive heuristic - rely on order instead
-        }
-      });
-      // Better: by index match (Harmonisch/Neutral/Angespannt = 0/1/2)
       const idx = sel==='harmonisch'?0:sel==='neutral'?1:sel==='angespannt'?2:-1;
       const btns = stimRow.querySelectorAll('.stim-btn');
       btns.forEach((b,i)=>{ b.className='stim-btn'; if(i===idx) b.className='stim-btn sel-'+sel; });
@@ -7978,7 +7977,7 @@ function renderFam(){
 function toggleFamComment(anker){
   famCommentOpen[anker]=!famCommentOpen[anker];
   if(famCommentOpen[anker]) famAnkerOpen[anker]=true;
-  renderFam();
+  renderFamUI();
 }
 function renderFamComment(anker){
   const container=document.getElementById('fam-comment-area-'+anker);
@@ -8000,9 +7999,9 @@ async function saveFamComment(anker){
   const ta=document.getElementById('ta-fam-'+anker);
   famData[anker].kommentar=ta?ta.value.trim():'';
   famCommentOpen[anker]=false;
-  showToast(famData[anker].kommentar?'Kommentar gespeichert ✓':'Kommentar entfernt');
-  renderFam();
   await upsertAnker(anker);
+  showToast(famData[anker].kommentar?'Kommentar gespeichert ✓':'Kommentar entfernt');
+  renderFamUI();
 }
 
 // ── SOZIALE KONTAKTE ──────────────────────
