@@ -6729,19 +6729,25 @@ async function loadFromDb(){
     if(typeof showToast === 'function') showToast('Fehler beim Laden: ' + err.message);
   }
   loading = false;
-  render();
+  renderUI();
 }
 
 // ── RENDER ────────────────────────────────
 let lastLoadedISO = null;
+
+// Wrapper: nur fuer initialen Render und Tag-Wechsel
 function render(){
-  // Auto-reload on day change
   const iso = getActiveISO();
   if(window.sbUser && lastLoadedISO !== iso){
     lastLoadedISO = iso;
     loadFromDb();
-    return; // loadFromDb wird render() nochmal aufrufen
+    return;
   }
+  renderUI();
+}
+
+// Pure render: zeichnet UI ohne DB-Reload
+function renderUI(){
   renderCommentArea();
   renderEntries();
 }
@@ -6858,7 +6864,7 @@ async function addEntry(){
       .single();
     if(error) throw error;
     entries.push({ id: data.id, time: timeFromTimestamp(data.erfasst_am), bristol: parseFloat(data.bristol_value) });
-    render();
+    renderUI();
     setTimeout(function(){
       const el = document.querySelector('[data-entry-id="'+data.id+'"]');
       if(el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -6879,7 +6885,7 @@ async function deleteEntry(id){
     if(error) throw error;
     entries = entries.filter(e=>e.id!==id);
     delete infoOpen[id];
-    render();
+    renderUI();
   } catch(err) {
     showToast('Fehler: ' + err.message);
   }
@@ -8353,14 +8359,53 @@ const CATS = {
   hyp:   {label:'Hypothese',   icon:'💡', short:'Hyp.'},
   frage: {label:'Frage',       icon:'❓', short:'Frage'},
 };
-let notes = []; // [{id, time, cat, text}]
+let notes = []; // [{id, time, cat, text, erfasst_am}]
 let activeFilter = 'all';
 let pickedCat = 'beob';
 let editingId = null;
+let loaded = false;
 
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+// Build a timestamp from time-only string, anchored to "today"
+// Used when user edits time of an existing note
+function timestampFromTime(timeStr, baseTs){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = baseTs ? new Date(baseTs) : new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+// ── DB SYNC ───────────────────────────────
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  try {
+    const { data, error } = await window.sb
+      .from('notizen')
+      .select('id, kategorie, text, erfasst_am')
+      .eq('user_id', window.sbUser.id)
+      .order('erfasst_am', { ascending: false });
+    if(error) throw error;
+    notes = (data||[]).map(r => ({
+      id: r.id,
+      cat: r.kategorie,
+      text: r.text,
+      time: timeFromTimestamp(r.erfasst_am),
+      erfasst_am: r.erfasst_am
+    }));
+    loaded = true;
+  } catch(err) {
+    console.error('Notes load error:', err);
+    if(typeof showToast === 'function') showToast('Notizen-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
 
 function setModalTitle(text){
   const el = document.querySelector('#notes-m-capture .mt');
@@ -8407,31 +8452,70 @@ function pickCat(cat, btn){
   btn.classList.add('sel');
 }
 
-function save(){
+async function save(){
+  if(!window.sbUser){ showToast('Nicht eingeloggt'); return; }
   const text = document.getElementById('notes-m-text').value.trim();
   const time = document.getElementById('notes-m-time').value || nowTime();
   if(!text){ showToast('Text fehlt'); return; }
-  if(editingId){
-    const n = notes.find(x=>x.id===editingId);
-    if(n){ n.text = text; n.time = time; n.cat = pickedCat; }
-    editingId = null;
-  } else {
-    notes.unshift({id:uid(), time, cat:pickedCat, text});
+  try {
+    if(editingId){
+      const n = notes.find(x=>x.id===editingId);
+      const newTs = timestampFromTime(time, n?.erfasst_am);
+      const { error } = await window.sb
+        .from('notizen')
+        .update({ text, kategorie: pickedCat, erfasst_am: newTs })
+        .eq('id', editingId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      if(n){ n.text = text; n.time = time; n.cat = pickedCat; n.erfasst_am = newTs; }
+      // Re-sort by erfasst_am desc
+      notes.sort((a,b)=>(b.erfasst_am||'').localeCompare(a.erfasst_am||''));
+      editingId = null;
+    } else {
+      // Use today's date with chosen time
+      const ts = timestampFromTime(time);
+      const { data, error } = await window.sb
+        .from('notizen')
+        .insert({ user_id: window.sbUser.id, kategorie: pickedCat, text, erfasst_am: ts })
+        .select()
+        .single();
+      if(error) throw error;
+      notes.unshift({
+        id: data.id,
+        cat: data.kategorie,
+        text: data.text,
+        time: timeFromTimestamp(data.erfasst_am),
+        erfasst_am: data.erfasst_am
+      });
+    }
+    closeModal('notes-m-capture');
+    renderUI();
+    const c = CATS[pickedCat];
+    showToast(`${c.icon} ${c.label} ${time} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
   }
-  closeModal('notes-m-capture');
-  render();
-  const c = CATS[pickedCat];
-  showToast(`${c.icon} ${c.label} ${time} ✓`);
 }
 
-function deleteNote(id){
-  notes = notes.filter(n=>n.id!==id);
-  render();
+async function deleteNote(id){
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('notizen')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    notes = notes.filter(n=>n.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function setFilter(f){
   activeFilter = f;
-  render();
+  renderUI();
 }
 
 function renderFilters(){
@@ -8463,10 +8547,18 @@ function renderList(){
   }
   el.innerHTML = filtered.map(n=>{
     const c = CATS[n.cat] || CATS.beob;
+    // Datum-Anzeige nur wenn nicht heute
+    const noteDate = n.erfasst_am ? new Date(n.erfasst_am) : null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const noteDay = noteDate ? new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate()) : null;
+    const isToday = noteDay && noteDay.getTime() === today.getTime();
+    const dateStr = noteDay && !isToday
+      ? `${String(noteDay.getDate()).padStart(2,'0')}.${String(noteDay.getMonth()+1).padStart(2,'0')}. `
+      : '';
     return `<div class="note-card">
       <div class="nc-meta">
         <span class="nc-cat ${n.cat}">${c.icon} ${c.short}</span>
-        <span>${n.time}</span>
+        <span>${dateStr}${n.time}</span>
       </div>
       <div class="nc-text">${escHtml(n.text)}</div>
       <div style="display:flex;justify-content:flex-end;gap:5px;margin-top:6px">
@@ -8477,7 +8569,17 @@ function renderList(){
   }).join('');
 }
 
+// Wrapper: laedt einmalig DB beim ersten Aufruf
 function render(){
+  if(window.sbUser && !loaded){
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+// Pure render: zeichnet UI ohne DB-Reload
+function renderUI(){
   renderFilters();
   renderList();
 }
