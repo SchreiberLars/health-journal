@@ -8695,9 +8695,11 @@ async function addWeightFromInput(){
   if(!input) return;
   const raw=input.value.replace(/\D/g,'');
   if(!raw){ showToast('Bitte Wert eingeben'); return; }
-  // 2-3 digits = whole kg (e.g. "82" -> 82.0), 4 digits = "824" -> 82.4
+  // Eingabe-Format:
+  //   2 Ziffern  -> ganze kg (z.B. "82" -> 82,0)
+  //   3+ Ziffern -> letzte Ziffer ist Dezimal (z.B. "689" -> 68,9; "1234" -> 123,4)
   let w;
-  if(raw.length<=3) w=parseInt(raw,10);
+  if(raw.length<=2) w=parseInt(raw,10);
   else w=parseInt(raw,10)/10;
   if(w<20||w>300){ showToast('Gewichtswert unplausibel'); return; }
   const timeEl=document.getElementById('messw-weight-time');
@@ -8884,7 +8886,8 @@ async function saveEditWeight(){
   if(/^\d+\.\d+$/.test(raw)) w = parseFloat(raw);
   else if(/^\d+$/.test(raw)){
     const digits = raw;
-    if(digits.length<=3) w = parseInt(digits,10);
+    // 2 Ziffern = ganze kg, 3+ Ziffern = letzte Ziffer ist Dezimal
+    if(digits.length<=2) w = parseInt(digits,10);
     else w = parseInt(digits,10)/10;
   } else { showToast('Ungültiger Wert'); return; }
   if(w<20||w>300){ showToast('Gewichtswert unplausibel'); return; }
