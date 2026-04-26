@@ -1174,6 +1174,7 @@ function shiftDay(n){
   activeDate=new Date(activeDate);
   activeDate.setDate(activeDate.getDate()+n);
   renderDateHeader();
+  rerenderAllModulesForDate();
 }
 
 function openCalendar(){
@@ -1212,7 +1213,15 @@ function selectCalDay(day){
 function shiftMonth(n){calViewDate=new Date(calViewDate);calViewDate.setMonth(calViewDate.getMonth()+n);renderCalendar();}
 function jumpToday(){calSelectedDate=todayDate();calViewDate=new Date(todayDate());renderCalendar();}
 function jumpDays(n){const d=todayDate();d.setDate(d.getDate()+n);calSelectedDate=new Date(d);calViewDate=new Date(d);renderCalendar();}
-function confirmDate(){activeDate=new Date(calSelectedDate);closeModal('m-cal');renderDateHeader();}
+function confirmDate(){activeDate=new Date(calSelectedDate);closeModal('m-cal');renderDateHeader();rerenderAllModulesForDate();}
+
+// Re-render alle Module nach Tag-Wechsel (laedt aus DB neu, soweit Modul migriert)
+function rerenderAllModulesForDate(){
+  ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
+    try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
+    catch(e){console.warn(m+' rerender:',e.message);}
+  });
+}
 
 // ═══════════════════════════════════════════
 // SECTIONS
