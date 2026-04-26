@@ -649,9 +649,14 @@ window.sbUser = null;
 <div id="sb-login-overlay">
   <div id="sb-login-card">
     <h2>Health Journal</h2>
-    <p>Gib deine Email ein. Du bekommst einen Login-Link.</p>
+    <p id="sb-login-hint">Gib Email und Passwort ein.</p>
     <input type="email" id="sb-login-email" placeholder="lars@ssbi-blog.de" autocomplete="email">
-    <button id="sb-login-btn" onclick="window.sbSendMagicLink()">Magic-Link senden</button>
+    <input type="password" id="sb-login-password" placeholder="Passwort" autocomplete="current-password">
+    <button id="sb-login-btn" onclick="window.sbLogin()">Anmelden</button>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:11px">
+      <a href="#" onclick="window.sbToggleMode(event)" id="sb-toggle-mode" style="color:var(--muted);text-decoration:none">Magic-Link statt Passwort</a>
+      <a href="#" onclick="window.sbForgotPassword(event)" style="color:var(--muted);text-decoration:none">Passwort vergessen?</a>
+    </div>
     <div id="sb-login-msg"></div>
   </div>
 </div>
@@ -8987,6 +8992,54 @@ function setLoginMsg(text, kind){
   m.className = text ? ('show ' + (kind||'')) : '';
 }
 
+// Login-Mode: 'password' (default) oder 'magic'
+let sbLoginMode = 'password';
+
+window.sbToggleMode = function(ev){
+  if(ev) ev.preventDefault();
+  sbLoginMode = sbLoginMode === 'password' ? 'magic' : 'password';
+  const pwEl = document.getElementById('sb-login-password');
+  const hintEl = document.getElementById('sb-login-hint');
+  const btn = document.getElementById('sb-login-btn');
+  const toggleEl = document.getElementById('sb-toggle-mode');
+  if(sbLoginMode === 'magic'){
+    pwEl.style.display = 'none';
+    hintEl.textContent = 'Gib deine Email ein. Du bekommst einen Login-Link.';
+    btn.textContent = 'Magic-Link senden';
+    btn.onclick = window.sbSendMagicLink;
+    toggleEl.textContent = 'Mit Passwort anmelden';
+  } else {
+    pwEl.style.display = '';
+    hintEl.textContent = 'Gib Email und Passwort ein.';
+    btn.textContent = 'Anmelden';
+    btn.onclick = window.sbLogin;
+    toggleEl.textContent = 'Magic-Link statt Passwort';
+  }
+  setLoginMsg('', '');
+};
+
+window.sbLogin = async function(){
+  const emailEl = document.getElementById('sb-login-email');
+  const pwEl = document.getElementById('sb-login-password');
+  const btn = document.getElementById('sb-login-btn');
+  const email = (emailEl?.value || '').trim().toLowerCase();
+  const password = pwEl?.value || '';
+  if(!email){ setLoginMsg('Bitte Email eingeben', 'error'); return; }
+  if(!password){ setLoginMsg('Bitte Passwort eingeben', 'error'); return; }
+  btn.disabled = true; btn.textContent = 'Anmelden…';
+  setLoginMsg('', '');
+  try {
+    const { error } = await window.sb.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    // Auth-State-Listener wird Login-Overlay schliessen und App initialisieren
+  } catch(err) {
+    setLoginMsg('Fehler: ' + (err.message || err), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = sbLoginMode === 'magic' ? 'Magic-Link senden' : 'Anmelden';
+  }
+};
+
 window.sbSendMagicLink = async function(){
   const emailEl = document.getElementById('sb-login-email');
   const btn = document.getElementById('sb-login-btn');
@@ -9004,7 +9057,24 @@ window.sbSendMagicLink = async function(){
   } catch(err) {
     setLoginMsg('Fehler: ' + (err.message || err), 'error');
   } finally {
-    btn.disabled = false; btn.textContent = 'Magic-Link senden';
+    btn.disabled = false; btn.textContent = sbLoginMode === 'magic' ? 'Magic-Link senden' : 'Anmelden';
+  }
+};
+
+window.sbForgotPassword = async function(ev){
+  if(ev) ev.preventDefault();
+  const emailEl = document.getElementById('sb-login-email');
+  const email = (emailEl?.value || '').trim().toLowerCase();
+  if(!email){ setLoginMsg('Bitte Email eingeben', 'error'); return; }
+  setLoginMsg('', '');
+  try {
+    const { error } = await window.sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.href.split('#')[0].split('?')[0]
+    });
+    if(error) throw error;
+    setLoginMsg('✉ Reset-Link gesendet an ' + email, 'success');
+  } catch(err) {
+    setLoginMsg('Fehler: ' + (err.message || err), 'error');
   }
 };
 
