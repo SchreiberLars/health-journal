@@ -6688,7 +6688,7 @@ async function loadFromDb(){
     // Load entries for active day
     const { data: eRows, error: e1 } = await window.sb
       .from('stuhl_eintraege')
-      .select('id, erfasst_am, bristol, notiz')
+      .select('id, erfasst_am, bristol_value, kommentar')
       .eq('user_id', window.sbUser.id)
       .gte('erfasst_am', iso + 'T00:00:00')
       .lte('erfasst_am', iso + 'T23:59:59')
@@ -6698,7 +6698,7 @@ async function loadFromDb(){
     entries = (eRows||[]).map(r => ({
       id: r.id,
       time: timeFromTimestamp(r.erfasst_am),
-      bristol: parseFloat(r.bristol)
+      bristol: parseFloat(r.bristol_value)
     }));
 
     // Load tageskommentar
@@ -6839,11 +6839,11 @@ async function addEntry(){
   try {
     const { data, error } = await window.sb
       .from('stuhl_eintraege')
-      .insert({ user_id: window.sbUser.id, erfasst_am: ts, bristol: 4 })
+      .insert({ user_id: window.sbUser.id, erfasst_am: ts, bristol_value: 4 })
       .select()
       .single();
     if(error) throw error;
-    entries.push({ id: data.id, time: timeFromTimestamp(data.erfasst_am), bristol: parseFloat(data.bristol) });
+    entries.push({ id: data.id, time: timeFromTimestamp(data.erfasst_am), bristol: parseFloat(data.bristol_value) });
     render();
     setTimeout(function(){
       const el = document.querySelector('[data-entry-id="'+data.id+'"]');
@@ -6881,7 +6881,7 @@ async function setVal(id, v){
   try {
     const { error } = await window.sb
       .from('stuhl_eintraege')
-      .update({ bristol: v })
+      .update({ bristol_value: v })
       .eq('id', id)
       .eq('user_id', window.sbUser.id);
     if(error) throw error;
@@ -8795,7 +8795,8 @@ function initAllModules(){
   });
   renderDateHeader();
   setTimeout(function(){
-    allCollapsed = false;
+    // Set to collapsed first, then toggle expands all (matches button label flow)
+    allCollapsed = true;
     toggleAllSections();
   }, 50);
 }
