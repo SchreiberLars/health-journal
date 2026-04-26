@@ -8269,6 +8269,69 @@ function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'
 function fmt1(n){ return n.toFixed(1).replace('.',','); }
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  const iso = getActiveISO();
+  tempEntries = [];
+  bpEntries = [];
+  weightEntries = [];
+  dayComment = '';
+  try {
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: rows, error: e1 } = await window.sb
+      .from('messw_eintraege')
+      .select('id, typ, erfasst_am, temp_c, bp_syst, bp_diast, bp_puls, gewicht_kg')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', dayStart)
+      .lte('erfasst_am', dayEnd)
+      .order('erfasst_am', { ascending: true });
+    if(e1) throw e1;
+    (rows||[]).forEach(r => {
+      const time = timeFromTimestamp(r.erfasst_am);
+      if(r.typ === 'temp' && r.temp_c != null){
+        tempEntries.push({id: r.id, time, temp: parseFloat(r.temp_c)});
+      } else if(r.typ === 'bp' && r.bp_syst != null){
+        bpEntries.push({id: r.id, time, syst: r.bp_syst, diast: r.bp_diast, puls: r.bp_puls});
+      } else if(r.typ === 'gewicht' && r.gewicht_kg != null){
+        weightEntries.push({id: r.id, time, weight: parseFloat(r.gewicht_kg)});
+      }
+    });
+    const { data: kRow } = await window.sb
+      .from('tageskommentare')
+      .select('kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('modul', 'messw')
+      .eq('tagesdatum', iso)
+      .maybeSingle();
+    dayComment = kRow?.kommentar || '';
+  } catch(err) {
+    console.error('Messw load error:', err);
+    if(typeof showToast === 'function') showToast('Messw-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
 function renderCommentArea(){
   const container = document.getElementById('messw-comment-area');
   if(!container) return;
@@ -8296,12 +8359,37 @@ function toggleComment(){
   renderCommentArea();
 }
 
-function saveComment(){
+async function saveComment(){
   const ta = document.getElementById('ta-messw-day');
   dayComment = ta ? ta.value.trim() : '';
   commentOpen = false;
   renderCommentArea();
-  showToast('Kommentar gespeichert ✓');
+  if(!window.sbUser){ showToast('Kommentar gespeichert ✓'); return; }
+  const iso = getActiveISO();
+  try {
+    if(dayComment){
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          modul: 'messw',
+          tagesdatum: iso,
+          kommentar: dayComment
+        }, { onConflict: 'user_id,modul,tagesdatum' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('modul', 'messw')
+        .eq('tagesdatum', iso);
+      if(error) throw error;
+    }
+    showToast('Kommentar gespeichert ✓');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── INJECT UI ────────────────────────────
@@ -8409,14 +8497,38 @@ function renderTemp(){
   if(tEl && !tEl.value) tEl.value=nowTime();
 }
 
-function addTemp(temp){
+async function addTemp(temp){
   if(temp==null||isNaN(temp)) return;
   if(temp<30||temp>45){ showToast('Bitte realistische Temperatur eingeben'); return; }
   const timeEl=document.getElementById('messw-temp-time');
   const time=(timeEl&&timeEl.value)||nowTime();
-  tempEntries.push({id:uid(),time,temp:Math.round(temp*10)/10});
-  renderTemp();
-  showToast(`🌡 ${fmt1(temp)} °C um ${time} ✓`);
+  const rounded = Math.round(temp*10)/10;
+  if(!window.sbUser){
+    tempEntries.push({id:uid(),time,temp:rounded});
+    renderTemp();
+    showToast(`🌡 ${fmt1(rounded)} °C um ${time} ✓`);
+    return;
+  }
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    const { data, error } = await window.sb
+      .from('messw_eintraege')
+      .insert({
+        user_id: window.sbUser.id,
+        typ: 'temp',
+        erfasst_am: ts,
+        temp_c: rounded
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    tempEntries.push({id:data.id,time,temp:rounded});
+    renderTemp();
+    showToast(`🌡 ${fmt1(rounded)} °C um ${time} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function addTempChip(t){ addTemp(t); }
@@ -8438,9 +8550,20 @@ function addTempFromInput(){
   input.value='';
 }
 
-function deleteTempEntry(id){
-  tempEntries=tempEntries.filter(e=>e.id!==id);
-  renderTemp();
+async function deleteTempEntry(id){
+  if(!window.sbUser){ tempEntries=tempEntries.filter(e=>e.id!==id); renderTemp(); return; }
+  try {
+    const { error } = await window.sb
+      .from('messw_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    tempEntries=tempEntries.filter(e=>e.id!==id);
+    renderTemp();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── BLUTDRUCK ────────────────────────────
@@ -8478,7 +8601,7 @@ function renderBp(){
   if(tEl && !tEl.value) tEl.value=nowTime();
 }
 
-function addBp(){
+async function addBp(){
   const systEl=document.getElementById('messw-bp-syst');
   const diastEl=document.getElementById('messw-bp-diast');
   const pulsEl=document.getElementById('messw-bp-puls');
@@ -8492,16 +8615,54 @@ function addBp(){
   if(syst<=diast){ showToast('Systolisch muss größer als diastolisch sein'); return; }
   if(puls<20||puls>240){ showToast('Pulswert unplausibel'); return; }
   const time=(timeEl&&timeEl.value)||nowTime();
-  bpEntries.push({id:uid(),time,syst,diast,puls});
-  systEl.value=''; diastEl.value=''; pulsEl.value='';
-  renderBp();
-  showToast(`🩸 ${syst}/${diast} ♥${puls} um ${time} ✓`);
-  systEl.focus();
+  if(!window.sbUser){
+    bpEntries.push({id:uid(),time,syst,diast,puls});
+    systEl.value=''; diastEl.value=''; pulsEl.value='';
+    renderBp();
+    showToast(`🩸 ${syst}/${diast} ♥${puls} um ${time} ✓`);
+    systEl.focus();
+    return;
+  }
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    const { data, error } = await window.sb
+      .from('messw_eintraege')
+      .insert({
+        user_id: window.sbUser.id,
+        typ: 'bp',
+        erfasst_am: ts,
+        bp_syst: syst,
+        bp_diast: diast,
+        bp_puls: puls
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    bpEntries.push({id:data.id,time,syst,diast,puls});
+    systEl.value=''; diastEl.value=''; pulsEl.value='';
+    renderBp();
+    showToast(`🩸 ${syst}/${diast} ♥${puls} um ${time} ✓`);
+    systEl.focus();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteBpEntry(id){
-  bpEntries=bpEntries.filter(e=>e.id!==id);
-  renderBp();
+async function deleteBpEntry(id){
+  if(!window.sbUser){ bpEntries=bpEntries.filter(e=>e.id!==id); renderBp(); return; }
+  try {
+    const { error } = await window.sb
+      .from('messw_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    bpEntries=bpEntries.filter(e=>e.id!==id);
+    renderBp();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function openBpInfo(){ openModal('messw-m-bp-info'); }
@@ -8529,7 +8690,7 @@ function renderWeight(){
   if(tEl && !tEl.value) tEl.value=nowTime();
 }
 
-function addWeightFromInput(){
+async function addWeightFromInput(){
   const input=document.getElementById('messw-weight-input');
   if(!input) return;
   const raw=input.value.replace(/\D/g,'');
@@ -8541,19 +8702,67 @@ function addWeightFromInput(){
   if(w<20||w>300){ showToast('Gewichtswert unplausibel'); return; }
   const timeEl=document.getElementById('messw-weight-time');
   const time=(timeEl&&timeEl.value)||nowTime();
-  weightEntries.push({id:uid(),time,weight:Math.round(w*10)/10});
-  input.value='';
-  renderWeight();
-  showToast(`⚖️ ${fmt1(w)} kg um ${time} ✓`);
+  const rounded = Math.round(w*10)/10;
+  if(!window.sbUser){
+    weightEntries.push({id:uid(),time,weight:rounded});
+    input.value='';
+    renderWeight();
+    showToast(`⚖️ ${fmt1(rounded)} kg um ${time} ✓`);
+    return;
+  }
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    const { data, error } = await window.sb
+      .from('messw_eintraege')
+      .insert({
+        user_id: window.sbUser.id,
+        typ: 'gewicht',
+        erfasst_am: ts,
+        gewicht_kg: rounded
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    weightEntries.push({id:data.id,time,weight:rounded});
+    input.value='';
+    renderWeight();
+    showToast(`⚖️ ${fmt1(rounded)} kg um ${time} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteWeightEntry(id){
-  weightEntries=weightEntries.filter(e=>e.id!==id);
-  renderWeight();
+async function deleteWeightEntry(id){
+  if(!window.sbUser){ weightEntries=weightEntries.filter(e=>e.id!==id); renderWeight(); return; }
+  try {
+    const { error } = await window.sb
+      .from('messw_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    weightEntries=weightEntries.filter(e=>e.id!==id);
+    renderWeight();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── MAIN RENDER ──────────────────────────
+let lastLoadedISO = null;
 function render(){
+  injectUI();
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
   injectUI();
   renderCommentArea();
   renderTemp();
@@ -8570,7 +8779,7 @@ function openEditTemp(id){
   document.getElementById('messw-m-edit-temp-val').dataset.eid = id;
   openModal('messw-m-edit-temp');
 }
-function saveEditTemp(){
+async function saveEditTemp(){
   const valEl = document.getElementById('messw-m-edit-temp-val');
   const timeEl = document.getElementById('messw-m-edit-temp-time');
   const id = valEl.dataset.eid;
@@ -8587,11 +8796,26 @@ function saveEditTemp(){
   } else { showToast('Ungültiger Wert'); return; }
   if(temp<30||temp>45){ showToast('Bitte realistische Temperatur eingeben'); return; }
   const time = timeEl.value || nowTime();
-  e.temp = Math.round(temp*10)/10;
+  const rounded = Math.round(temp*10)/10;
+  e.temp = rounded;
   e.time = time;
   closeModal('messw-m-edit-temp');
   renderTemp();
-  showToast(`🌡 ${fmt1(e.temp)} °C ✓`);
+  showToast(`🌡 ${fmt1(rounded)} °C ✓`);
+  if(window.sbUser){
+    const iso = getActiveISO();
+    const ts = timestampFromTime(time, iso);
+    try {
+      const { error } = await window.sb
+        .from('messw_eintraege')
+        .update({ temp_c: rounded, erfasst_am: ts })
+        .eq('id', id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
 function openEditBp(id){
@@ -8604,7 +8828,7 @@ function openEditBp(id){
   document.getElementById('messw-m-edit-bp-syst').dataset.eid = id;
   openModal('messw-m-edit-bp');
 }
-function saveEditBp(){
+async function saveEditBp(){
   const systEl = document.getElementById('messw-m-edit-bp-syst');
   const diastEl = document.getElementById('messw-m-edit-bp-diast');
   const pulsEl = document.getElementById('messw-m-edit-bp-puls');
@@ -8625,6 +8849,20 @@ function saveEditBp(){
   closeModal('messw-m-edit-bp');
   renderBp();
   showToast(`🩸 ${syst}/${diast} ♥${puls} ✓`);
+  if(window.sbUser){
+    const iso = getActiveISO();
+    const ts = timestampFromTime(time, iso);
+    try {
+      const { error } = await window.sb
+        .from('messw_eintraege')
+        .update({ bp_syst: syst, bp_diast: diast, bp_puls: puls, erfasst_am: ts })
+        .eq('id', id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
 function openEditWeight(id){
@@ -8635,7 +8873,7 @@ function openEditWeight(id){
   document.getElementById('messw-m-edit-weight-val').dataset.eid = id;
   openModal('messw-m-edit-weight');
 }
-function saveEditWeight(){
+async function saveEditWeight(){
   const valEl = document.getElementById('messw-m-edit-weight-val');
   const timeEl = document.getElementById('messw-m-edit-weight-time');
   const id = valEl.dataset.eid;
@@ -8651,11 +8889,26 @@ function saveEditWeight(){
   } else { showToast('Ungültiger Wert'); return; }
   if(w<20||w>300){ showToast('Gewichtswert unplausibel'); return; }
   const time = timeEl.value || nowTime();
-  e.weight = Math.round(w*10)/10;
+  const rounded = Math.round(w*10)/10;
+  e.weight = rounded;
   e.time = time;
   closeModal('messw-m-edit-weight');
   renderWeight();
-  showToast(`⚖️ ${fmt1(e.weight)} kg ✓`);
+  showToast(`⚖️ ${fmt1(rounded)} kg ✓`);
+  if(window.sbUser){
+    const iso = getActiveISO();
+    const ts = timestampFromTime(time, iso);
+    try {
+      const { error } = await window.sb
+        .from('messw_eintraege')
+        .update({ gewicht_kg: rounded, erfasst_am: ts })
+        .eq('id', id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
 // Exports
