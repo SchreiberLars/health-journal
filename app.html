@@ -8774,12 +8774,17 @@ function renderUI(){
 
 // ── EDIT-FUNKTIONEN ──────────────────────
 function openEditTemp(id){
+  console.log('[messw] openEditTemp called with id:', id);
+  console.log('[messw] tempEntries:', tempEntries);
   const e = tempEntries.find(x=>x.id===id);
-  if(!e) return;
+  if(!e){ console.warn('[messw] entry not found'); return; }
+  console.log('[messw] entry found:', e);
   document.getElementById('messw-m-edit-temp-val').value = String(e.temp).replace('.',',');
   document.getElementById('messw-m-edit-temp-time').value = e.time;
   document.getElementById('messw-m-edit-temp-val').dataset.eid = id;
+  console.log('[messw] calling openModal');
   openModal('messw-m-edit-temp');
+  console.log('[messw] openModal returned');
 }
 async function saveEditTemp(){
   const valEl = document.getElementById('messw-m-edit-temp-val');
