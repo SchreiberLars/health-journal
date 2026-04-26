@@ -7830,15 +7830,7 @@ window.akt_lpAction=function(card){if(typeof openEditEntry==='function')openEdit
 
 (function() {
 const DAUER_QUICK=[5,10,15,20,30,45,60];
-let regenItems=[
-  {id:'kalt', name:'Kalt duschen', icon:'🧊'},
-  {id:'rlt',  name:'RLT',          icon:'🔴'},
-  {id:'nsdr', name:'NSDR',         icon:'🧘'},
-  {id:'medi', name:'Meditation',   icon:'🙏'},
-  {id:'neur', name:'Nurosym',      icon:'⚡'},
-  {id:'atem', name:'Atemübungen',  icon:'💨'},
-];
-regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+let regenItems=[]; // wird aus DB geladen
 let entries=[];
 let delMode=false,editMode=false,addCtx=null,editCtx=null;
 let dayComment = '';
@@ -7846,6 +7838,97 @@ let commentOpen = false;
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+let regenItemsLoaded = false;
+async function loadRegenItems(){
+  if(!window.sbUser || !window.sb || regenItemsLoaded) return;
+  try {
+    const { data, error } = await window.sb
+      .from('regen_arten')
+      .select('id, name, emoji, standard_dauer_min, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true })
+      .order('name', { ascending: true });
+    if(error) throw error;
+    regenItems = (data||[]).map(r => ({
+      id: r.id,
+      name: r.name,
+      icon: r.emoji || '🔋',
+      defaultDauer: r.standard_dauer_min || null,
+      sortierung: r.sortierung || 0
+    }));
+    regenItemsLoaded = true;
+  } catch(err) {
+    console.error('Regen-Stammdaten-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Regen-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadRegenItems();
+  const iso = getActiveISO();
+  entries = [];
+  dayComment = '';
+  try {
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: eRows, error: e1 } = await window.sb
+      .from('regen_eintraege')
+      .select('id, art_id, erfasst_am, dauer_min, notiz')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', dayStart)
+      .lte('erfasst_am', dayEnd)
+      .order('erfasst_am', { ascending: true });
+    if(e1) throw e1;
+    entries = (eRows||[]).map(r => {
+      const item = regenItems.find(x=>x.id===r.art_id);
+      return {
+        id: r.id,
+        rid: r.art_id,
+        name: item?.name || '?',
+        icon: item?.icon || '❓',
+        dauer: r.dauer_min,
+        time: timeFromTimestamp(r.erfasst_am)
+      };
+    });
+
+    const { data: kRow, error: k1 } = await window.sb
+      .from('tageskommentare')
+      .select('kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('modul', 'regen')
+      .eq('tagesdatum', iso)
+      .maybeSingle();
+    if(k1) throw k1;
+    dayComment = kRow?.kommentar || '';
+  } catch(err) {
+    console.error('Regen load error:', err);
+    if(typeof showToast === 'function') showToast('Regen-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
 
 function renderCommentArea(){
   const container = document.getElementById('regen-comment-area');
@@ -7874,15 +7957,51 @@ function toggleComment(){
   renderCommentArea();
 }
 
-function saveComment(){
+async function saveComment(){
   const ta = document.getElementById('ta-regen-day');
   dayComment = ta ? ta.value.trim() : '';
   commentOpen = false;
   renderCommentArea();
-  showToast('Kommentar gespeichert ✓');
+  if(!window.sbUser){ showToast('Kommentar gespeichert ✓'); return; }
+  const iso = getActiveISO();
+  try {
+    if(dayComment){
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          modul: 'regen',
+          tagesdatum: iso,
+          kommentar: dayComment
+        }, { onConflict: 'user_id,modul,tagesdatum' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('modul', 'regen')
+        .eq('tagesdatum', iso);
+      if(error) throw error;
+    }
+    showToast('Kommentar gespeichert ✓');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
+let lastLoadedISO = null;
 function render(){
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
   renderCommentArea();
   // entries list
   const el=document.getElementById('regen-entries');
@@ -7923,9 +8042,9 @@ function openAddModal(rid){
   const item=regenItems.find(x=>x.id===rid);if(!item)return;
   addCtx={rid};
   document.getElementById('regen-m-dauer-title').textContent=`${item.icon} ${item.name}`;
-  document.getElementById('regen-m-dauer-val').value='';
+  document.getElementById('regen-m-dauer-val').value=item.defaultDauer||'';
   document.getElementById('regen-m-dauer-quick').innerHTML=[5,10,15,20,30,45,60].map(v=>
-    `<button class="db" onclick="window.regen_pickDauer(${v},this)">${v} min</button>`).join('');
+    `<button class="db${item.defaultDauer===v?' sel':''}" onclick="window.regen_pickDauer(${v},this)">${v} min</button>`).join('');
   document.getElementById('regen-m-dauer-time').value=nowTime();
   openModal('regen-m-dauer');
   setTimeout(()=>document.getElementById('regen-m-dauer-val').focus(),100);
@@ -7935,34 +8054,99 @@ function pickDauer(v,btn){
   btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
 }
-function confirmDauer(){
+async function confirmDauer(){
   const dauer=parseInt(document.getElementById('regen-m-dauer-val').value)||null;
   if(!dauer){showToast('Bitte Dauer eingeben');document.getElementById('regen-m-dauer-val').focus();return;}
   const time=document.getElementById('regen-m-dauer-time').value||nowTime();
-  if(addCtx?.editId){
-    const idx=entries.findIndex(x=>x.id===addCtx.editId);
-    if(idx!==-1){entries[idx].dauer=dauer;entries[idx].time=time;}
-    closeModal('regen-m-dauer');addCtx=null;render();showToast('Eintrag aktualisiert ✓');
-  } else {
-    const item=regenItems.find(x=>x.id===addCtx.rid);
-    entries.push({id:uid(),rid:item.id,name:item.name,icon:item.icon,dauer,time});
-    closeModal('regen-m-dauer');addCtx=null;render();
-    showToast(`${item.icon} ${item.name} · ${dauer} min ✓`);
+  if(!window.sbUser){
+    if(addCtx?.editId){
+      const idx=entries.findIndex(x=>x.id===addCtx.editId);
+      if(idx!==-1){entries[idx].dauer=dauer;entries[idx].time=time;}
+      closeModal('regen-m-dauer');addCtx=null;renderUI();showToast('Eintrag aktualisiert ✓');
+    } else {
+      const item=regenItems.find(x=>x.id===addCtx.rid);
+      entries.push({id:uid(),rid:item.id,name:item.name,icon:item.icon,dauer,time});
+      closeModal('regen-m-dauer');addCtx=null;renderUI();
+      showToast(`${item.icon} ${item.name} · ${dauer} min ✓`);
+    }
+    return;
+  }
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    if(addCtx?.editId){
+      const { error } = await window.sb
+        .from('regen_eintraege')
+        .update({ erfasst_am: ts, dauer_min: dauer })
+        .eq('id', addCtx.editId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const idx=entries.findIndex(x=>x.id===addCtx.editId);
+      if(idx!==-1){entries[idx].dauer=dauer;entries[idx].time=time;}
+      closeModal('regen-m-dauer');addCtx=null;renderUI();showToast('Eintrag aktualisiert ✓');
+    } else {
+      const item=regenItems.find(x=>x.id===addCtx.rid);
+      const { data, error } = await window.sb
+        .from('regen_eintraege')
+        .insert({
+          user_id: window.sbUser.id,
+          art_id: item.id,
+          erfasst_am: ts,
+          dauer_min: dauer
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      entries.push({id:data.id,rid:item.id,name:item.name,icon:item.icon,dauer,time});
+      closeModal('regen-m-dauer');addCtx=null;renderUI();
+      showToast(`${item.icon} ${item.name} · ${dauer} min ✓`);
+    }
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
   }
 }
 function cancelDauer(){closeModal('regen-m-dauer');addCtx=null;}
-function deleteEntry(id){entries=entries.filter(e=>e.id!==id);render();}
+async function deleteEntry(id){
+  if(!window.sbUser){ entries=entries.filter(e=>e.id!==id); renderUI(); return; }
+  try {
+    const { error } = await window.sb
+      .from('regen_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    entries=entries.filter(e=>e.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
 
 // ── LONG PRESS ON ENTRY ──────────────────
 let entryLpTimer=null,entryLpFired=false;
 
-function toggleDelMode(){delMode=!delMode;if(delMode)editMode=false;updateBtns();render();}
-function toggleEditMode(){editMode=!editMode;if(editMode)delMode=false;updateBtns();render();}
+function toggleDelMode(){delMode=!delMode;if(delMode)editMode=false;updateBtns();renderUI();}
+function toggleEditMode(){editMode=!editMode;if(editMode)delMode=false;updateBtns();renderUI();}
 function updateBtns(){
   const d=document.getElementById('regen-btn-del');d.classList.toggle('on',delMode);d.textContent=delMode?'✓ Fertig':'🗑 Löschen';
   const e=document.getElementById('regen-btn-edit');e.classList.toggle('on',editMode);e.textContent=editMode?'✓ Fertig':'✎ Bearbeiten';
 }
-function deleteItem(id){regenItems=regenItems.filter(x=>x.id!==id);render();}
+async function deleteItem(id){
+  if(!confirm('Methode wirklich entfernen? Bisherige Einträge bleiben in der Datenbank.')) return;
+  if(!window.sbUser){ regenItems=regenItems.filter(x=>x.id!==id); renderUI(); return; }
+  try {
+    const { error } = await window.sb
+      .from('regen_arten')
+      .update({ aktiv: false })
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    regenItems=regenItems.filter(x=>x.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
 
 function openNewItem(){openEditModal(null);}
 function openEdit(id){openEditModal(id);}
@@ -7993,25 +8177,62 @@ function updateRegenIconPreview(){
   }
 }
 function pickEditDauer(v,btn){document.getElementById('regen-m-edit-dauer').value=v;btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');}
-function saveEdit(){
+async function saveEdit(){
   const name=document.getElementById('regen-m-edit-name').value.trim();
   const icon=document.getElementById('regen-icon-preview')?.textContent||document.getElementById('regen-m-edit-icon').value.trim()||'🔋';
   const dauer=parseInt(document.getElementById('regen-m-edit-dauer').value)||null;
   if(!name){showToast('Name fehlt');return;}
-  if(editCtx.id){
-    const item=regenItems.find(x=>x.id===editCtx.id);
-    if(item){item.name=name;item.icon=icon;item.defaultDauer=dauer;}
-  } else {
-    regenItems.push({id:uid(),name,icon,defaultDauer:dauer,doneToday:false,dauer:null});
-    regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  if(!window.sbUser){
+    if(editCtx.id){
+      const item=regenItems.find(x=>x.id===editCtx.id);
+      if(item){item.name=name;item.icon=icon;item.defaultDauer=dauer;}
+    } else {
+      regenItems.push({id:uid(),name,icon,defaultDauer:dauer});
+      regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    }
+    editCtx=null;
+    closeModal('regen-m-edit');renderUI();showToast(`${icon} ${name} gespeichert ✓`);
+    return;
   }
-  editCtx=null;
-  closeModal('regen-m-edit');render();showToast(`${icon} ${name} gespeichert ✓`);
+  try {
+    if(editCtx.id){
+      const { error } = await window.sb
+        .from('regen_arten')
+        .update({ name, emoji: icon, standard_dauer_min: dauer })
+        .eq('id', editCtx.id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const item=regenItems.find(x=>x.id===editCtx.id);
+      if(item){item.name=name;item.icon=icon;item.defaultDauer=dauer;}
+      // Update entries cache
+      entries.forEach(e => { if(e.rid===editCtx.id){ e.name=name; e.icon=icon; } });
+    } else {
+      const sortMax = regenItems.reduce((m,x)=>Math.max(m, x.sortierung||0), 0);
+      const { data, error } = await window.sb
+        .from('regen_arten')
+        .insert({
+          user_id: window.sbUser.id,
+          name,
+          emoji: icon,
+          standard_dauer_min: dauer,
+          aktiv: true,
+          sortierung: sortMax + 10
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      regenItems.push({id:data.id,name:data.name,icon:data.emoji||'🔋',defaultDauer:data.standard_dauer_min,sortierung:data.sortierung});
+      regenItems.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    }
+    editCtx=null;
+    closeModal('regen-m-edit');renderUI();showToast(`${icon} ${name} gespeichert ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
-// modal listeners: global
 let tt;function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);}
 // Exports
 window.regen_lpAction=function(card){if(typeof entries==='undefined'||!entries)return;var e=entries.find(function(x){return x.id===card.dataset.eid;});if(!e)return;if(typeof addCtx!=='undefined')addCtx={rid:e.rid,editId:e.id};var item=(typeof regenItems!=='undefined'?regenItems:[]).find(function(x){return x.id===e.rid;})||{icon:e.icon||'',name:e.name||''};var t=document.getElementById('regen-m-dauer-title');if(t)t.textContent='Bearbeiten: '+item.icon+' '+item.name;var v=document.getElementById('regen-m-dauer-val');if(v)v.value=e.dauer||'';var tm=document.getElementById('regen-m-dauer-time');if(tm)tm.value=e.time||'';openModal('regen-m-dauer');};
@@ -8032,7 +8253,6 @@ window.regen_lpAction=function(card){if(typeof entries==='undefined'||!entries)r
   window.regen_toggleComment = toggleComment;
   window.regen_saveComment = saveComment;
   window.regen_updateRegenIconPreview = updateRegenIconPreview;
-  window.regen_render = render;
 })();
 
 (function() {
