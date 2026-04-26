@@ -839,7 +839,7 @@ window.sbUser = null;
 <div class="section" id="sec-stuhl" style="border-left-color:var(--c-stuhl)">
   <div class="section-header" onclick="toggleSection('stuhl')">
     <div class="section-left">
-      <span>🚽</span>
+      <span>💩</span>
       <span class="section-label">Stuhlgang</span>
       <span class="section-badge" id="badge-stuhl">—</span>
     </div>
@@ -4177,6 +4177,9 @@ const SCALES = {
   stimmung: [
     {v:1,label:'1'},{v:2,label:'2'},{v:3,label:'3'},{v:4,label:'4'},{v:5,label:'5'}
   ],
+  konzentration: [
+    {v:1,label:'1'},{v:2,label:'2'},{v:3,label:'3'},{v:4,label:'4'},{v:5,label:'5'}
+  ],
   pain: [
     {v:0,label:'0'},{v:1,label:'1'},{v:2,label:'2'},{v:3,label:'3'},{v:4,label:'4'},{v:5,label:'5'}
   ],
@@ -4462,7 +4465,7 @@ function renderMetricRow(m, anker, val, isOptional=false){
   const scale = SCALES[m.scale];
   const chips = scale.map(s=>{
     const isPain = m.scale==='pain';
-    const isEn = m.scale==='energie' || m.scale==='stimmung';
+    const isEn = m.scale==='energie' || m.scale==='stimmung' || m.scale==='konzentration';
     let colorClass = '';
     if(isPain) colorClass = 'pain-'+s.v;
     else if(isEn) colorClass = 'en-'+s.v;
@@ -8862,7 +8865,7 @@ function buildTimelineEvents() {
   // Stuhlgang
   if(typeof stuhlgangList !== 'undefined') {
     stuhlgangList.forEach(function(s){ if(s.uhrzeit) events.push({
-      time:s.uhrzeit, icon:'🚽', title:'Stuhlgang', detail:s.bristol?'Bristol '+s.bristol:null, color:'var(--muted)'
+      time:s.uhrzeit, icon:'💩', title:'Stuhlgang', detail:s.bristol?'Bristol '+s.bristol:null, color:'var(--muted)'
     });});
   }
 
@@ -8897,7 +8900,7 @@ function buildTimelineEvents() {
       {time:'07:29',icon:'☕',title:'Kaffee (nüchtern)',detail:null,color:'#8B6914'},
       {time:'07:35',icon:'🌿',title:'Supplements Morgen',detail:'CoQ10, Omega-3, Quercetin, Vitamin-C',color:'var(--accent2)'},
       {time:'08:11',icon:'☕',title:'Kaffee (nüchtern)',detail:null,color:'#8B6914'},
-      {time:'08:52',icon:'🚽',title:'Stuhlgang',detail:'Bristol 4.5',color:'var(--muted)'},
+      {time:'08:52',icon:'💩',title:'Stuhlgang',detail:'Bristol 4.5',color:'var(--muted)'},
       {time:'12:05',icon:'🍽',title:'Mittagessen',detail:'Schwarze Bohnen, Koriander, Pfirsich, Zwiebel',color:'var(--accent3)'},
       {time:'13:18',icon:'☕',title:'Kaffee',detail:null,color:'#8B6914'},
       {time:'14:48',icon:'🍫',title:'Nachmittag',detail:'Schokolade (Vollmilch)',color:'var(--accent3)'},
