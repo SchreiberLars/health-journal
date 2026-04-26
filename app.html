@@ -611,9 +611,56 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .type-btn.sel{border-color:var(--accent3);background:color-mix(in srgb,var(--accent3) 15%,var(--surface2));color:var(--accent3);font-weight:600}
 .type-row{display:flex;gap:6px;margin-bottom:10px}
 .meal-entries{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}.meal-entries .chip{width:auto;flex-shrink:0}
+
+/* ── SUPABASE LOGIN OVERLAY ── */
+#sb-login-overlay{position:fixed;inset:0;background:var(--bg);z-index:99999;display:none;align-items:center;justify-content:center;padding:20px}
+#sb-login-overlay.show{display:flex}
+#sb-login-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:400px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+#sb-login-card h2{margin:0 0 8px 0;font-family:'EB Garamond',serif;font-size:24px}
+#sb-login-card p{margin:0 0 20px 0;color:var(--muted);font-size:13px;line-height:1.5}
+#sb-login-card input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:14px;margin-bottom:12px;box-sizing:border-box}
+#sb-login-card button{width:100%;padding:12px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:0.05em}
+#sb-login-card button:disabled{opacity:0.5;cursor:not-allowed}
+#sb-login-msg{margin-top:12px;padding:10px;border-radius:6px;font-size:12px;display:none}
+#sb-login-msg.show{display:block}
+#sb-login-msg.success{background:color-mix(in srgb,var(--good) 15%,var(--surface));color:var(--good);border:1px solid var(--good)}
+#sb-login-msg.error{background:color-mix(in srgb,var(--bad) 15%,var(--surface));color:var(--bad);border:1px solid var(--bad)}
+
+/* ── HEADER: USER INFO ── */
+#sb-user-info{position:fixed;top:8px;right:8px;font-size:10px;color:var(--muted);z-index:9999;display:flex;align-items:center;gap:6px;background:var(--surface);padding:4px 8px;border-radius:12px;border:1px solid var(--border)}
+#sb-user-info button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0}
 </style>
+
+<!-- Supabase Client via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ─── SUPABASE BOOTSTRAP ───
+const SUPABASE_URL = 'https://qfzzzxlxyvaokmrkbdrp.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_nGpFcOPg5OKxFK140HMjoQ_mXHGw_R9';
+window.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+});
+window.sbUser = null;
+</script>
 </head>
 <body>
+
+<!-- ── SUPABASE LOGIN OVERLAY ── -->
+<div id="sb-login-overlay">
+  <div id="sb-login-card">
+    <h2>Health Journal</h2>
+    <p>Gib deine Email ein. Du bekommst einen Login-Link.</p>
+    <input type="email" id="sb-login-email" placeholder="lars@ssbi-blog.de" autocomplete="email">
+    <button id="sb-login-btn" onclick="window.sbSendMagicLink()">Magic-Link senden</button>
+    <div id="sb-login-msg"></div>
+  </div>
+</div>
+
+<!-- ── USER INFO (oben rechts, klein) ── -->
+<div id="sb-user-info" style="display:none">
+  <span id="sb-user-email">…</span>
+  <button onclick="window.sbLogout()" title="Abmelden">⏻</button>
+</div>
 
 <!-- ── DATE HEADER ── -->
 <div class="date-header" id="date-header">
@@ -6601,6 +6648,7 @@ let entries = [];
 let infoOpen = {}; // entryId -> bool
 let dayComment = '';
 let commentOpen = false;
+let loading = false;
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function nowTime(){
@@ -6609,8 +6657,77 @@ function nowTime(){
 }
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
+function getActiveISO(){
+  // activeDate is the global date variable from main app
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  // ts is ISO timestamp e.g. "2026-04-26T19:30:00+00:00"
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  // Combine date + HH:MM into a local timestamp ISO
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+// ── DB SYNC ───────────────────────────────
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  loading = true;
+  const iso = getActiveISO();
+  try {
+    // Load entries for active day
+    const { data: eRows, error: e1 } = await window.sb
+      .from('stuhl_eintraege')
+      .select('id, erfasst_am, bristol, notiz')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', iso + 'T00:00:00')
+      .lte('erfasst_am', iso + 'T23:59:59')
+      .order('erfasst_am', { ascending: true });
+    if(e1) throw e1;
+
+    entries = (eRows||[]).map(r => ({
+      id: r.id,
+      time: timeFromTimestamp(r.erfasst_am),
+      bristol: parseFloat(r.bristol)
+    }));
+
+    // Load tageskommentar
+    const { data: kRows } = await window.sb
+      .from('tageskommentare')
+      .select('kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('modul', 'stuhl')
+      .eq('tagesdatum', iso)
+      .maybeSingle();
+    dayComment = kRows?.kommentar || '';
+  } catch(err) {
+    console.error('Stuhl load error:', err);
+    if(typeof showToast === 'function') showToast('Fehler beim Laden: ' + err.message);
+  }
+  loading = false;
+  render();
+}
+
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
+  // Auto-reload on day change
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return; // loadFromDb wird render() nochmal aufrufen
+  }
   renderCommentArea();
   renderEntries();
 }
@@ -6642,12 +6759,39 @@ function toggleComment(){
   renderCommentArea();
 }
 
-function saveComment(){
+async function saveComment(){
   const ta = document.getElementById('ta-stuhl-day');
   dayComment = ta ? ta.value.trim() : '';
   commentOpen = false;
   renderCommentArea();
-  showToast('Kommentar gespeichert ✓');
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(dayComment){
+      // Upsert
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          modul: 'stuhl',
+          tagesdatum: iso,
+          kommentar: dayComment
+        }, { onConflict: 'user_id,modul,tagesdatum' });
+      if(error) throw error;
+    } else {
+      // Empty -> delete
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('modul', 'stuhl')
+        .eq('tagesdatum', iso);
+      if(error) throw error;
+    }
+    showToast('Kommentar gespeichert ✓');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function renderEntries(){
@@ -6687,27 +6831,63 @@ function renderEntries(){
 }
 
 // ── INTERACTIONS ──────────────────────────
-function addEntry(){
-  // Create entry and open inline — show it immediately
-  const id = uid();
-  entries.push({ id:id, time:nowTime(), bristol:4 });
-  render();
-  // Scroll to and highlight the new entry
-  setTimeout(function(){
-    const el = document.querySelector('[data-entry-id="'+id+'"]');
-    if(el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
-  }, 100);
+async function addEntry(){
+  if(!window.sbUser){ showToast('Nicht eingeloggt'); return; }
+  const time = nowTime();
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    const { data, error } = await window.sb
+      .from('stuhl_eintraege')
+      .insert({ user_id: window.sbUser.id, erfasst_am: ts, bristol: 4 })
+      .select()
+      .single();
+    if(error) throw error;
+    entries.push({ id: data.id, time: timeFromTimestamp(data.erfasst_am), bristol: parseFloat(data.bristol) });
+    render();
+    setTimeout(function(){
+      const el = document.querySelector('[data-entry-id="'+data.id+'"]');
+      if(el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }, 100);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteEntry(id){
-  entries = entries.filter(e=>e.id!==id);
-  delete infoOpen[id];
-  render();
+async function deleteEntry(id){
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('stuhl_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    entries = entries.filter(e=>e.id!==id);
+    delete infoOpen[id];
+    render();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function setVal(id, v){
+async function setVal(id, v){
   const e = entries.find(x=>x.id===id);
-  if(e){ e.bristol=v; infoOpen[id]=true; renderEntries(); renderDbg(); }
+  if(!e) return;
+  e.bristol = v;
+  infoOpen[id] = true;
+  renderEntries();
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('stuhl_eintraege')
+      .update({ bristol: v })
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+  } catch(err) {
+    showToast('Fehler beim Speichern: ' + err.message);
+  }
 }
 
 function toggleInfo(id){
@@ -8619,7 +8799,98 @@ function initAllModules(){
     toggleAllSections();
   }, 50);
 }
-document.addEventListener('DOMContentLoaded',initAllModules);
+
+// ═══════════════════════════════════════════
+// AUTH GATE
+// ═══════════════════════════════════════════
+let appInitialized = false;
+
+function showLoginOverlay(show){
+  const ov = document.getElementById('sb-login-overlay');
+  if(ov) ov.classList.toggle('show', !!show);
+}
+function showUserInfo(email){
+  const el = document.getElementById('sb-user-info');
+  const em = document.getElementById('sb-user-email');
+  if(em) em.textContent = email || '';
+  if(el) el.style.display = email ? 'flex' : 'none';
+}
+function setLoginMsg(text, kind){
+  const m = document.getElementById('sb-login-msg');
+  if(!m) return;
+  m.textContent = text || '';
+  m.className = text ? ('show ' + (kind||'')) : '';
+}
+
+window.sbSendMagicLink = async function(){
+  const emailEl = document.getElementById('sb-login-email');
+  const btn = document.getElementById('sb-login-btn');
+  const email = (emailEl?.value || '').trim().toLowerCase();
+  if(!email){ setLoginMsg('Bitte Email eingeben', 'error'); return; }
+  btn.disabled = true; btn.textContent = 'Sende…';
+  setLoginMsg('', '');
+  try {
+    const { error } = await window.sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href.split('#')[0].split('?')[0] }
+    });
+    if(error) throw error;
+    setLoginMsg('✉ Link wurde an ' + email + ' gesendet. Klick den Link in der Mail.', 'success');
+  } catch(err) {
+    setLoginMsg('Fehler: ' + (err.message || err), 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Magic-Link senden';
+  }
+};
+
+window.sbLogout = async function(){
+  if(!confirm('Wirklich abmelden?')) return;
+  try { await window.sb.auth.signOut(); } catch(e) {}
+  window.location.reload();
+};
+
+async function bootstrapAuth(){
+  // Check current session
+  const { data: { session } } = await window.sb.auth.getSession();
+  if(session?.user){
+    window.sbUser = session.user;
+    showLoginOverlay(false);
+    showUserInfo(session.user.email);
+    if(!appInitialized){
+      appInitialized = true;
+      initAllModules();
+    }
+  } else {
+    showLoginOverlay(true);
+    showUserInfo(null);
+    // Pre-fill last used email if available
+    const last = localStorage.getItem('hj_last_email');
+    if(last){
+      const inp = document.getElementById('sb-login-email');
+      if(inp) inp.value = last;
+    }
+  }
+
+  // Listen for auth state changes (Magic-Link callback, logout, etc.)
+  window.sb.auth.onAuthStateChange((event, session) => {
+    if(event === 'SIGNED_IN' && session?.user){
+      window.sbUser = session.user;
+      try { localStorage.setItem('hj_last_email', session.user.email); } catch(e){}
+      showLoginOverlay(false);
+      showUserInfo(session.user.email);
+      if(!appInitialized){
+        appInitialized = true;
+        initAllModules();
+      }
+    } else if(event === 'SIGNED_OUT'){
+      window.sbUser = null;
+      showLoginOverlay(true);
+      showUserInfo(null);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', bootstrapAuth);
 </script>
 </body>
 </html>
