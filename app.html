@@ -4875,36 +4875,98 @@ function saveEditMetrik(){
   closeModal('bef-m-edit-metrik');
   // reopen manager
   openMetrikMgr();
-  showToast(`${name} gespeichert ✓`);
   renderUI();
+  // Persist
+  if(window.sbUser){
+    window.sb.from('bef_metriken')
+      .update({ name, skala_id: scale, pflicht })
+      .eq('id', m.id)
+      .eq('user_id', window.sbUser.id)
+      .then(({error})=>{
+        if(error) showToast('DB-Fehler: '+error.message);
+        else showToast(`${name} gespeichert ✓`);
+      });
+  } else {
+    showToast(`${name} gespeichert ✓`);
+  }
 }
 
 function togglePflicht(id){
   const m=metriken.find(x=>x.id===id);
-  if(m) m.pflicht=!m.pflicht;
+  if(!m) return;
+  m.pflicht=!m.pflicht;
   renderMgrList();
   renderUI();
+  if(window.sbUser){
+    window.sb.from('bef_metriken')
+      .update({ pflicht: m.pflicht })
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id)
+      .then(({error})=>{ if(error) showToast('DB-Fehler: '+error.message); });
+  }
 }
 
 function delMetrik(id){
+  // Soft-delete: aktiv=false (verliert keine historischen Werte)
+  if(!confirm('Metrik wirklich entfernen? Bisherige Werte bleiben in der Datenbank, sind aber nicht mehr sichtbar.')) return;
   metriken=metriken.filter(x=>x.id!==id);
-  // Clean up data
   Object.keys(ankerData).forEach(a=>delete ankerData[a][id]);
+  Object.keys(activeOptional).forEach(a=>activeOptional[a].delete(id));
   renderMgrList();
   renderUI();
+  if(window.sbUser){
+    window.sb.from('bef_metriken')
+      .update({ aktiv: false })
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id)
+      .then(({error})=>{ if(error) showToast('DB-Fehler: '+error.message); });
+  }
 }
 
-function addMetrik(){
+async function addMetrik(){
   const name=document.getElementById('bef-mgr-new-name').value.trim();
   const scale=document.getElementById('bef-mgr-new-scale').value;
   const pflicht=document.getElementById('bef-mgr-new-pflicht').value==='pflicht';
   if(!name){showToast('Name fehlt');return}
   if(metriken.find(m=>m.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
-  metriken.push({id:uid(),name,scale,pflicht});
-  document.getElementById('bef-mgr-new-name').value='';
-  renderMgrList();
-  render();
-  showToast(`${name} hinzugefügt`);
+  if(!window.sbUser){
+    // Fallback: lokal
+    metriken.push({id:uid(),name,scale,pflicht});
+    document.getElementById('bef-mgr-new-name').value='';
+    renderMgrList();
+    renderUI();
+    showToast(`${name} hinzugefügt (nur lokal)`);
+    return;
+  }
+  try {
+    const sortMax = metriken.reduce((m,x)=>Math.max(m, x.sortierung||0), 0);
+    const { data, error } = await window.sb
+      .from('bef_metriken')
+      .insert({
+        user_id: window.sbUser.id,
+        name,
+        skala_id: scale,
+        pflicht,
+        aktiv: true,
+        sortierung: sortMax + 10
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    metriken.push({
+      id: data.id,
+      name: data.name,
+      scale: data.skala_id,
+      pflicht: data.pflicht,
+      sortierung: data.sortierung
+    });
+    document.getElementById('bef-mgr-new-name').value='';
+    renderMgrList();
+    renderUI();
+    showToast(`${name} hinzugefügt`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── MODALS ────────────────────────────────
