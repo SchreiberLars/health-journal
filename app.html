@@ -4215,6 +4215,17 @@ function getActiveISO(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
 let metrikenLoaded = false;
 async function loadMetriken(){
   if(!window.sbUser || !window.sb || metrikenLoaded) return;
@@ -4249,6 +4260,7 @@ async function loadFromDb(){
   ankerComments = { morgen:'', abend:'' };
   activeOptional = { morgen: new Set(), abend: new Set() };
   krankData = { aktiv: false, kommentar: '' };
+  spontanList = [];
 
   try {
     // Metric values for active day
@@ -4290,6 +4302,31 @@ async function loadFromDb(){
       krankData.aktiv = !!krRow.aktiv;
       krankData.kommentar = krRow.kommentar || '';
     }
+
+    // Spontan-Episoden mit Werten (per Tag)
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: epRows, error: epErr } = await window.sb
+      .from('bef_episoden')
+      .select('id, start_zeit, end_zeit, label, bef_episoden_metriken(metrik_id, wert)')
+      .eq('user_id', window.sbUser.id)
+      .gte('start_zeit', dayStart)
+      .lte('start_zeit', dayEnd)
+      .order('start_zeit', { ascending: true });
+    if(epErr) throw epErr;
+    spontanList = (epRows||[]).map(r => {
+      const values = {};
+      (r.bef_episoden_metriken||[]).forEach(em => {
+        values[em.metrik_id] = parseFloat(em.wert);
+      });
+      return {
+        id: r.id,
+        time: timeFromTimestamp(r.start_zeit),
+        endtime: r.end_zeit ? timeFromTimestamp(r.end_zeit) : null,
+        label: r.label || '',
+        values: values
+      };
+    });
   } catch(err) {
     console.error('Befinden load error:', err);
     if(typeof showToast === 'function') showToast('Befinden-Lade-Fehler: ' + err.message);
@@ -4708,7 +4745,7 @@ function setSpontanMetric(metrikId, val, btn){
   }
 }
 
-function saveSpontan(){
+async function saveSpontan(){
   const time = document.getElementById('bef-m-spontan-time').value;
   const endtimeRaw = document.getElementById('bef-m-spontan-endtime').value;
   const endtime = endtimeRaw||null;
@@ -4717,22 +4754,91 @@ function saveSpontan(){
   if(endtime && timeToMin(endtime) <= timeToMin(time)){
     showToast('Endzeit muss nach Startzeit liegen'); return;
   }
-  if(editingSpontanId){
-    const e = spontanList.find(x=>x.id===editingSpontanId);
-    if(e){
-      e.time = time; e.endtime = endtime; e.label = label;
-      e.values = {...spontanVals};
+  if(!window.sbUser){
+    // Fallback: lokal
+    if(editingSpontanId){
+      const e = spontanList.find(x=>x.id===editingSpontanId);
+      if(e){ e.time = time; e.endtime = endtime; e.label = label; e.values = {...spontanVals}; }
+      editingSpontanId = null;
+    } else {
+      spontanList.push({ id:uid(), time, endtime, label, values:{...spontanVals} });
     }
-    editingSpontanId = null;
-  } else {
-    spontanList.push({ id:uid(), time, endtime, label, values:{...spontanVals} });
+    spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+    spontanVals={};
+    closeModal('bef-m-spontan');
+    renderUI();
+    return;
   }
-  spontanList.sort((a,b)=>a.time.localeCompare(b.time));
-  spontanVals={};
-  closeModal('bef-m-spontan');
-  renderUI();
-  const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
-  showToast(`Befinden ${time}${dur} ✓`);
+  const iso = getActiveISO();
+  try {
+    if(editingSpontanId){
+      // Update episode
+      const startTs = timestampFromTime(time, iso);
+      const endTs = endtime ? timestampFromTime(endtime, iso) : null;
+      const { error: e1 } = await window.sb
+        .from('bef_episoden')
+        .update({ start_zeit: startTs, end_zeit: endTs, label: label || null })
+        .eq('id', editingSpontanId)
+        .eq('user_id', window.sbUser.id);
+      if(e1) throw e1;
+      // Replace metric values: delete all, insert new
+      const { error: e2 } = await window.sb
+        .from('bef_episoden_metriken')
+        .delete()
+        .eq('episode_id', editingSpontanId);
+      if(e2) throw e2;
+      const valueRows = Object.entries(spontanVals).map(([mid, val]) => ({
+        episode_id: editingSpontanId,
+        metrik_id: mid,
+        wert: val
+      }));
+      if(valueRows.length){
+        const { error: e3 } = await window.sb
+          .from('bef_episoden_metriken')
+          .insert(valueRows);
+        if(e3) throw e3;
+      }
+      // Update local
+      const e = spontanList.find(x=>x.id===editingSpontanId);
+      if(e){ e.time = time; e.endtime = endtime; e.label = label; e.values = {...spontanVals}; }
+      editingSpontanId = null;
+    } else {
+      // Insert new episode
+      const startTs = timestampFromTime(time, iso);
+      const endTs = endtime ? timestampFromTime(endtime, iso) : null;
+      const { data: epData, error: e1 } = await window.sb
+        .from('bef_episoden')
+        .insert({
+          user_id: window.sbUser.id,
+          start_zeit: startTs,
+          end_zeit: endTs,
+          label: label || null
+        })
+        .select()
+        .single();
+      if(e1) throw e1;
+      const valueRows = Object.entries(spontanVals).map(([mid, val]) => ({
+        episode_id: epData.id,
+        metrik_id: mid,
+        wert: val
+      }));
+      if(valueRows.length){
+        const { error: e2 } = await window.sb
+          .from('bef_episoden_metriken')
+          .insert(valueRows);
+        if(e2) throw e2;
+      }
+      spontanList.push({ id: epData.id, time, endtime, label, values: {...spontanVals} });
+    }
+    spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+    spontanVals={};
+    closeModal('bef-m-spontan');
+    renderUI();
+    const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
+    showToast(`Befinden ${time}${dur} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function endOpenEntry(id){
@@ -4772,7 +4878,7 @@ function pickEndChip(min, btn){
   btn.classList.add('sel');
 }
 
-function confirmEnd(){
+async function confirmEnd(){
   if(!endingEntryId) return;
   const e = spontanList.find(x=>x.id===endingEntryId);
   if(!e){ closeModal('bef-m-end'); return; }
@@ -4781,10 +4887,25 @@ function confirmEnd(){
   const startMin = timeToMin(e.time);
   if(timeToMin(t) <= startMin){ showToast('Endzeit muss nach Startzeit liegen'); return; }
   e.endtime = t;
+  const epId = endingEntryId;
   endingEntryId = null;
   closeModal('bef-m-end');
   renderUI();
   showToast(`Beendet · Dauer ${minToHm(timeToMin(t)-startMin)} ✓`);
+  if(window.sbUser){
+    const iso = getActiveISO();
+    const endTs = timestampFromTime(t, iso);
+    try {
+      const { error } = await window.sb
+        .from('bef_episoden')
+        .update({ end_zeit: endTs })
+        .eq('id', epId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
 
@@ -4806,9 +4927,21 @@ function setKrankKommentar(val) {
   krankData.kommentar = val;
   // Persist debounced - keep simple: update only on explicit save
 }
-function delSpontan(id){
+async function delSpontan(id){
   spontanList=spontanList.filter(e=>e.id!==id);
   renderUI();
+  if(window.sbUser){
+    try {
+      const { error } = await window.sb
+        .from('bef_episoden')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
 // ── METRIKEN MANAGER ─────────────────────
