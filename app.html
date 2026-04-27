@@ -67,6 +67,20 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .anker-mark.filled{background:color-mix(in srgb,var(--accent2) 25%,var(--surface2));border-color:var(--accent2);filter:none;color:var(--text)}
 .section-body{padding:14px 16px}
 
+/* ── SORT MODE ─────────────────────────── */
+body.sort-mode .section-body{display:none !important}
+body.sort-mode .section-header{cursor:default;background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+body.sort-mode .section-right .section-chevron,
+body.sort-mode .section-right .anker-marks,
+body.sort-mode .section-right .section-badge{display:none}
+body.sort-mode .section-left .section-badge{display:none}
+.sort-controls{display:none;gap:4px;align-items:center}
+body.sort-mode .sort-controls{display:inline-flex}
+.sort-btn{background:var(--surface2);border:1px solid var(--border);border-radius:6px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;color:var(--text);cursor:pointer;line-height:1;padding:0}
+.sort-btn:active{background:var(--accent);color:#f5f0e8}
+.sort-btn:disabled{opacity:.3;cursor:not-allowed}
+#btn-sort-mode.active{background:var(--accent);color:#f5f0e8;border-color:var(--accent)}
+
 /* ── STACK CARD ─────────────────────────── */
 .stack-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
 .stack-header{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;cursor:pointer;user-select:none}
@@ -682,6 +696,7 @@ window.sbUser = null;
   <div id="date-badge"></div>
   <button class="date-nav" onclick="shiftDay(+1)">›</button>
   <button id="btn-collapse-all" onclick="toggleAllSections()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:9px;color:var(--muted);cursor:pointer;font-family:'JetBrains Mono',monospace;white-space:nowrap;flex-shrink:0">▼ Alle zuklappen</button>
+  <button id="btn-sort-mode" onclick="toggleSortMode()" title="Module sortieren" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:11px;color:var(--muted);cursor:pointer;flex-shrink:0">⇅</button>
 </div>
 
 <!-- ── TAB: JOURNAL ── -->
@@ -1255,6 +1270,124 @@ function setAnkerStatus(modulKey, status){
     const anker = m.dataset.anker;
     m.classList.toggle('filled', !!status[anker]);
   });
+}
+
+// ═══════════════════════════════════════════
+// MODUL-SORTIERUNG (persistiert pro User)
+// ═══════════════════════════════════════════
+const MODUL_KEYS = ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp'];
+let sortMode = false;
+
+// Sort-Buttons in jede Section injizieren (nach DOM-Aufbau)
+function injectSortControls(){
+  MODUL_KEYS.forEach(function(key){
+    const sec = document.getElementById('sec-'+key);
+    if(!sec) return;
+    const right = sec.querySelector('.section-right');
+    if(!right || right.querySelector('.sort-controls')) return;
+    const wrap = document.createElement('span');
+    wrap.className = 'sort-controls';
+    wrap.innerHTML = `
+      <button class="sort-btn" onclick="event.stopPropagation();moveModul('${key}',-1)" title="Nach oben">↑</button>
+      <button class="sort-btn" onclick="event.stopPropagation();moveModul('${key}',1)" title="Nach unten">↓</button>
+    `;
+    right.appendChild(wrap);
+  });
+}
+
+function toggleSortMode(){
+  sortMode = !sortMode;
+  document.body.classList.toggle('sort-mode', sortMode);
+  const btn = document.getElementById('btn-sort-mode');
+  if(btn) btn.classList.toggle('active', sortMode);
+  if(sortMode){
+    injectSortControls();
+    updateSortButtonStates();
+  }
+}
+
+function getCurrentOrder(){
+  // Aktuelle DOM-Reihenfolge (Modul-Keys nur die in DOM)
+  const tab = document.getElementById('tab-journal');
+  if(!tab) return MODUL_KEYS.slice();
+  return Array.from(tab.querySelectorAll('.section[id^="sec-"]'))
+    .map(s => s.id.replace(/^sec-/,''))
+    .filter(k => MODUL_KEYS.includes(k));
+}
+
+function updateSortButtonStates(){
+  const order = getCurrentOrder();
+  order.forEach(function(key, idx){
+    const sec = document.getElementById('sec-'+key);
+    if(!sec) return;
+    const btns = sec.querySelectorAll('.sort-controls .sort-btn');
+    if(btns.length === 2){
+      btns[0].disabled = (idx === 0);
+      btns[1].disabled = (idx === order.length - 1);
+    }
+  });
+}
+
+async function moveModul(key, direction){
+  const tab = document.getElementById('tab-journal');
+  if(!tab) return;
+  const order = getCurrentOrder();
+  const idx = order.indexOf(key);
+  if(idx === -1) return;
+  const newIdx = idx + direction;
+  if(newIdx < 0 || newIdx >= order.length) return;
+  // DOM-Reorder
+  const sec = document.getElementById('sec-'+key);
+  const target = document.getElementById('sec-'+order[newIdx]);
+  if(!sec || !target) return;
+  if(direction < 0){
+    target.parentNode.insertBefore(sec, target);
+  } else {
+    target.parentNode.insertBefore(sec, target.nextSibling);
+  }
+  updateSortButtonStates();
+  // Persist
+  await persistOrder();
+}
+
+async function persistOrder(){
+  if(!window.sbUser || !window.sb) return;
+  const order = getCurrentOrder();
+  const rows = order.map((key, i) => ({
+    user_id: window.sbUser.id,
+    modul: key,
+    sortierung: (i+1) * 10
+  }));
+  try {
+    const { error } = await window.sb
+      .from('user_modul_reihenfolge')
+      .upsert(rows, { onConflict: 'user_id,modul' });
+    if(error) throw error;
+  } catch(err) {
+    console.error('Sort-Persist-Fehler:', err);
+  }
+}
+
+async function loadOrderAndApply(){
+  if(!window.sbUser || !window.sb) return;
+  try {
+    const { data, error } = await window.sb
+      .from('user_modul_reihenfolge')
+      .select('modul, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .order('sortierung', { ascending: true });
+    if(error) throw error;
+    if(!data || !data.length) return; // keine Custom-Order
+    const tab = document.getElementById('tab-journal');
+    if(!tab) return;
+    // Module-Sektionen in der gespeicherten Reihenfolge an das Ende verschieben
+    data.forEach(function(row){
+      const sec = document.getElementById('sec-'+row.modul);
+      if(sec) tab.appendChild(sec);
+    });
+  } catch(err) {
+    console.error('Sort-Lade-Fehler:', err);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -10860,8 +10993,10 @@ window.stress_saveNewType = saveNewType;
 })();
 
 
-function initAllModules(){
+async function initAllModules(){
   injectModules();
+  // Custom-Reihenfolge laden (falls vorhanden) bevor wir rendern
+  await loadOrderAndApply();
   ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+':',e.message);}
