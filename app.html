@@ -11702,46 +11702,70 @@ function formatDate(iso){
 
 // ── STATE ─────────────────────────────────
 // hypothesen: [{id, text, status, erstellt, log:[{datum, status, notiz}]}]
-let hypothesen = [
-  {
-    id: 'h1',
-    text: 'Meine Hautentzündungen (Seborrhoische Dermatitis) werden durch eine überschießende Immunreaktion auf Malassezia verursacht — und lassen sich durch Ketoconazol (topisch) sowie systemische Mastzellstabilisierung mit Quercetin messbar reduzieren.',
-    status: 'aktiv',
-    erstellt: '2026-04-03',
-    log: [
-      { datum:'2026-04-07', status:'aktiv', notiz:'Terzolin zeigt nach 4 Anwendungen klare Verbesserung. Hals-Region von 4 auf 3. Fortsetzung.' }
-    ]
-  },
-  {
-    id: 'h2',
-    text: 'Alkoholkonsum (besonders Bier) verschlechtert meine Hautsymptome innerhalb von 12–24 Stunden messbar.',
-    status: 'bestaetigt',
-    erstellt: '2026-03-15',
-    log: [
-      { datum:'2026-03-28', status:'bestaetigt', notiz:'Klare Korrelation über 3 Episoden beobachtet. Entzündungswert +1,5 am Folgetag nach Bier.' }
-    ]
-  },
-  {
-    id: 'h3',
-    text: 'Joghurt ist ein Trigger für meine Darmbeschwerden.',
-    status: 'aktiv',
-    erstellt: '2026-04-01',
-    log: []
-  },
-];
+let hypothesen = [];
 
 let updateCtx = null;
 let editCtx = null;
-let expandedIds = new Set(['h1']); // first one open by default
+let expandedIds = new Set();
+
+// ── DB ────────────────────────────────────
+let dbLoaded = false;
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  try {
+    const { data: hRows, error: hErr } = await window.sb
+      .from('hypothesen')
+      .select('id, text, status, erstellt_am')
+      .eq('user_id', window.sbUser.id)
+      .order('erstellt_am', { ascending: false });
+    if(hErr) throw hErr;
+    const ids = (hRows||[]).map(h => h.id);
+    let updates = [];
+    if(ids.length){
+      const { data: uRows, error: uErr } = await window.sb
+        .from('hypothesen_updates')
+        .select('id, hypothese_id, datum, status_nachher, notiz')
+        .in('hypothese_id', ids)
+        .order('datum', { ascending: true });
+      if(uErr) throw uErr;
+      updates = uRows || [];
+    }
+    hypothesen = (hRows||[]).map(h => ({
+      id: h.id,
+      text: h.text,
+      status: h.status,
+      erstellt: h.erstellt_am ? h.erstellt_am.slice(0,10) : nowISO(),
+      log: updates
+        .filter(u => u.hypothese_id === h.id)
+        .map(u => ({
+          id: u.id,
+          datum: u.datum ? u.datum.slice(0,10) : nowISO(),
+          status: u.status_nachher,
+          notiz: u.notiz
+        }))
+    }));
+    dbLoaded = true;
+  } catch(err) {
+    console.error('Hypothesen-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Hyp-Lade-Fehler: ' + err.message);
+  }
+}
 
 // ── RENDER ────────────────────────────────
 function render(){
+  if(window.sbUser && !dbLoaded){
+    loadFromDb().then(renderUI);
+    return;
+  }
+  renderUI();
+}
+function renderUI(){
   const container = document.getElementById('hyp-list-cards');
   if(!container) return;
   if(!hypothesen.length){
     container.innerHTML=`<div style="font-size:11px;color:var(--muted);font-style:italic;padding:8px 0">
       Noch keine Hypothesen. Formuliere deine erste These!</div>`;
-    renderDbg(); return;
+    return;
   }
 
   container.innerHTML = hypothesen.map(h=>{
@@ -11792,7 +11816,7 @@ function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace
 function toggleHyp(id){
   if(expandedIds.has(id)) expandedIds.delete(id);
   else expandedIds.add(id);
-  render();
+  renderUI();
 }
 
 // ── NEW HYPOTHESE ─────────────────────────
@@ -11816,30 +11840,93 @@ function openEdit(id){
   setTimeout(()=>document.getElementById('hyp-m-new-text').focus(), 100);
 }
 
-function saveHyp(){
+async function saveHyp(){
   const text = document.getElementById('hyp-m-new-text').value.trim();
   const status = document.getElementById('hyp-m-new-status').value;
   if(!text){ showToast('Bitte These eingeben'); return; }
 
-  if(editCtx){
-    const h = hypothesen.find(x=>x.id===editCtx.id);
-    if(h){ h.text=text; h.status=status; }
-    showToast('Hypothese aktualisiert ✓');
-  } else {
-    const newId = uid();
-    hypothesen.unshift({ id:newId, text, status, erstellt:nowISO(), log:[] });
-    expandedIds.add(newId);
-    showToast('Hypothese gespeichert ✓');
+  if(!window.sbUser){
+    if(editCtx){
+      const h = hypothesen.find(x=>x.id===editCtx.id);
+      if(h){ h.text=text; h.status=status; }
+      showToast('Hypothese aktualisiert ✓');
+    } else {
+      const newId = uid();
+      hypothesen.unshift({ id:newId, text, status, erstellt:nowISO(), log:[] });
+      expandedIds.add(newId);
+      showToast('Hypothese gespeichert ✓');
+    }
+    editCtx = null;
+    closeModal('hyp-m-new');
+    renderUI();
+    return;
   }
-  editCtx = null;
-  closeModal('hyp-m-new');
-  render();
+  try {
+    if(editCtx){
+      const id = editCtx.id;
+      const { error } = await window.sb
+        .from('hypothesen')
+        .update({ text, status })
+        .eq('id', id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const h = hypothesen.find(x=>x.id===id);
+      if(h){ h.text=text; h.status=status; }
+      showToast('Hypothese aktualisiert ✓');
+    } else {
+      const { data, error } = await window.sb
+        .from('hypothesen')
+        .insert({
+          user_id: window.sbUser.id,
+          text,
+          status,
+          erstellt_am: new Date().toISOString()
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      hypothesen.unshift({
+        id: data.id,
+        text: data.text,
+        status: data.status,
+        erstellt: data.erstellt_am ? data.erstellt_am.slice(0,10) : nowISO(),
+        log: []
+      });
+      expandedIds.add(data.id);
+      showToast('Hypothese gespeichert ✓');
+    }
+    editCtx = null;
+    closeModal('hyp-m-new');
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteHyp(id){
-  hypothesen = hypothesen.filter(x=>x.id!==id);
-  render();
-  showToast('Hypothese entfernt');
+async function deleteHyp(id){
+  const h = hypothesen.find(x=>x.id===id);
+  if(!confirm(`Hypothese "${(h?.text||'').slice(0,60)}..." wirklich löschen? Auch alle Updates werden gelöscht.`)) return;
+  if(!window.sbUser){
+    hypothesen = hypothesen.filter(x=>x.id!==id);
+    renderUI();
+    showToast('Hypothese entfernt');
+    return;
+  }
+  try {
+    // Cascade: erst Updates loeschen, dann Hypothese
+    await window.sb.from('hypothesen_updates').delete().eq('hypothese_id', id);
+    const { error } = await window.sb
+      .from('hypothesen')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    hypothesen = hypothesen.filter(x=>x.id!==id);
+    renderUI();
+    showToast('Hypothese entfernt');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── UPDATE ────────────────────────────────
@@ -11855,19 +11942,59 @@ function openUpdate(id){
   setTimeout(()=>document.getElementById('hyp-m-update-text').focus(), 100);
 }
 
-function confirmUpdate(){
+async function confirmUpdate(){
   if(!updateCtx) return;
   const h = hypothesen.find(x=>x.id===updateCtx.id);
   if(!h) return;
   const status = document.getElementById('hyp-m-update-status').value;
   const notiz  = document.getElementById('hyp-m-update-text').value.trim();
   if(!notiz){ showToast('Bitte Erkenntnis eingeben'); return; }
-  h.status = status;
-  h.log.push({ datum:nowISO(), status, notiz });
+  const hypId = updateCtx.id;
   updateCtx = null;
-  closeModal('hyp-m-update');
-  render();
-  showToast('Update gespeichert ✓');
+
+  if(!window.sbUser){
+    h.status = status;
+    h.log.push({ datum:nowISO(), status, notiz });
+    closeModal('hyp-m-update');
+    renderUI();
+    showToast('Update gespeichert ✓');
+    return;
+  }
+  try {
+    // 1. Update-Eintrag
+    const { data: uData, error: uErr } = await window.sb
+      .from('hypothesen_updates')
+      .insert({
+        hypothese_id: hypId,
+        datum: new Date().toISOString(),
+        status_nachher: status,
+        notiz
+      })
+      .select()
+      .single();
+    if(uErr) throw uErr;
+    // 2. Hypothese-Status aktualisieren (falls geaendert)
+    if(h.status !== status){
+      const { error: hErr } = await window.sb
+        .from('hypothesen')
+        .update({ status })
+        .eq('id', hypId)
+        .eq('user_id', window.sbUser.id);
+      if(hErr) throw hErr;
+    }
+    h.status = status;
+    h.log.push({
+      id: uData.id,
+      datum: uData.datum ? uData.datum.slice(0,10) : nowISO(),
+      status,
+      notiz
+    });
+    closeModal('hyp-m-update');
+    renderUI();
+    showToast('Update gespeichert ✓');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── MODALS ────────────────────────────────
