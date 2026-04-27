@@ -275,6 +275,7 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .tag-sel{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .tag-btn{font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:20px;
   padding:5px 10px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer}
+.tag-btn.sel{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .tag-btn.sel.tb-tee{color:#4a7a5a;border-color:#4a7a5a;background:color-mix(in srgb,#4a7a5a 12%,transparent)}
 .tag-btn.sel.tb-aufguss{color:#5a7a4a;border-color:#5a7a4a;background:color-mix(in srgb,#5a7a4a 12%,transparent)}
 .tag-btn.sel.tb-koffein{color:var(--gold);border-color:var(--gold);background:color-mix(in srgb,var(--gold) 12%,transparent)}
@@ -2038,7 +2039,7 @@ function injectModules() {
     <label class="ml">Standard-Volumen (ml)</label>
     <div class="dq" id="get-m-new-quick"></div>
     <input class="mi" id="get-m-new-ml" type="number" min="1" step="1"
-      placeholder="ml eingeben..." oninput="updateNewQuick()">
+      placeholder="ml eingeben..." oninput="window.get_updateNewQuick()">
 
     <label class="ml">Tags <span style="color:var(--muted);font-size:9px">(mehrere möglich · keiner = neutral)</span></label>
     <div class="tag-sel" id="get-m-new-tags"></div>
@@ -5797,13 +5798,13 @@ function renderEntries(){
   el.innerHTML=[...entries].sort((a,b)=>a.time.localeCompare(b.time)).map(e=>{
     const g = getraenke.find(x=>x.id===e.getraenkId);
     const bw = g?.bewertung || e.bewertung || 'gut';
-    return '<button class="entry-chip '+bw+'" onclick="window.get_openEditMl(\''+e.id+'\')">' +
+    return '<div class="entry-chip '+bw+'" role="button" tabindex="0" onclick="window.get_openEditMl(\''+e.id+'\')">' +
       e.name +
       '<span class="ec-ml">'+e.ml+'ml</span>'+
       '<span class="ec-time">'+e.time+'</span>'+
-      (e.kommentar ? '<span ontouchend="event.preventDefault();event.stopPropagation();window.get_showKommentar(\''+e.id+'\')" style="font-size:11px;cursor:pointer;-webkit-user-select:none;-webkit-touch-callout:none">💬</span>' : '') +
+      (e.kommentar ? '<span onclick="event.stopPropagation();window.get_showKommentar(\''+e.id+'\')" style="font-size:11px;cursor:pointer;-webkit-user-select:none;-webkit-touch-callout:none">💬</span>' : '') +
       '<button class="entry-action del" onclick="event.stopPropagation();window.get_deleteEntry(\''+e.id+'\')" style="-webkit-user-select:none" title="Löschen">✕</button>'+
-      '</button>';
+      '</div>';
   }).join('');
 }
 
