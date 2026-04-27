@@ -82,6 +82,7 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .chip:active{transform:scale(0.95)}
 .chip.done{background:color-mix(in srgb,var(--accent2) 15%,var(--surface2));border-color:var(--accent2)}
 .chip.done .ck{color:var(--accent2)}
+.ml-preset.sel{background:var(--accent);color:#f5f0e8;border-color:var(--accent)}
 .chip.not-due{opacity:0.55}
 .chip-dose{color:var(--gold);font-size:10px}
 .chip-hint{color:var(--muted);font-size:9px}
@@ -5740,10 +5741,8 @@ function renderGetraenke(){
 let _editEid = null;
 
 function openEditMl(entryId) {
-  console.log('[get] openEditMl', entryId);
   const e = entries.find(x=>x.id===entryId);
-  if(!e) { console.warn('[get] entry not found'); showToast('Eintrag nicht gefunden'); return; }
-  console.log('[get] entry:', e);
+  if(!e) { showToast('Eintrag nicht gefunden'); return; }
   _editEid = entryId;
   const g = getraenke.find(x=>x.id===e.getraenkId);
   const base = g ? g.ml : e.ml;
@@ -5756,11 +5755,20 @@ function openEditMl(entryId) {
   const komEl = document.getElementById('get-edit-ml-kommentar');
   if(komEl) komEl.value = e.kommentar || '';
   document.getElementById('get-edit-ml-presets').innerHTML = presets.map(v=>
-    '<button type="button" class="chip" style="'+(v===e.ml?'background:var(--accent);color:#f5f0e8;border-color:var(--accent)':'')+'" onclick="document.getElementById(\'get-edit-ml-val\').value='+v+'">'+v+'ml</button>'
+    '<button type="button" class="chip ml-preset'+(v===e.ml?' sel':'')+'" data-ml="'+v+'">'+v+'ml</button>'
   ).join('');
+  // Event-Delegation: ein Listener fuer alle Preset-Buttons
+  const presetWrap = document.getElementById('get-edit-ml-presets');
+  presetWrap.onclick = function(ev){
+    const btn = ev.target.closest('.ml-preset');
+    if(!btn) return;
+    const v = parseInt(btn.dataset.ml,10);
+    document.getElementById('get-edit-ml-val').value = v;
+    presetWrap.querySelectorAll('.ml-preset').forEach(b=>b.classList.remove('sel'));
+    btn.classList.add('sel');
+  };
   var modal = document.getElementById('get-edit-ml-modal');
   modal.style.display = 'flex';
-  console.log('[get] modal opened, _editEid=', _editEid);
 }
 
 async function saveEditMl() {
