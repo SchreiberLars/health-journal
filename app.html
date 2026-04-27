@@ -7802,41 +7802,50 @@ function render(){
 }
 
 function renderUI(){
-  ANKER.forEach(a=>{
-    const body=document.getElementById('schmerz-body-'+a);
-    const arr=document.getElementById('schmerz-arr-'+a);
-    if(!body || !arr) return;
-    if(ankerOpen[a]){
-      body.style.display='block'; arr.textContent='▲';
-      renderRegions(a); renderCommentArea(a);
-    } else {
-      body.style.display='none'; arr.textContent='▼';
-    }
-    renderBadge(a);
-  });
-  renderSpontan();
-  // Anker-Indikator: erfasst wenn Werte gesetzt ODER Kommentar
-  if(typeof setAnkerStatus === 'function'){
-    const status = {};
-    ANKER.forEach(a => {
-      const hasVals = Object.values(ankerData[a]||{}).some(v => v && v.val != null);
-      const hasComment = !!(ankerComments[a] && ankerComments[a].trim());
-      status[a] = hasVals || hasComment;
+  // Anker-Indikator zuerst und unabhaengig - darf nie ausfallen wegen DOM-Fehlern in renderBadge etc.
+  updateAnkerIndicator();
+  try {
+    ANKER.forEach(a=>{
+      const body=document.getElementById('schmerz-body-'+a);
+      const arr=document.getElementById('schmerz-arr-'+a);
+      if(!body || !arr) return;
+      if(ankerOpen[a]){
+        body.style.display='block'; arr.textContent='▲';
+        renderRegions(a); renderCommentArea(a);
+      } else {
+        body.style.display='none'; arr.textContent='▼';
+      }
+      renderBadge(a);
     });
-    setAnkerStatus('schmerz', status);
+    renderSpontan();
+  } catch(err){
+    console.error('Schmerz renderUI error:', err);
   }
+}
+
+function updateAnkerIndicator(){
+  if(typeof setAnkerStatus !== 'function') return;
+  const status = {};
+  ANKER.forEach(a => {
+    const hasVals = Object.values(ankerData[a]||{}).some(v => v && v.val != null);
+    const hasComment = !!(ankerComments[a] && ankerComments[a].trim());
+    const hasAllo = Object.values(allodynie[a]||{}).some(v => v === true);
+    status[a] = hasVals || hasComment || hasAllo;
+  });
+  setAnkerStatus('schmerz', status);
 }
 
 function renderBadge(anker){
   const badge=document.getElementById('schmerz-badge-'+anker);
   const cbtn=document.getElementById('schmerz-cbtn-'+anker);
+  if(!badge) return;
   const regs=regions.filter(r=>r.groups.includes(anker));
   const filled=regs.filter(r=>ankerData[anker][r.id]?.val!=null).length;
   const hasHigh=regs.some(r=>(ankerData[anker][r.id]?.val||0)>=3);
   if(filled===0){badge.textContent='—';badge.className='anker-badge'}
   else if(hasHigh){badge.textContent=`${filled}/${regs.length}`;badge.className='anker-badge active'}
   else{badge.textContent=`✓ ${filled}/${regs.length}`;badge.className='anker-badge done'}
-  cbtn.classList.toggle('has-comment',!!ankerComments[anker]);
+  if(cbtn) cbtn.classList.toggle('has-comment',!!ankerComments[anker]);
 }
 
 
