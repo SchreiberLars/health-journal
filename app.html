@@ -86,6 +86,18 @@ body.sort-mode .sort-controls{display:inline-flex}
 .kategorie-divider .kd-line{flex:1;height:1px;background:var(--border)}
 .kategorie-divider .kd-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--muted);font-weight:600;white-space:nowrap}
 
+/* ── TIMELINE ──────────────────────────── */
+.timeline-header{display:flex;align-items:center;justify-content:space-between;padding:14px 4px;border-bottom:1px solid var(--border);margin-bottom:10px}
+.timeline-date{font-family:'EB Garamond',serif;font-size:18px;color:var(--text)}
+.timeline-count{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);background:var(--surface2);padding:3px 8px;border-radius:10px}
+.timeline-list{display:flex;flex-direction:column;gap:6px}
+.timeline-item{display:flex;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--border)}
+.timeline-time{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);min-width:42px;padding-top:1px;font-weight:600}
+.timeline-body{flex:1;min-width:0}
+.timeline-title{font-size:13px;color:var(--text);margin-bottom:2px}
+.timeline-detail{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;line-height:1.4;word-break:break-word}
+.timeline-mod{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:4px;opacity:.7}
+
 /* ── STACK CARD ─────────────────────────── */
 .stack-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
 .stack-header{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;cursor:pointer;user-select:none}
@@ -1279,6 +1291,10 @@ function rerenderAllModulesForDate(){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+' rerender:',e.message);}
   });
+  // Timeline auch neu laden wenn Tab aktiv ist
+  if(typeof currentTab !== 'undefined' && currentTab === 'timeline'){
+    if(typeof renderTimeline === 'function') renderTimeline();
+  }
 }
 
 // Anker-Status-Indikator setzen (☀️/🌙 in Section-Header)
@@ -1503,8 +1519,280 @@ function switchTab(tab){
   currentTab=tab;
   document.getElementById('tab-journal').style.display=tab==='journal'?'block':'none';
   document.getElementById('tab-hyp').style.display=tab==='hyp'?'block':'none';
+  document.getElementById('tab-timeline').style.display=tab==='timeline'?'block':'none';
   document.getElementById('tab-btn-journal').classList.toggle('active',tab==='journal');
   document.getElementById('tab-btn-hyp').classList.toggle('active',tab==='hyp');
+  document.getElementById('tab-btn-timeline').classList.toggle('active',tab==='timeline');
+  if(tab==='timeline') renderTimeline();
+}
+
+// ═══════════════════════════════════════════
+// ZEITACHSE (TIMELINE) - aggregiert alle Eintraege mit Zeitstempel
+// ═══════════════════════════════════════════
+function timelineISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  return new Date().toISOString().slice(0,10);
+}
+function timelineHHMM(ts){
+  if(!ts) return '--:--';
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timelineEsc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+const TIMELINE_MODULES = [
+  {key:'med',     icon:'💊', label:'Medikament',       color:'var(--c-med)'},
+  {key:'supp',    icon:'🌿', label:'Supplement',       color:'var(--c-supp)'},
+  {key:'haut',    icon:'🧴', label:'Hautpflege',       color:'var(--c-haut)'},
+  {key:'get',     icon:'💧', label:'Getränk',          color:'var(--c-get)'},
+  {key:'ern',     icon:'🍴', label:'Mahlzeit',         color:'var(--c-ern)'},
+  {key:'akt',     icon:'🏃', label:'Aktivität',        color:'var(--c-akt)'},
+  {key:'regen',   icon:'🔋', label:'Regeneration',     color:'var(--c-regen)'},
+  {key:'messw',   icon:'📊', label:'Messwert',         color:'var(--c-messw)'},
+  {key:'stuhl',   icon:'💩', label:'Stuhlgang',        color:'var(--c-stuhl)'},
+  {key:'stress',  icon:'⚡', label:'Akut-Signal',      color:'var(--c-bef)'},
+  {key:'schmerz', icon:'💪', label:'Schmerz-Episode',  color:'var(--c-schmerz)'},
+  {key:'notes',   icon:'📝', label:'Notiz',            color:'var(--muted)'}
+];
+
+let timelineLastDate = null;
+let timelineLoading = false;
+
+async function renderTimeline(){
+  const host = document.getElementById('timeline-content');
+  if(!host) return;
+  const iso = timelineISO();
+  if(timelineLoading) return;
+  timelineLoading = true;
+  host.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted)">⏳ Lade Zeitachse...</div>`;
+  try {
+    const items = await collectTimelineItems(iso);
+    timelineLastDate = iso;
+    items.sort((a,b)=> (a.ts||'').localeCompare(b.ts||''));
+    renderTimelineList(items, iso);
+  } catch(err){
+    console.error('Timeline-Fehler:', err);
+    host.innerHTML = `<div style="padding:30px;text-align:center;color:var(--delete)">Fehler beim Laden: ${timelineEsc(err.message)}</div>`;
+  } finally {
+    timelineLoading = false;
+  }
+}
+
+async function collectTimelineItems(iso){
+  if(!window.sbUser || !window.sb) return [];
+  const dayStart = iso + 'T00:00:00';
+  const dayEnd   = iso + 'T23:59:59';
+  const items = [];
+
+  // Helper: Liste von Promises parallel ausfuehren
+  async function safeQuery(fn){
+    try { return await fn(); }
+    catch(err){ console.error('Timeline-Query-Fehler:', err); return null; }
+  }
+
+  // Stammdaten cachen die wir auflösen muessen (Namen)
+  const [medsData, suppsData, prodsData, sortenData, aktArtenData, akutTypenData, regionsData] = await Promise.all([
+    safeQuery(()=> window.sb.from('medikamente').select('id,name').eq('user_id', window.sbUser.id)),
+    safeQuery(()=> window.sb.from('supplements').select('id,name').eq('user_id', window.sbUser.id)),
+    safeQuery(()=> window.sb.from('haut_produkte').select('id,name').eq('user_id', window.sbUser.id)),
+    safeQuery(()=> window.sb.from('get_sorten').select('id,name').eq('user_id', window.sbUser.id)),
+    safeQuery(()=> window.sb.from('akt_arten').select('id,name,emoji').eq('user_id', window.sbUser.id)),
+    safeQuery(()=> window.sb.from('stress_akut_typen').select('id,name,emoji').eq('user_id', window.sbUser.id)),
+    safeQuery(()=> window.sb.from('schmerz_regionen').select('id,name').eq('user_id', window.sbUser.id))
+  ]);
+  const lookup = {
+    med: Object.fromEntries(((medsData?.data)||[]).map(x=>[x.id,x.name])),
+    supp: Object.fromEntries(((suppsData?.data)||[]).map(x=>[x.id,x.name])),
+    haut: Object.fromEntries(((prodsData?.data)||[]).map(x=>[x.id,x.name])),
+    get: Object.fromEntries(((sortenData?.data)||[]).map(x=>[x.id,x.name])),
+    akt: Object.fromEntries(((aktArtenData?.data)||[]).map(x=>[x.id,(x.emoji||'')+' '+x.name])),
+    stress: Object.fromEntries(((akutTypenData?.data)||[]).map(x=>[x.id,(x.emoji||'')+' '+x.name])),
+    schmerz: Object.fromEntries(((regionsData?.data)||[]).map(x=>[x.id,x.name]))
+  };
+
+  // 1. Medikamente
+  const med = await safeQuery(()=> window.sb
+    .from('med_einnahmen')
+    .select('id, medikament_id, dosis, einheit_label, erfasst_am, notiz')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (med?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'med',
+    title: lookup.med[r.medikament_id] || 'Medikament',
+    detail: [r.dosis ? `${r.dosis}${r.einheit_label?' '+r.einheit_label:''}` : null, r.notiz].filter(Boolean).join(' · ')
+  }));
+
+  // 2. Supplements (gefiltert nach Tagesdatum)
+  const supp = await safeQuery(()=> window.sb
+    .from('supp_einnahmen')
+    .select('id, supplement_id, stack, dosis, einheit_label, erfasst_am')
+    .eq('user_id', window.sbUser.id).eq('tagesdatum', iso));
+  (supp?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'supp',
+    title: lookup.supp[r.supplement_id] || 'Supplement',
+    detail: [r.dosis ? `${r.dosis}${r.einheit_label?' '+r.einheit_label:''}` : null, r.stack].filter(Boolean).join(' · ')
+  }));
+
+  // 3. Hautpflege
+  const haut = await safeQuery(()=> window.sb
+    .from('haut_anwendungen')
+    .select('id, produkt_id, routine_id, dosis, einheit_label, erfasst_am')
+    .eq('user_id', window.sbUser.id).eq('tagesdatum', iso));
+  (haut?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'haut',
+    title: lookup.haut[r.produkt_id] || 'Hautpflege',
+    detail: r.dosis ? `${r.dosis}${r.einheit_label?' '+r.einheit_label:''}` : ''
+  }));
+
+  // 4. Getraenke
+  const get = await safeQuery(()=> window.sb
+    .from('get_eintraege')
+    .select('id, sorte_id, menge_ml, kommentar, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (get?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'get',
+    title: lookup.get[r.sorte_id] || 'Getränk',
+    detail: [r.menge_ml ? `${r.menge_ml} ml` : null, r.kommentar].filter(Boolean).join(' · ')
+  }));
+
+  // 5. Aktivitaet
+  const akt = await safeQuery(()=> window.sb
+    .from('akt_eintraege')
+    .select('id, art_id, dauer_min, intensitaet, notiz, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (akt?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'akt',
+    title: lookup.akt[r.art_id] || 'Aktivität',
+    detail: [r.dauer_min ? `${r.dauer_min} min` : null,
+             r.intensitaet ? `Intensität ${r.intensitaet}/5` : null,
+             r.notiz].filter(Boolean).join(' · ')
+  }));
+
+  // 6. Regeneration (mit art_id Lookup)
+  const regenArten = await safeQuery(()=> window.sb.from('regen_arten').select('id,name,emoji').eq('user_id', window.sbUser.id));
+  const regenLookup = Object.fromEntries(((regenArten?.data)||[]).map(x=>[x.id,(x.emoji||'')+' '+x.name]));
+  const regen = await safeQuery(()=> window.sb
+    .from('regen_eintraege')
+    .select('id, art_id, dauer_min, notiz, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (regen?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'regen',
+    title: regenLookup[r.art_id] || 'Regeneration',
+    detail: [r.dauer_min ? `${r.dauer_min} min` : null, r.notiz].filter(Boolean).join(' · ')
+  }));
+
+  // 7. Messwerte (typisierte Spalten je nach typ)
+  const messw = await safeQuery(()=> window.sb
+    .from('messw_eintraege')
+    .select('id, typ, temp_c, bp_syst, bp_diast, bp_puls, gewicht_kg, notiz, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (messw?.data||[]).forEach(r => {
+    let title='Messwert', valTxt='';
+    if(r.typ==='temp')   { title='Temperatur'; valTxt = r.temp_c!=null ? `${r.temp_c} °C` : ''; }
+    else if(r.typ==='bp'){ title='Blutdruck';  valTxt = r.bp_syst!=null ? `${r.bp_syst}/${r.bp_diast}${r.bp_puls?` · ${r.bp_puls} bpm`:''}` : ''; }
+    else if(r.typ==='gewicht'){ title='Gewicht'; valTxt = r.gewicht_kg!=null ? `${r.gewicht_kg} kg` : ''; }
+    items.push({
+      ts: r.erfasst_am, mod:'messw',
+      title,
+      detail: [valTxt, r.notiz].filter(Boolean).join(' · ')
+    });
+  });
+
+  // 8. Stuhl
+  const stuhl = await safeQuery(()=> window.sb
+    .from('stuhl_eintraege')
+    .select('id, bristol_value, kommentar, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (stuhl?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'stuhl',
+    title: 'Stuhlgang',
+    detail: [r.bristol_value != null ? `Bristol ${r.bristol_value}` : null, r.kommentar].filter(Boolean).join(' · ')
+  }));
+
+  // 9. Stress Akut-Signale
+  const stressA = await safeQuery(()=> window.sb
+    .from('stress_akut_eintraege')
+    .select('id, typ_id, detail, notiz, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (stressA?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'stress',
+    title: lookup.stress[r.typ_id] || 'Akut-Signal',
+    detail: [r.detail, r.notiz].filter(Boolean).join(' · ')
+  }));
+
+  // 10. Schmerz-Episoden
+  const schmerz = await safeQuery(()=> window.sb
+    .from('schmerz_episoden')
+    .select('id, start_zeit, end_zeit, notiz, schmerz_episoden_regionen(region_id, wert)')
+    .eq('user_id', window.sbUser.id)
+    .gte('start_zeit', dayStart).lte('start_zeit', dayEnd));
+  (schmerz?.data||[]).forEach(r => {
+    const regions = (r.schmerz_episoden_regionen||[])
+      .map(x => `${lookup.schmerz[x.region_id]||'?'} ${x.wert}/5`).join(', ');
+    const dauer = r.end_zeit ? ` → ${timelineHHMM(r.end_zeit)}` : ' (läuft)';
+    items.push({
+      ts: r.start_zeit, mod:'schmerz',
+      title: 'Schmerz-Episode'+dauer,
+      detail: [regions, r.notiz].filter(Boolean).join(' · ')
+    });
+  });
+
+  // 11. Notizen
+  const notes = await safeQuery(()=> window.sb
+    .from('notizen')
+    .select('id, text, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (notes?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'notes',
+    title: 'Notiz',
+    detail: r.text || ''
+  }));
+
+  return items;
+}
+
+function renderTimelineList(items, iso){
+  const host = document.getElementById('timeline-content');
+  if(!host) return;
+  const dateLabel = new Date(iso).toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'});
+  let html = `<div class="timeline-header">
+    <div class="timeline-date">${dateLabel}</div>
+    <div class="timeline-count">${items.length} ${items.length===1?'Eintrag':'Einträge'}</div>
+  </div>`;
+  if(!items.length){
+    html += `<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px">
+      Keine Einträge mit Zeitstempel an diesem Tag.<br>
+      <span style="font-size:11px">Anker-basierte Daten (Befinden, Stress-Anker etc.) sind hier nicht enthalten.</span>
+    </div>`;
+  } else {
+    html += `<div class="timeline-list">`;
+    items.forEach(item => {
+      const meta = TIMELINE_MODULES.find(m => m.key === item.mod) || {icon:'•', label:item.mod, color:'var(--muted)'};
+      const time = timelineHHMM(item.ts);
+      html += `<div class="timeline-item" style="border-left-color:${meta.color}">
+        <div class="timeline-time">${time}</div>
+        <div class="timeline-body">
+          <div class="timeline-title"><span style="font-size:13px">${meta.icon}</span> ${timelineEsc(item.title)}</div>
+          ${item.detail ? `<div class="timeline-detail">${timelineEsc(item.detail)}</div>` : ''}
+          <div class="timeline-mod">${meta.label}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  host.innerHTML = html;
 }
 
 function toggleExport(){
