@@ -7667,15 +7667,7 @@ const ALLODYNIE_DESC = 'Schmerz bei normalerweise schmerzlosen Reizen (Wasser, B
 const ANKER = ['morgen','abend'];
 
 // ── STATE ─────────────────────────────────
-let regions = [
-  {id:'ferse_l',  name:'Ferse links',    groups:['morgen','abend']},
-  {id:'ferse_r',  name:'Ferse rechts',   groups:['morgen','abend']},
-  {id:'nacken',   name:'Nacken',         groups:['morgen','abend']},
-  {id:'schulter', name:'Schulter',       groups:['morgen','abend']},
-  {id:'bauch',    name:'Bauch',          groups:['morgen','abend']},
-  {id:'kopf',     name:'Kopf',           groups:['morgen','abend']},
-];
-regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+let regions = []; // wird aus DB geladen
 
 // ankerData: { morgen: { regionId: {val:0-5, nurAufstehen:bool} }, abend: {...} }
 let ankerData = { morgen:{}, abend:{} };
@@ -7694,11 +7686,126 @@ function nowTime(){
   return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
 }
 
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+let regionsLoaded = false;
+async function loadRegions(){
+  if(!window.sbUser || !window.sb || regionsLoaded) return;
+  try {
+    const { data, error } = await window.sb
+      .from('schmerz_regionen')
+      .select('id, name, sortierung, groups')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true });
+    if(error) throw error;
+    regions = (data||[]).map(r => ({
+      id: r.id,
+      name: r.name,
+      sortierung: r.sortierung,
+      groups: Array.isArray(r.groups) ? r.groups : ['morgen','abend']
+    }));
+    regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    regionsLoaded = true;
+  } catch(err) {
+    console.error('Schmerz-Regionen-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Schmerz-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadRegions();
+  const iso = getActiveISO();
+  ankerData = { morgen:{}, abend:{} };
+  allodynie = { morgen:{}, abend:{} };
+  ankerComments = { morgen:'', abend:'' };
+  spontanList = [];
+  try {
+    // Anker-Werte
+    const { data: vRows, error: e1 } = await window.sb
+      .from('schmerz_anker_werte')
+      .select('region_id, anker, wert, nur_aufstehen, allodynie')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(e1) throw e1;
+    (vRows||[]).forEach(r => {
+      if(!ankerData[r.anker]) ankerData[r.anker] = {};
+      if(r.wert != null){
+        ankerData[r.anker][r.region_id] = { val: r.wert, nurAufstehen: !!r.nur_aufstehen };
+      }
+      if(r.allodynie) allodynie[r.anker][r.region_id] = true;
+    });
+    // Anker-Kommentare
+    const { data: kRows, error: e2 } = await window.sb
+      .from('schmerz_anker_kommentare')
+      .select('anker, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(e2) throw e2;
+    (kRows||[]).forEach(r => {
+      if(ankerComments[r.anker] !== undefined) ankerComments[r.anker] = r.kommentar;
+    });
+    // Spontan-Episoden
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: epRows, error: e3 } = await window.sb
+      .from('schmerz_episoden')
+      .select('id, start_zeit, end_zeit, notiz, schmerz_episoden_regionen(region_id, wert)')
+      .eq('user_id', window.sbUser.id)
+      .gte('start_zeit', dayStart)
+      .lte('start_zeit', dayEnd)
+      .order('start_zeit', { ascending: true });
+    if(e3) throw e3;
+    spontanList = (epRows||[]).map(e => ({
+      id: e.id,
+      time: timeFromTimestamp(e.start_zeit),
+      endtime: e.end_zeit ? timeFromTimestamp(e.end_zeit) : null,
+      note: e.notiz || '',
+      values: Object.fromEntries((e.schmerz_episoden_regionen||[]).map(r=>[r.region_id, parseFloat(r.wert)]))
+    }));
+  } catch(err) {
+    console.error('Schmerz load error:', err);
+    if(typeof showToast === 'function') showToast('Schmerz-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
   ANKER.forEach(a=>{
     const body=document.getElementById('schmerz-body-'+a);
     const arr=document.getElementById('schmerz-arr-'+a);
+    if(!body || !arr) return;
     if(ankerOpen[a]){
       body.style.display='block'; arr.textContent='▲';
       renderRegions(a); renderCommentArea(a);
@@ -7708,6 +7815,16 @@ function render(){
     renderBadge(a);
   });
   renderSpontan();
+  // Anker-Indikator: erfasst wenn Werte gesetzt ODER Kommentar
+  if(typeof setAnkerStatus === 'function'){
+    const status = {};
+    ANKER.forEach(a => {
+      const hasVals = Object.values(ankerData[a]||{}).some(v => v && v.val != null);
+      const hasComment = !!(ankerComments[a] && ankerComments[a].trim());
+      status[a] = hasVals || hasComment;
+    });
+    setAnkerStatus('schmerz', status);
+  }
 }
 
 function renderBadge(anker){
@@ -7723,11 +7840,6 @@ function renderBadge(anker){
 }
 
 
-function toggleAllodynie(anker, regionId) {
-  allodynie[anker][regionId] = !allodynie[anker][regionId];
-  render();
-}
-
 function copyFromPrevDay(anker) {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -7737,7 +7849,7 @@ function copyFromPrevDay(anker) {
     if(prev[anker] && Object.keys(prev[anker]).length > 0) {
       ankerData[anker] = Object.assign({}, prev[anker]);
       if(prev['allo_'+anker]) allodynie[anker] = Object.assign({}, prev['allo_'+anker]);
-      render();
+      renderUI();
       showToast('Vortageswerte übernommen ✓');
     } else {
       showToast('Keine Vortageswerte vorhanden');
@@ -7848,34 +7960,122 @@ function renderSpontan(){
 }
 
 // ── INTERACTIONS ──────────────────────────
-function toggleAnker(id){ankerOpen[id]=!ankerOpen[id];render()}
+function toggleAnker(id){ankerOpen[id]=!ankerOpen[id];renderUI()}
 
 function setRegion(anker,regionId,val){
   if(!ankerData[anker][regionId]) ankerData[anker][regionId]={};
-  if(ankerData[anker][regionId].val===val) ankerData[anker][regionId]={};
-  else ankerData[anker][regionId].val=val;
+  let willDelete = false;
+  if(ankerData[anker][regionId].val===val){
+    ankerData[anker][regionId]={};
+    willDelete = true;
+  } else {
+    ankerData[anker][regionId].val=val;
+  }
   renderRegions(anker);
   renderBadge(anker);
+  // Anker-Indikator updaten
+  if(typeof setAnkerStatus === 'function'){
+    const hasVals = Object.values(ankerData[anker]||{}).some(v => v && v.val != null);
+    const hasComment = !!(ankerComments[anker] && ankerComments[anker].trim());
+    const status = {};
+    ANKER.forEach(a => {
+      const hv = Object.values(ankerData[a]||{}).some(v => v && v.val != null);
+      const hc = !!(ankerComments[a] && ankerComments[a].trim());
+      status[a] = hv || hc;
+    });
+    setAnkerStatus('schmerz', status);
+  }
+  persistAnkerWert(anker, regionId, willDelete);
 }
 
 function toggleAufstehen(anker,regionId){
   if(!ankerData[anker][regionId]) ankerData[anker][regionId]={};
   ankerData[anker][regionId].nurAufstehen=!ankerData[anker][regionId].nurAufstehen;
   renderRegions(anker);
+  // Wenn kein val gesetzt aber nurAufstehen toggled: nichts persistieren ohne val (sinnfrei)
+  if(ankerData[anker][regionId].val != null) persistAnkerWert(anker, regionId, false);
+}
+
+function toggleAllodynie(anker, regionId) {
+  allodynie[anker][regionId] = !allodynie[anker][regionId];
+  renderUI();
+  persistAnkerWert(anker, regionId, false);
+}
+
+async function persistAnkerWert(anker, regionId, deleteRow){
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  const entry = ankerData[anker][regionId] || {};
+  const allo = !!allodynie[anker][regionId];
+  // Wenn weder val noch allodynie -> Zeile loeschen
+  if((entry.val == null) && !allo){
+    try {
+      const { error } = await window.sb
+        .from('schmerz_anker_werte')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('anker', anker)
+        .eq('region_id', regionId);
+      if(error) throw error;
+    } catch(err) { showToast('DB-Fehler: ' + err.message); }
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('schmerz_anker_werte')
+      .upsert({
+        user_id: window.sbUser.id,
+        tagesdatum: iso,
+        anker,
+        region_id: regionId,
+        wert: entry.val != null ? entry.val : null,
+        nur_aufstehen: !!entry.nurAufstehen,
+        allodynie: allo
+      }, { onConflict: 'user_id,tagesdatum,anker,region_id' });
+    if(error) throw error;
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── COMMENTS ─────────────────────────────
 function toggleComment(anker){
   ankerCommentOpen[anker]=!ankerCommentOpen[anker];
   if(ankerCommentOpen[anker]) ankerOpen[anker]=true;
-  render();
+  renderUI();
 }
-function saveComment(anker){
+async function saveComment(anker){
   const ta=document.getElementById('ta-'+anker);
   ankerComments[anker]=ta?ta.value.trim():'';
   ankerCommentOpen[anker]=false;
   showToast(ankerComments[anker]?'Kommentar gespeichert ✓':'Kommentar entfernt');
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(ankerComments[anker]){
+      const { error } = await window.sb
+        .from('schmerz_anker_kommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          anker,
+          kommentar: ankerComments[anker]
+        }, { onConflict: 'user_id,tagesdatum,anker' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('schmerz_anker_kommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('anker', anker);
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── REGION MANAGER ────────────────────────
@@ -7917,30 +8117,88 @@ function openEditRegion(rid){
   setTimeout(()=>document.getElementById('schmerz-m-region-name').focus(),100);
 }
 
-function saveRegion(){
+async function saveRegion(){
   const name=document.getElementById('schmerz-m-region-name').value.trim();
   const groups=[...document.querySelectorAll('#schmerz-m-region-grps .grp-btn.sel')].map(b=>b.dataset.g);
   if(!name){showToast('Name fehlt');return}
   if(!groups.length){showToast('Mindestens einen Block wählen');return}
-  if(editRegionCtx){
-    const r=regions.find(x=>x.id===editRegionCtx.rid);
-    if(r){r.name=name;r.groups=groups;}
-    showToast(`${name} gespeichert ✓`);
-  } else {
-    if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
-    regions.push({id:uid(),name,groups});
-    regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
-    showToast(`${name} hinzugefügt`);
+  if(!window.sbUser){
+    if(editRegionCtx){
+      const r=regions.find(x=>x.id===editRegionCtx.rid);
+      if(r){r.name=name;r.groups=groups;}
+      showToast(`${name} gespeichert ✓`);
+    } else {
+      if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
+      regions.push({id:uid(),name,groups});
+      regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+      showToast(`${name} hinzugefügt`);
+    }
+    editRegionCtx=null;closeModal('schmerz-m-region');renderUI();
+    return;
   }
-  editRegionCtx=null;closeModal('schmerz-m-region');render();
+  try {
+    if(editRegionCtx){
+      const rid = editRegionCtx.rid;
+      const { error } = await window.sb
+        .from('schmerz_regionen')
+        .update({ name, groups })
+        .eq('id', rid)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const r=regions.find(x=>x.id===rid);
+      if(r){r.name=name;r.groups=groups;}
+      showToast(`${name} gespeichert ✓`);
+    } else {
+      if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){
+        showToast('Bereits vorhanden');return;
+      }
+      const sortMax = regions.reduce((m,x)=>Math.max(m, x.sortierung||0), 0);
+      const { data, error } = await window.sb
+        .from('schmerz_regionen')
+        .insert({
+          user_id: window.sbUser.id,
+          name,
+          groups,
+          aktiv: true,
+          sortierung: sortMax + 10
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      regions.push({id:data.id, name, groups, sortierung: data.sortierung});
+      showToast(`${name} hinzugefügt`);
+    }
+    regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    editRegionCtx=null;closeModal('schmerz-m-region');renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteRegion(rid){
+async function deleteRegion(rid){
   const r=regions.find(x=>x.id===rid);
-  regions=regions.filter(x=>x.id!==rid);
-  ANKER.forEach(a=>delete ankerData[a][rid]);
-  showToast(`${r?.name} entfernt`);
-  renderMgrChips();render();
+  if(!confirm(`"${r?.name}" wirklich entfernen? Bisherige Werte bleiben in der Datenbank.`)) return;
+  if(!window.sbUser){
+    regions=regions.filter(x=>x.id!==rid);
+    ANKER.forEach(a=>delete ankerData[a][rid]);
+    showToast(`${r?.name} entfernt`);
+    renderMgrChips();renderUI();
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('schmerz_regionen')
+      .update({ aktiv: false })
+      .eq('id', rid)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    regions=regions.filter(x=>x.id!==rid);
+    ANKER.forEach(a=>delete ankerData[a][rid]);
+    showToast(`${r?.name} entfernt`);
+    renderMgrChips();renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── SPONTAN ───────────────────────────────
@@ -8062,7 +8320,7 @@ function setSpontanRegion(rid,val,btn){
   } else if(vspan) vspan.remove();
 }
 
-function saveSpontan(){
+async function saveSpontan(){
   const time=document.getElementById('schmerz-m-spontan-time').value||nowTime();
   const endtimeRaw=document.getElementById('schmerz-m-spontan-endtime').value;
   const endtime=endtimeRaw||null;
@@ -8071,20 +8329,82 @@ function saveSpontan(){
   if(endtime && timeToMin(endtime) <= timeToMin(time)){
     showToast('Endzeit muss nach Startzeit liegen'); return;
   }
-  if(editingSpontanId){
-    const e = spontanList.find(x=>x.id===editingSpontanId);
-    if(e){
-      e.time = time; e.endtime = endtime; e.note = note;
-      e.values = {...spontanVals};
+  const editId = editingSpontanId;
+  editingSpontanId = null;
+  const valuesCopy = {...spontanVals};
+
+  if(!window.sbUser){
+    if(editId){
+      const e = spontanList.find(x=>x.id===editId);
+      if(e){
+        e.time = time; e.endtime = endtime; e.note = note;
+        e.values = valuesCopy;
+      }
+    } else {
+      spontanList.push({id:uid(),time,endtime,note,values:valuesCopy});
     }
-    editingSpontanId = null;
-  } else {
-    spontanList.push({id:uid(),time,endtime,note,values:{...spontanVals}});
+    spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+    closeModal('schmerz-m-spontan');renderUI();
+    const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
+    showToast(`Schmerz ${time}${dur} ✓`);
+    return;
   }
-  spontanList.sort((a,b)=>a.time.localeCompare(b.time));
-  closeModal('schmerz-m-spontan');render();
-  const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
-  showToast(`Schmerz ${time}${dur} ✓`);
+  const iso = getActiveISO();
+  const startTs = timestampFromTime(time, iso);
+  const endTs = endtime ? timestampFromTime(endtime, iso) : null;
+  try {
+    let episodeId;
+    if(editId){
+      const { error } = await window.sb
+        .from('schmerz_episoden')
+        .update({ start_zeit: startTs, end_zeit: endTs, notiz: note || null })
+        .eq('id', editId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      episodeId = editId;
+      // Alte Region-Werte raus
+      await window.sb.from('schmerz_episoden_regionen').delete().eq('episode_id', episodeId);
+    } else {
+      const { data, error } = await window.sb
+        .from('schmerz_episoden')
+        .insert({
+          user_id: window.sbUser.id,
+          start_zeit: startTs,
+          end_zeit: endTs,
+          notiz: note || null
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      episodeId = data.id;
+    }
+    // Region-Werte
+    const rows = Object.entries(valuesCopy).map(([rid, val]) => ({
+      episode_id: episodeId,
+      region_id: rid,
+      wert: val
+    }));
+    if(rows.length){
+      const { error: e2 } = await window.sb.from('schmerz_episoden_regionen').insert(rows);
+      if(e2) throw e2;
+    }
+    // Local update
+    if(editId){
+      const e = spontanList.find(x=>x.id===editId);
+      if(e){
+        e.time = time; e.endtime = endtime; e.note = note;
+        e.values = valuesCopy;
+      }
+    } else {
+      spontanList.push({id:episodeId,time,endtime,note,values:valuesCopy});
+    }
+    spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+    closeModal('schmerz-m-spontan');renderUI();
+    const dur = endtime ? ' · '+minToHm(timeToMin(endtime)-timeToMin(time)) : ' · läuft';
+    showToast(`Schmerz ${time}${dur} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 let endingEntryId = null;
@@ -8128,7 +8448,7 @@ function pickEndChip(min, btn){
   btn.classList.add('sel');
 }
 
-function confirmEnd(){
+async function confirmEnd(){
   if(!endingEntryId) return;
   const e = spontanList.find(x=>x.id===endingEntryId);
   if(!e){ closeModal('schmerz-m-end'); return; }
@@ -8137,13 +8457,43 @@ function confirmEnd(){
   const startMin = timeToMin(e.time);
   if(timeToMin(t) <= startMin){ showToast('Endzeit muss nach Startzeit liegen'); return; }
   e.endtime = t;
+  const epId = endingEntryId;
   endingEntryId = null;
   closeModal('schmerz-m-end');
-  render();
+  renderUI();
   showToast(`Beendet · Dauer ${minToHm(timeToMin(t)-startMin)} ✓`);
+  if(window.sbUser){
+    const iso = getActiveISO();
+    const endTs = timestampFromTime(t, iso);
+    try {
+      const { error } = await window.sb
+        .from('schmerz_episoden')
+        .update({ end_zeit: endTs })
+        .eq('id', epId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
-function delSpontan(id){spontanList=spontanList.filter(e=>e.id!==id);render()}
+async function delSpontan(id){
+  if(!window.sbUser){ spontanList=spontanList.filter(e=>e.id!==id); renderUI(); return; }
+  try {
+    // Cascade-Delete via FK auf schmerz_episoden_regionen
+    const { error } = await window.sb
+      .from('schmerz_episoden')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    spontanList=spontanList.filter(e=>e.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
 
 // ── MODALS ────────────────────────────────
 function openModal(id){document.getElementById(id).classList.add('open')}
