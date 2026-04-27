@@ -1828,7 +1828,7 @@ function injectModules() {
     <label class="ml">Menge heute</label>
     <div class="dq" id="haut-m-dose-quick"></div>
     <input class="mi" id="haut-m-dose-val" type="number" min="0" step="any" placeholder="Andere Menge...">
-    <label class="ml" style="margin-top:14px">Verschieben in</label>
+    <label class="ml" style="margin-top:14px">Verfügbar in</label>
     <div class="dq" id="haut-m-dose-stacks"></div>
     <div class="mbr">
       <button class="bs" onclick="window.haut_cancelDose()">Abwählen</button>
@@ -5209,7 +5209,7 @@ async function delProd(pid,grp){
 function openDoseModal(pid,grp){
   const p=products.find(x=>x.id===pid);
   if(!p)return;
-  doseCtx={pid,grp,p,targetGroup:grp};
+  doseCtx={pid,grp,p};
   document.getElementById('haut-m-dose-title').textContent=`✎ ${p.name} — Menge heute`;
   const cur=getODose(pid,grp)??doseFor(p,grp);
   document.getElementById('haut-m-dose-val').value=cur||'';
@@ -5217,20 +5217,19 @@ function openDoseModal(pid,grp){
   document.getElementById('haut-m-dose-quick').innerHTML=ps.map(v=>
     `<button class="db${parseFloat(cur)===v?' sel':''}" onclick="window.haut_pickDose(${v},this)">${v}${p.unit?' '+p.unit:''}</button>`
   ).join('');
-  // Routine-Verschieben (analog Supplements)
+  // Multi-Select: alle Routinen, in denen Produkt schon ist, vorausgewaehlt
   const stacksEl = document.getElementById('haut-m-dose-stacks');
   if(stacksEl){
     stacksEl.innerHTML = GROUPS.map(g =>
-      `<button class="db${g.id===grp?' sel':''}" onclick="window.haut_pickStack('${g.id}',this)">${g.label}</button>`
+      `<button class="db${p.groups.includes(g.id)?' sel':''}" data-stk="${g.id}" onclick="window.haut_pickStack('${g.id}',this)">${g.label}</button>`
     ).join('');
   }
   openModal('haut-m-dose');
 }
 function pickStack(grp, btn){
   if(!doseCtx) return;
-  doseCtx.targetGroup = grp;
-  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
-  btn.classList.add('sel');
+  // Multi-Select: einfach togglen
+  btn.classList.toggle('sel');
 }
 function pickDose(v,btn){
   document.getElementById('haut-m-dose-val').value=v;
@@ -5240,22 +5239,35 @@ function pickDose(v,btn){
 async function confirmDose(){
   if(!doseCtx)return;
   const {pid,grp,p}=doseCtx;
-  const targetGroup = doseCtx.targetGroup || grp;
-  const moved = (targetGroup !== grp);
   const d=parseFloat(document.getElementById('haut-m-dose-val').value)||null;
+  // Aus dem Modal: welche Routinen sind aktuell ausgewaehlt
+  const selBtns = document.querySelectorAll('#haut-m-dose-stacks .db.sel');
+  const selectedGroups = Array.from(selBtns).map(b => b.dataset.stk);
+  if(!selectedGroups.length){ showToast('Mindestens eine Routine waehlen'); return; }
 
-  // Stack-Move: Produkt-Stammdaten anpassen
-  if(moved){
-    p.groups = p.groups.filter(g => g !== grp);
-    if(!p.groups.includes(targetGroup)) p.groups.push(targetGroup);
+  // Diff zur bisherigen Zuordnung
+  const oldGroups = [...p.groups];
+  const removed = oldGroups.filter(g => !selectedGroups.includes(g));
+  const added   = selectedGroups.filter(g => !oldGroups.includes(g));
+  p.groups = [...selectedGroups];
+
+  // Ist der ausloesende Stack noch dabei?
+  const stillCurrent = selectedGroups.includes(grp);
+  if(stillCurrent){
+    // Dose-Override fuer aktuellen Stack
+    setDone(pid, grp, true, d);
+  } else {
+    // grp wurde abgewaehlt -> aus doneMap raus
+    delete doneMap[pid+'__'+grp];
   }
-  const oldAnwId = getAnwId(pid, grp);
-  if(moved) delete doneMap[pid+'__'+grp];
-  setDone(pid, targetGroup, true, d);
-  closeModal('haut-m-dose');doseCtx=null;
-  if(moved){
-    const targetLabel = GROUPS.find(g=>g.id===targetGroup)?.label || '?';
-    showToast(`${p.name} → ${targetLabel} ✓`);
+  // Fuer added Gruppen automatisch als "heute angewendet" markieren
+  added.forEach(g => setDone(pid, g, true, null));
+
+  closeModal('haut-m-dose');
+  doseCtx=null;
+  if(removed.length || added.length){
+    const labels = selectedGroups.map(g=>GROUPS.find(x=>x.id===g)?.label||'?').join(', ');
+    showToast(`${p.name} → ${labels}`);
   } else {
     showToast(`${p.name}${d&&p.unit?` · ${d} ${p.unit}`:''} ✓`);
   }
@@ -5263,50 +5275,68 @@ async function confirmDose(){
   if(!window.sbUser) return;
   const iso = getActiveISO();
   try {
-    if(moved){
-      // Alte Anwendung loeschen
-      if(oldAnwId){
-        await window.sb.from('haut_anwendungen').delete()
-          .eq('id', oldAnwId).eq('user_id', window.sbUser.id);
-      }
-      // Routine-Zuordnung anpassen: alte raus, neue rein
+    // 1. Routine-Zuordnungen synchronisieren
+    if(removed.length){
       await window.sb.from('haut_routine_produkte').delete()
-        .eq('routine_id', grp).eq('produkt_id', pid);
-      const sortMax = Object.keys(window.__hautRP||{})
-        .filter(k=>k.endsWith('__'+targetGroup))
-        .reduce((m,k)=>Math.max(m, (window.__hautRP[k].sortierung||0)), 0);
-      const { data: rpNew, error: rpErr } = await window.sb
-        .from('haut_routine_produkte')
-        .insert({
-          routine_id: targetGroup,
-          produkt_id: pid,
-          dosis: d || p.dose,
-          sortierung: (sortMax||0) + 10
-        })
-        .select().single();
-      if(rpErr) throw rpErr;
-      delete (window.__hautRP||{})[pid+'__'+grp];
-      window.__hautRP[pid+'__'+targetGroup] = {
-        dosis: rpNew.dosis,
-        intervall: rpNew.intervall_tage,
-        lastUsed: rpNew.letzte_anwendung_datum
-      };
+        .eq('produkt_id', pid).in('routine_id', removed);
+      removed.forEach(g => delete (window.__hautRP||{})[pid+'__'+g]);
+      // Auch Anwendungen heute aus den entfernten Routinen loeschen
+      await window.sb.from('haut_anwendungen').delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('produkt_id', pid)
+        .eq('tagesdatum', iso)
+        .in('routine_id', removed);
+      removed.forEach(g => delete doneMap[pid+'__'+g]);
     }
-    const { data, error } = await window.sb
-      .from('haut_anwendungen')
-      .upsert({
+    if(added.length){
+      const newRows = added.map(g => ({
+        routine_id: g, produkt_id: pid, dosis: p.dose, sortierung: 100
+      }));
+      const { data, error } = await window.sb
+        .from('haut_routine_produkte').insert(newRows).select();
+      if(error) throw error;
+      (data||[]).forEach(rp => {
+        window.__hautRP[pid+'__'+rp.routine_id] = {
+          dosis: rp.dosis, intervall: rp.intervall_tage, lastUsed: rp.letzte_anwendung_datum
+        };
+      });
+    }
+    // 2. Dose-Override fuer aktuellen Stack speichern (wenn noch dabei)
+    if(stillCurrent){
+      const { data, error } = await window.sb
+        .from('haut_anwendungen')
+        .upsert({
+          user_id: window.sbUser.id,
+          produkt_id: pid,
+          routine_id: grp,
+          tagesdatum: iso,
+          erfasst_am: new Date().toISOString(),
+          dosis: d,
+          einheit_label: p.unit || null
+        }, { onConflict: 'user_id,produkt_id,tagesdatum,routine_id' })
+        .select().single();
+      if(error) throw error;
+      setDone(pid, grp, true, d, data.id);
+    }
+    // 3. Fuer NEU hinzugefuegte Routinen: heutige Anwendung anlegen (mit Standard-Dosis)
+    if(added.length){
+      const rows = added.map(g => ({
         user_id: window.sbUser.id,
         produkt_id: pid,
-        routine_id: targetGroup,
+        routine_id: g,
         tagesdatum: iso,
         erfasst_am: new Date().toISOString(),
-        dosis: d,
+        dosis: p.dose,
         einheit_label: p.unit || null
-      }, { onConflict: 'user_id,produkt_id,tagesdatum,routine_id' })
-      .select()
-      .single();
-    if(error) throw error;
-    setDone(pid, targetGroup, true, d, data.id);
+      }));
+      const { data, error } = await window.sb
+        .from('haut_anwendungen')
+        .upsert(rows, { onConflict: 'user_id,produkt_id,tagesdatum,routine_id' })
+        .select();
+      if(error) throw error;
+      (data||[]).forEach(r => setDone(r.produkt_id, r.routine_id, true, null, r.id));
+    }
+    renderUI();
   } catch(err) {
     showToast('DB-Fehler: ' + err.message);
   }
