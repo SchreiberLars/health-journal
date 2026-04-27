@@ -783,6 +783,10 @@ window.sbUser = null;
       <span class="section-badge" id="badge-stress">—</span>
     </div>
     <div class="section-right">
+      <span class="anker-marks" id="anker-stress">
+        <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
+      </span>
       <span class="section-chevron" id="chev-stress">▼</span>
     </div>
   </div>
@@ -11072,30 +11076,116 @@ function timeToMin(t){if(!t)return null;const[h,m]=t.split(':').map(Number);retu
 function minToHm(mins){if(mins<0)mins=0;const h=Math.floor(mins/60),m=mins%60;return h?`${h}h ${String(m).padStart(2,'0')}min`:`${m}min`}
 
 // Metriken für Tages-Tracking (0-5, 0 = nicht erfasst = nichts gehabt)
-let metriken = [
-  {id:'stress',  name:'Gefühlter Stress',  pflicht:false},
-  {id:'licht',   name:'Lichtempfindlichkeit', pflicht:false},
-  {id:'geraeusch', name:'Geräuschempfindlichkeit', pflicht:false},
-];
+// wird aus DB geladen
+let metriken = [];
 
-// Typen für Akut-Signale - erweiterbar
-let AKUT_TYPES = {
-  muskelzucken: {icon:'💢', label:'Muskelzucken'},
-  herzklopfen:  {icon:'💓', label:'Herzklopfen'},
-  schweiss:     {icon:'💦', label:'Schweißausbruch'},
-  unruhe:       {icon:'🌀', label:'Innere Unruhe'},
-  andere:       {icon:'📌', label:'Andere'}
-};
-let akutTypeOrder = ['muskelzucken','herzklopfen','schweiss','unruhe','andere'];
-let currentAkutType = 'muskelzucken';
+// Typen für Akut-Signale - aus DB
+// Map: id -> {icon, label}
+let AKUT_TYPES = {};
+let akutTypeOrder = [];
+let currentAkutType = null;
 
-// Tages-Daten: { morgen: { stress:3, licht:2, ... }, mittag:{}, abend:{} }
+// Tages-Daten: { morgen: { metrikId:wert }, mittag:{}, abend:{} }
 let ankerData = { morgen:{}, mittag:{}, abend:{} };
 let ankerOpen = { morgen:true, mittag:false, abend:false };
 
-// Akut-Signale: [{id, type, detail, time, endtime, note}]
+// Akut-Signale: [{id, typId, detail, time, note}]
 let akutList = [];
 let editingAkutId = null;
+
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+let stammdatenLoaded = false;
+async function loadStammdaten(){
+  if(!window.sbUser || !window.sb || stammdatenLoaded) return;
+  try {
+    const { data: mRows, error: mErr } = await window.sb
+      .from('stress_metriken')
+      .select('id, name, pflicht, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true });
+    if(mErr) throw mErr;
+    metriken = (mRows||[]).map(m => ({ id: m.id, name: m.name, pflicht: !!m.pflicht }));
+
+    const { data: tRows, error: tErr } = await window.sb
+      .from('stress_akut_typen')
+      .select('id, name, emoji, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true });
+    if(tErr) throw tErr;
+    AKUT_TYPES = {};
+    akutTypeOrder = [];
+    (tRows||[]).forEach(t => {
+      AKUT_TYPES[t.id] = { icon: t.emoji || '📌', label: t.name };
+      akutTypeOrder.push(t.id);
+    });
+    if(akutTypeOrder.length) currentAkutType = akutTypeOrder[0];
+    stammdatenLoaded = true;
+  } catch(err) {
+    console.error('Stress-Stammdaten-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Stress-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadStammdaten();
+  const iso = getActiveISO();
+  ankerData = { morgen:{}, mittag:{}, abend:{} };
+  akutList = [];
+  try {
+    const { data: vRows, error: e1 } = await window.sb
+      .from('stress_metric_values')
+      .select('metrik_id, anker, wert')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(e1) throw e1;
+    (vRows||[]).forEach(r => {
+      if(ankerData[r.anker]) ankerData[r.anker][r.metrik_id] = parseFloat(r.wert);
+    });
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: aRows, error: e2 } = await window.sb
+      .from('stress_akut_eintraege')
+      .select('id, typ_id, detail, notiz, erfasst_am')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', dayStart)
+      .lte('erfasst_am', dayEnd)
+      .order('erfasst_am', { ascending: true });
+    if(e2) throw e2;
+    akutList = (aRows||[]).map(r => ({
+      id: r.id,
+      typId: r.typ_id,
+      detail: r.detail || '',
+      time: timeFromTimestamp(r.erfasst_am),
+      note: r.notiz || ''
+    }));
+  } catch(err) {
+    console.error('Stress load error:', err);
+    if(typeof showToast === 'function') showToast('Stress-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
 
 // ── INJECT UI ─────────────────────────────
 function injectUI(){
@@ -11123,11 +11213,33 @@ function injectUI(){
 }
 
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
+  injectUI();
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
   injectUI();
   renderAnker();
   renderAkut();
   updateBadge();
+  // Anker-Indikator: erfasst wenn mindestens eine Metrik > 0
+  if(typeof setAnkerStatus === 'function'){
+    const status = {};
+    ['morgen','abend'].forEach(a => {
+      const vals = Object.values(ankerData[a]||{}).filter(v=>typeof v==='number' && v>0);
+      status[a] = vals.length > 0;
+    });
+    // Mittag mappen wir nicht - der Indikator hat nur ☀/🌙
+    setAnkerStatus('stress', status);
+  }
 }
 
 const ANKER = [
@@ -11180,18 +11292,46 @@ function ankerBadge(ankerId){
   return max.toString();
 }
 
-function setMetric(ankerId, metricId, val){
-  if(ankerData[ankerId][metricId] === val){
+async function setMetric(ankerId, metricId, val){
+  const wasEqual = ankerData[ankerId][metricId] === val;
+  if(wasEqual){
     delete ankerData[ankerId][metricId];
   } else {
     ankerData[ankerId][metricId] = val;
   }
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(wasEqual){
+      const { error } = await window.sb
+        .from('stress_metric_values')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('metrik_id', metricId)
+        .eq('tagesdatum', iso)
+        .eq('anker', ankerId);
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('stress_metric_values')
+        .upsert({
+          user_id: window.sbUser.id,
+          metrik_id: metricId,
+          tagesdatum: iso,
+          anker: ankerId,
+          wert: val
+        }, { onConflict: 'user_id,metrik_id,tagesdatum,anker' });
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 function toggleAnker(ankerId){
   ankerOpen[ankerId] = !ankerOpen[ankerId];
-  render();
+  renderUI();
 }
 
 // ── AKUT-SIGNALE ──────────────────────────
@@ -11223,23 +11363,50 @@ function openNewType(){
   },50);
 }
 
-function saveNewType(){
+async function saveNewType(){
   const emoji = document.getElementById('stress-m-new-type-emoji').value.trim();
   const name  = document.getElementById('stress-m-new-type-name').value.trim();
   if(!name){ showToast('Name fehlt'); return; }
   if(!emoji){ showToast('Emoji fehlt'); return; }
-  const id = 't_'+uid();
-  AKUT_TYPES[id] = { icon:emoji, label:name };
-  akutTypeOrder.push(id);
-  currentAkutType = id;
-  closeModal('stress-m-new-type');
-  renderTypeChips();
-  showToast(`${emoji} ${name} ✓`);
+  if(!window.sbUser){
+    const id = 't_'+uid();
+    AKUT_TYPES[id] = { icon:emoji, label:name };
+    akutTypeOrder.push(id);
+    currentAkutType = id;
+    closeModal('stress-m-new-type');
+    renderTypeChips();
+    showToast(`${emoji} ${name} ✓`);
+    return;
+  }
+  try {
+    const sortMax = akutTypeOrder.reduce((m,id)=>Math.max(m, 0), 0) + 10*akutTypeOrder.length;
+    const { data, error } = await window.sb
+      .from('stress_akut_typen')
+      .insert({
+        user_id: window.sbUser.id,
+        name,
+        emoji,
+        aktiv: true,
+        sortierung: sortMax + 10
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    AKUT_TYPES[data.id] = { icon:emoji, label:name };
+    akutTypeOrder.push(data.id);
+    currentAkutType = data.id;
+    closeModal('stress-m-new-type');
+    renderTypeChips();
+    showToast(`${emoji} ${name} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function openAkut(){
   editingAkutId = null;
-  currentAkutType = akutTypeOrder[0] || 'muskelzucken';
+  currentAkutType = akutTypeOrder[0] || null;
+  if(!currentAkutType){ showToast('Erst einen Typ anlegen'); return; }
   document.getElementById('stress-m-akut-title').textContent = 'Akut-Signal erfassen';
   document.getElementById('stress-m-akut-detail').value = '';
   document.getElementById('stress-m-akut-time').value = nowTime();
@@ -11252,7 +11419,7 @@ function openEditAkut(id){
   const a = akutList.find(x=>x.id===id);
   if(!a) return;
   editingAkutId = id;
-  currentAkutType = AKUT_TYPES[a.type] ? a.type : akutTypeOrder[0];
+  currentAkutType = AKUT_TYPES[a.typId] ? a.typId : akutTypeOrder[0];
   document.getElementById('stress-m-akut-title').textContent = 'Akut-Signal bearbeiten';
   document.getElementById('stress-m-akut-detail').value = a.detail||'';
   document.getElementById('stress-m-akut-time').value = a.time;
@@ -11261,30 +11428,80 @@ function openEditAkut(id){
   openModal('stress-m-akut');
 }
 
-function saveAkut(){
-  const type    = currentAkutType;
+async function saveAkut(){
+  const typId   = currentAkutType;
   const detail  = document.getElementById('stress-m-akut-detail').value.trim();
   const time    = document.getElementById('stress-m-akut-time').value || nowTime();
   const note    = document.getElementById('stress-m-akut-note').value.trim();
 
-  if(!AKUT_TYPES[type]){ showToast('Bitte Art wählen'); return; }
+  if(!AKUT_TYPES[typId]){ showToast('Bitte Art wählen'); return; }
 
-  if(editingAkutId){
-    const a = akutList.find(x=>x.id===editingAkutId);
-    if(a){ a.type=type; a.detail=detail; a.time=time; a.note=note; }
-    editingAkutId = null;
-  } else {
-    akutList.push({ id:uid(), type, detail, time, note });
+  const editId = editingAkutId;
+  editingAkutId = null;
+
+  if(!window.sbUser){
+    if(editId){
+      const a = akutList.find(x=>x.id===editId);
+      if(a){ a.typId=typId; a.detail=detail; a.time=time; a.note=note; }
+    } else {
+      akutList.push({ id:uid(), typId, detail, time, note });
+    }
+    akutList.sort((a,b)=>a.time.localeCompare(b.time));
+    closeModal('stress-m-akut');
+    renderUI();
+    showToast(`${AKUT_TYPES[typId].icon} ${AKUT_TYPES[typId].label} ✓`);
+    return;
   }
-  akutList.sort((a,b)=>a.time.localeCompare(b.time));
-  closeModal('stress-m-akut');
-  render();
-  showToast(`${AKUT_TYPES[type].icon} ${AKUT_TYPES[type].label} ✓`);
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    if(editId){
+      const { error } = await window.sb
+        .from('stress_akut_eintraege')
+        .update({ typ_id: typId, detail: detail || null, notiz: note || null, erfasst_am: ts })
+        .eq('id', editId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const a = akutList.find(x=>x.id===editId);
+      if(a){ a.typId=typId; a.detail=detail; a.time=time; a.note=note; }
+    } else {
+      const { data, error } = await window.sb
+        .from('stress_akut_eintraege')
+        .insert({
+          user_id: window.sbUser.id,
+          typ_id: typId,
+          detail: detail || null,
+          notiz: note || null,
+          erfasst_am: ts
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      akutList.push({ id:data.id, typId, detail, time, note });
+    }
+    akutList.sort((a,b)=>a.time.localeCompare(b.time));
+    closeModal('stress-m-akut');
+    renderUI();
+    showToast(`${AKUT_TYPES[typId].icon} ${AKUT_TYPES[typId].label} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteAkut(id){
-  akutList = akutList.filter(a=>a.id!==id);
-  render();
+async function deleteAkut(id){
+  if(!window.sbUser){ akutList = akutList.filter(a=>a.id!==id); renderUI(); return; }
+  try {
+    const { error } = await window.sb
+      .from('stress_akut_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    akutList = akutList.filter(a=>a.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function renderAkut(){
@@ -11295,7 +11512,7 @@ function renderAkut(){
     return;
   }
   el.innerHTML = akutList.map(a=>{
-    const t = AKUT_TYPES[a.type] || AKUT_TYPES.andere;
+    const t = AKUT_TYPES[a.typId] || {icon:'📌',label:'?'};
     return `<div class="spontan-entry">
       <div class="spontan-time">${a.time}${a.note?' · '+escHtml(a.note):''}</div>
       <div style="font-size:12px">${t.icon} ${t.label}${a.detail?': '+escHtml(a.detail):''}</div>
