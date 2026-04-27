@@ -6940,17 +6940,7 @@ const SCALE = [
 const ANKER = ['morgen','abend'];
 
 // ── STATE ─────────────────────────────────
-// regions: [{id, name, groups:[]}]
-let regions = [
-  {id:'hals',    name:'Hals',              groups:['morgen','abend']},
-  {id:'brust',   name:'Brust',             groups:['morgen','abend']},
-  {id:'achsel',  name:'Linke Achsel',      groups:['morgen','abend']},
-  {id:'ruecken', name:'Oberer Rücken',     groups:['morgen','abend']},
-  {id:'kopfh',   name:'Kopfhaut',          groups:['morgen','abend']},
-  {id:'gesicht', name:'Gesicht',           groups:['morgen','abend']},
-  {id:'oberarm', name:'Oberarme',          groups:['morgen','abend']},
-];
-regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+let regions = []; // wird aus DB geladen
 
 // ankerData: { morgen: { regionId: 0-5|null }, abend: {...} }
 let ankerData = { morgen:{}, abend:{} };
@@ -6966,35 +6956,159 @@ let spontanVals = {};
 function uid(){return Math.random().toString(36).slice(2,9)}
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+let regionsLoaded = false;
+async function loadRegions(){
+  if(!window.sbUser || !window.sb || regionsLoaded) return;
+  try {
+    const { data, error } = await window.sb
+      .from('entz_regionen')
+      .select('id, name, sortierung, groups')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true });
+    if(error) throw error;
+    regions = (data||[]).map(r => ({
+      id: r.id,
+      name: r.name,
+      sortierung: r.sortierung,
+      groups: Array.isArray(r.groups) ? r.groups : ['morgen','abend']
+    }));
+    regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    regionsLoaded = true;
+  } catch(err) {
+    console.error('Entz-Regionen-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Entz-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadRegions();
+  const iso = getActiveISO();
+  ankerData = { morgen:{}, abend:{} };
+  ankerComments = { morgen:'', abend:'' };
+  spontanList = [];
+  try {
+    const { data: vRows, error: e1 } = await window.sb
+      .from('entz_anker_werte')
+      .select('region_id, anker, wert')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(e1) throw e1;
+    (vRows||[]).forEach(r => {
+      if(r.wert != null) ankerData[r.anker][r.region_id] = parseFloat(r.wert);
+    });
+    const { data: kRows, error: e2 } = await window.sb
+      .from('entz_anker_kommentare')
+      .select('anker, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(e2) throw e2;
+    (kRows||[]).forEach(r => {
+      if(ankerComments[r.anker] !== undefined) ankerComments[r.anker] = r.kommentar;
+    });
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: epRows, error: e3 } = await window.sb
+      .from('entz_episoden')
+      .select('id, start_zeit, notiz, entz_episoden_regionen(region_id, wert)')
+      .eq('user_id', window.sbUser.id)
+      .gte('start_zeit', dayStart)
+      .lte('start_zeit', dayEnd)
+      .order('start_zeit', { ascending: true });
+    if(e3) throw e3;
+    spontanList = (epRows||[]).map(e => ({
+      id: e.id,
+      time: timeFromTimestamp(e.start_zeit),
+      note: e.notiz || '',
+      values: Object.fromEntries((e.entz_episoden_regionen||[]).map(r=>[r.region_id, parseFloat(r.wert)]))
+    }));
+  } catch(err) {
+    console.error('Entz load error:', err);
+    if(typeof showToast === 'function') showToast('Entz-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
-  ANKER.forEach(a=>{
-    const body=document.getElementById('entz-body-'+a);
-    const arr=document.getElementById('entz-arr-'+a);
-    if(ankerOpen[a]){
-      body.style.display='block';
-      arr.textContent='▲';
-      renderRegions(a);
-      renderCommentArea(a);
-    } else {
-      body.style.display='none';
-      arr.textContent='▼';
-    }
-    renderBadge(a);
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
+  // Anker-Indikator zuerst und unabhaengig
+  updateAnkerIndicator();
+  try {
+    ANKER.forEach(a=>{
+      const body=document.getElementById('entz-body-'+a);
+      const arr=document.getElementById('entz-arr-'+a);
+      if(!body || !arr) return;
+      if(ankerOpen[a]){
+        body.style.display='block';
+        arr.textContent='▲';
+        renderRegions(a);
+        renderCommentArea(a);
+      } else {
+        body.style.display='none';
+        arr.textContent='▼';
+      }
+      renderBadge(a);
+    });
+    renderSpontan();
+  } catch(err){
+    console.error('Entz renderUI error:', err);
+  }
+}
+
+function updateAnkerIndicator(){
+  if(typeof setAnkerStatus !== 'function') return;
+  const status = {};
+  ANKER.forEach(a => {
+    const hasVals = Object.values(ankerData[a]||{}).some(v => v != null);
+    const hasComment = !!(ankerComments[a] && ankerComments[a].trim());
+    status[a] = hasVals || hasComment;
   });
-  renderSpontan();
+  setAnkerStatus('entz', status);
 }
 
 function renderBadge(anker){
   const badge=document.getElementById('entz-badge-'+anker);
   const cbtn=document.getElementById('entz-cbtn-'+anker);
+  if(!badge) return;
   const regs=regions.filter(r=>r.groups.includes(anker));
   const filled=regs.filter(r=>ankerData[anker][r.id]!=null).length;
   const hasHigh=regs.some(r=>(ankerData[anker][r.id]||0)>=3);
   if(filled===0){badge.textContent='—';badge.className='anker-badge'}
   else if(hasHigh){badge.textContent=`${filled}/${regs.length}`;badge.className='anker-badge active'}
   else{badge.textContent=`✓ ${filled}/${regs.length}`;badge.className='anker-badge done'}
-  cbtn.classList.toggle('has-comment',!!ankerComments[anker]);
+  if(cbtn) cbtn.classList.toggle('has-comment',!!ankerComments[anker]);
 }
 
 
@@ -7084,27 +7198,85 @@ function renderSpontan(){
 }
 
 // ── INTERACTIONS ──────────────────────────
-function toggleAnker(id){ankerOpen[id]=!ankerOpen[id];render()}
+function toggleAnker(id){ankerOpen[id]=!ankerOpen[id];renderUI()}
 
-function setRegion(anker,regionId,val){
-  if(ankerData[anker][regionId]===val) ankerData[anker][regionId]=null;
-  else ankerData[anker][regionId]=val;
+async function setRegion(anker,regionId,val){
+  let willDelete = false;
+  if(ankerData[anker][regionId]===val){
+    ankerData[anker][regionId]=null;
+    willDelete = true;
+  } else {
+    ankerData[anker][regionId]=val;
+  }
   renderRegions(anker);
   renderBadge(anker);
+  updateAnkerIndicator();
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(willDelete){
+      const { error } = await window.sb
+        .from('entz_anker_werte')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('anker', anker)
+        .eq('region_id', regionId);
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('entz_anker_werte')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          anker,
+          region_id: regionId,
+          wert: val
+        }, { onConflict: 'user_id,tagesdatum,anker,region_id' });
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── COMMENTS ─────────────────────────────
 function toggleComment(anker){
   ankerCommentOpen[anker]=!ankerCommentOpen[anker];
   if(ankerCommentOpen[anker]) ankerOpen[anker]=true;
-  render();
+  renderUI();
 }
-function saveComment(anker){
+async function saveComment(anker){
   const ta=document.getElementById('ta-'+anker);
   ankerComments[anker]=ta?ta.value.trim():'';
   ankerCommentOpen[anker]=false;
   showToast(ankerComments[anker]?'Kommentar gespeichert ✓':'Kommentar entfernt');
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(ankerComments[anker]){
+      const { error } = await window.sb
+        .from('entz_anker_kommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          anker,
+          kommentar: ankerComments[anker]
+        }, { onConflict: 'user_id,tagesdatum,anker' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('entz_anker_kommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('anker', anker);
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── DELETE MODE ───────────────────────────
@@ -7154,33 +7326,82 @@ function openEditRegion(rid){
   setTimeout(()=>document.getElementById('entz-m-region-name').focus(),100);
 }
 
-function saveRegion(){
+async function saveRegion(){
   const name=document.getElementById('entz-m-region-name').value.trim();
   const groups=[...document.querySelectorAll('#entz-m-region-grps .grp-btn.sel')].map(b=>b.dataset.g);
   if(!name){showToast('Name fehlt');return}
   if(!groups.length){showToast('Mindestens einen Block wählen');return}
-  if(editRegionCtx){
-    const r=regions.find(x=>x.id===editRegionCtx.rid);
-    if(r){r.name=name;r.groups=groups;}
-    showToast(`${name} gespeichert ✓`);
-  } else {
-    if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
-    regions.push({id:uid(),name,groups});
-    regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
-    showToast(`${name} hinzugefügt`);
+  if(!window.sbUser){
+    if(editRegionCtx){
+      const r=regions.find(x=>x.id===editRegionCtx.rid);
+      if(r){r.name=name;r.groups=groups;}
+      showToast(`${name} gespeichert ✓`);
+    } else {
+      if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
+      regions.push({id:uid(),name,groups});
+      regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+      showToast(`${name} hinzugefügt`);
+    }
+    editRegionCtx=null;closeModal('entz-m-region');renderUI();
+    return;
   }
-  editRegionCtx=null;
-  closeModal('entz-m-region');
-  render();
+  try {
+    if(editRegionCtx){
+      const rid = editRegionCtx.rid;
+      const { error } = await window.sb
+        .from('entz_regionen')
+        .update({ name, groups })
+        .eq('id', rid).eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const r=regions.find(x=>x.id===rid);
+      if(r){r.name=name;r.groups=groups;}
+      showToast(`${name} gespeichert ✓`);
+    } else {
+      if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){
+        showToast('Bereits vorhanden');return;
+      }
+      const sortMax = regions.reduce((m,x)=>Math.max(m, x.sortierung||0), 0);
+      const { data, error } = await window.sb
+        .from('entz_regionen')
+        .insert({
+          user_id: window.sbUser.id, name, groups,
+          aktiv: true, sortierung: sortMax + 10
+        })
+        .select().single();
+      if(error) throw error;
+      regions.push({id:data.id, name, groups, sortierung: data.sortierung});
+      showToast(`${name} hinzugefügt`);
+    }
+    regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    editRegionCtx=null;closeModal('entz-m-region');renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteRegion(rid){
+async function deleteRegion(rid){
   const r=regions.find(x=>x.id===rid);
-  regions=regions.filter(x=>x.id!==rid);
-  ANKER.forEach(a=>delete ankerData[a][rid]);
-  showToast(`${r?.name} entfernt`);
-  renderMgrChips();
-  render();
+  if(!confirm(`"${r?.name}" wirklich entfernen? Bisherige Werte bleiben in der Datenbank.`)) return;
+  if(!window.sbUser){
+    regions=regions.filter(x=>x.id!==rid);
+    ANKER.forEach(a=>delete ankerData[a][rid]);
+    showToast(`${r?.name} entfernt`);
+    renderMgrChips();renderUI();
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('entz_regionen')
+      .update({ aktiv: false })
+      .eq('id', rid).eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    regions=regions.filter(x=>x.id!==rid);
+    ANKER.forEach(a=>delete ankerData[a][rid]);
+    showToast(`${r?.name} entfernt`);
+    renderMgrChips();renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── SPONTAN ───────────────────────────────
@@ -7226,20 +7447,70 @@ function setSpontanRegion(rid,val,btn){
   } else if(vspan) vspan.remove();
 }
 
-function saveSpontan(){
+async function saveSpontan(){
   const time=document.getElementById('entz-m-spontan-time').value;
   const note=document.getElementById('entz-m-spontan-note').value.trim();
   if(!Object.keys(spontanVals).length){showToast('Mindestens eine Region wählen');return}
-  spontanList.push({id:uid(),time,note,values:{...spontanVals}});
-  spontanList.sort((a,b)=>a.time.localeCompare(b.time));
-  closeModal('entz-m-spontan');
-  render();
-  showToast(`Befund ${time} gespeichert ✓`);
+  const valuesCopy = {...spontanVals};
+  if(!window.sbUser){
+    spontanList.push({id:uid(),time,note,values:valuesCopy});
+    spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+    closeModal('entz-m-spontan');
+    renderUI();
+    showToast(`Befund ${time} gespeichert ✓`);
+    return;
+  }
+  const iso = getActiveISO();
+  const startTs = timestampFromTime(time, iso);
+  try {
+    const { data: ep, error: e1 } = await window.sb
+      .from('entz_episoden')
+      .insert({
+        user_id: window.sbUser.id,
+        start_zeit: startTs,
+        notiz: note || null
+      })
+      .select().single();
+    if(e1) throw e1;
+    const rows = Object.entries(valuesCopy).map(([rid, val]) => ({
+      episode_id: ep.id,
+      region_id: rid,
+      wert: val
+    }));
+    if(rows.length){
+      const { error: e2 } = await window.sb
+        .from('entz_episoden_regionen').insert(rows);
+      if(e2) throw e2;
+    }
+    spontanList.push({id:ep.id, time, note, values:valuesCopy});
+    spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+    closeModal('entz-m-spontan');
+    renderUI();
+    showToast(`Befund ${time} gespeichert ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function delSpontan(id){
-  spontanList=spontanList.filter(e=>e.id!==id);
-  render();
+async function delSpontan(id){
+  if(!window.sbUser){
+    spontanList=spontanList.filter(e=>e.id!==id);
+    renderUI();
+    return;
+  }
+  try {
+    // Cascade-Delete via FK
+    const { error } = await window.sb
+      .from('entz_episoden')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    spontanList=spontanList.filter(e=>e.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── MODALS ────────────────────────────────
