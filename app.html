@@ -62,9 +62,9 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .section-badge.partial{background:var(--gold);color:#f5f0e8}
 .section-chevron{font-size:10px;color:var(--muted);transition:transform .2s;flex-shrink:0}
 .section-chevron.open{transform:rotate(180deg)}
-.anker-marks{display:inline-flex;gap:5px;align-items:center;margin-right:6px}
-.anker-mark{font-size:13px;line-height:1;color:var(--muted);opacity:.55;filter:grayscale(1);transition:all .15s}
-.anker-mark.filled{opacity:1;filter:none}
+.anker-marks{display:inline-flex;gap:4px;align-items:center;margin-right:8px}
+.anker-mark{font-size:11px;line-height:1;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .15s;filter:grayscale(1) opacity(.55)}
+.anker-mark.filled{background:color-mix(in srgb,var(--accent2) 25%,var(--surface2));border-color:var(--accent2);filter:none;color:var(--text)}
 .section-body{padding:14px 16px}
 
 /* ── STACK CARD ─────────────────────────── */
@@ -834,6 +834,10 @@ window.sbUser = null;
       <span class="section-badge" id="badge-schmerz">—</span>
     </div>
     <div class="section-right">
+      <span class="anker-marks" id="anker-schmerz">
+        <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
+      </span>
       <span class="section-chevron" id="chev-schmerz">▼</span>
     </div>
   </div>
