@@ -62,6 +62,9 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospa
 .section-badge.partial{background:var(--gold);color:#f5f0e8}
 .section-chevron{font-size:10px;color:var(--muted);transition:transform .2s;flex-shrink:0}
 .section-chevron.open{transform:rotate(180deg)}
+.anker-marks{display:inline-flex;gap:4px;align-items:center;margin-right:6px}
+.anker-mark{font-size:11px;line-height:1;opacity:.25;transition:opacity .15s}
+.anker-mark.filled{opacity:1}
 .section-body{padding:14px 16px}
 
 /* ── STACK CARD ─────────────────────────── */
@@ -742,6 +745,10 @@ window.sbUser = null;
       <span class="section-badge" id="badge-bef">—</span>
     </div>
     <div class="section-right">
+      <span class="anker-marks" id="anker-bef">
+        <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
+      </span>
       <span class="section-chevron" id="chev-bef">▼</span>
     </div>
   </div>
@@ -912,6 +919,10 @@ window.sbUser = null;
       <span class="section-badge" id="badge-fam">—</span>
     </div>
     <div class="section-right">
+      <span class="anker-marks" id="anker-fam">
+        <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
+      </span>
       <span class="section-chevron" id="chev-fam">▼</span>
     </div>
   </div>
@@ -1225,6 +1236,18 @@ function rerenderAllModulesForDate(){
   ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+' rerender:',e.message);}
+  });
+}
+
+// Anker-Status-Indikator setzen (☀️/🌙 in Section-Header)
+// modulKey: 'bef', 'fam', etc.
+// status: { morgen: bool, abend: bool } - true wenn Eintrag fuer den Anker existiert
+function setAnkerStatus(modulKey, status){
+  const el = document.getElementById('anker-'+modulKey);
+  if(!el) return;
+  el.querySelectorAll('.anker-mark').forEach(function(m){
+    const anker = m.dataset.anker;
+    m.classList.toggle('filled', !!status[anker]);
   });
 }
 
@@ -4458,6 +4481,18 @@ function renderUI(){
     renderBadge(anker);
   });
   renderSpontan();
+
+  // Anker-Indikator im Section-Header: ein Anker gilt als "erfasst"
+  // wenn mindestens ein Metrik-Wert ODER ein Kommentar vorhanden ist
+  if(typeof setAnkerStatus === 'function'){
+    const status = {};
+    ['morgen','abend'].forEach(a => {
+      const hasValues = Object.values(ankerData[a]||{}).some(v => v != null);
+      const hasComment = !!(ankerComments[a] && ankerComments[a].trim());
+      status[a] = hasValues || hasComment;
+    });
+    setAnkerStatus('bef', status);
+  }
 }
 
 function renderBadge(anker){
@@ -8774,17 +8809,12 @@ function renderUI(){
 
 // ── EDIT-FUNKTIONEN ──────────────────────
 function openEditTemp(id){
-  console.log('[messw] openEditTemp called with id:', id);
-  console.log('[messw] tempEntries:', tempEntries);
   const e = tempEntries.find(x=>x.id===id);
-  if(!e){ console.warn('[messw] entry not found'); return; }
-  console.log('[messw] entry found:', e);
+  if(!e) return;
   document.getElementById('messw-m-edit-temp-val').value = String(e.temp).replace('.',',');
   document.getElementById('messw-m-edit-temp-time').value = e.time;
   document.getElementById('messw-m-edit-temp-val').dataset.eid = id;
-  console.log('[messw] calling openModal');
   openModal('messw-m-edit-temp');
-  console.log('[messw] openModal returned');
 }
 async function saveEditTemp(){
   const valEl = document.getElementById('messw-m-edit-temp-val');
@@ -9097,6 +9127,16 @@ function renderFamUI(){
       btns.forEach((b,i)=>{ b.className='stim-btn'; if(i===idx) b.className='stim-btn sel-'+sel; });
     }
   });
+
+  // Anker-Indikator: erfasst wenn Stimmung ODER Kommentar
+  if(typeof setAnkerStatus === 'function'){
+    const status = {};
+    ['morgen','abend'].forEach(a => {
+      const d = famData[a] || {};
+      status[a] = !!(d.stimmung || (d.kommentar && d.kommentar.trim()));
+    });
+    setAnkerStatus('fam', status);
+  }
 }
 
 function toggleFamComment(anker){
