@@ -728,6 +728,10 @@ window.sbUser = null;
       <span class="section-badge" id="badge-supp">—</span>
     </div>
     <div class="section-right">
+      <span class="anker-marks" id="anker-supp">
+        <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
+      </span>
       <span class="section-chevron open" id="chev-supp">▼</span>
     </div>
   </div>
@@ -745,6 +749,10 @@ window.sbUser = null;
       <span class="section-badge" id="badge-haut">—</span>
     </div>
     <div class="section-right">
+      <span class="anker-marks" id="anker-haut">
+        <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
+      </span>
       <span class="section-chevron" id="chev-haut">▼</span>
     </div>
   </div>
@@ -804,6 +812,10 @@ window.sbUser = null;
       <span class="section-badge" id="badge-entz">—</span>
     </div>
     <div class="section-right">
+      <span class="anker-marks" id="anker-entz">
+        <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
+      </span>
       <span class="section-chevron" id="chev-entz">▼</span>
     </div>
   </div>
@@ -4012,6 +4024,14 @@ function render(){
 
 function renderUI(){
   document.getElementById('supp-stacks').innerHTML=STACKS.map(renderStack).join('');
+  // Anker-Indikator: Morgen-Stack + Abend-Stack (Mittag/Schlaf werden nicht angezeigt)
+  // "Erfasst" = mindestens ein Supplement in dem Stack heute "taken"
+  if(typeof setAnkerStatus === 'function'){
+    setAnkerStatus('supp', {
+      morgen: takenCount('morgen') > 0,
+      abend:  takenCount('abend')  > 0
+    });
+  }
 }
 
 function renderStack(stk){
