@@ -2871,19 +2871,13 @@ function deleteUnit(unitId) {
 // STATE
 // ═══════════════════════════════════════════
 
-// Persisted med list: [{id, name, unit, defaultDose}]
-let medList = [
-  { id: 'med-ibu',  name: 'Ibuprofen',     unit: 'mg',   defaultDose: 400,  stacks: [] },
-  { id: 'med-levo', name: 'Levocetirizin', unit: 'Kps.', defaultDose: 1,    stacks: [] },
-  { id: 'med-nasa', name: 'Nasenspray',    unit: 'Hübe', defaultDose: 2,    stacks: [], subOptions: ['Links', 'Rechts', 'Beide'] },
-] || [
-  { id: 'levo',  name: 'Levocetirizin', unit: 'mg',   defaultDose: 5,   intervalDays: null, lastUsed: null },
-  { id: 'ibup',  name: 'Ibuprofen',     unit: 'mg',   defaultDose: 400, intervalDays: null, lastUsed: null },
-  { id: 'nasen', name: 'Nasenspray',    unit: 'Hübe', defaultDose: 2,   intervalDays: null, lastUsed: null },
-];
+// Persisted med list: [{id, name, unit, defaultDose, subOptions}]
+// Wird aus DB geladen, leerer Default
+let medList = [];
 
-// Session entries: [{id, medId, name, dose, unit, time}]
+// Session entries: [{id, medId, name, dose, unit, time, comment, subOption}]
 let medEntries = [];
+let medComment = '';
 
 // Delete mode
 let deleteMode = false;
@@ -2909,12 +2903,161 @@ function uid() {
 }
 
 // ═══════════════════════════════════════════
+// DB HELPERS
+// ═══════════════════════════════════════════
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+let medListLoaded = false;
+async function loadMedList(){
+  if(!window.sbUser || !window.sb || medListLoaded) return;
+  try {
+    const { data, error } = await window.sb
+      .from('medikamente')
+      .select('id, name, dosis_einheit_label, standard_dosis, sortierung, medikament_sub_optionen(id, label, sortierung)')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true })
+      .order('name', { ascending: true });
+    if(error) throw error;
+    medList = (data||[]).map(m => ({
+      id: m.id,
+      name: m.name,
+      unit: m.dosis_einheit_label || 'mg',
+      defaultDose: m.standard_dosis ? parseFloat(m.standard_dosis) : null,
+      sortierung: m.sortierung,
+      subOptions: (m.medikament_sub_optionen||[])
+        .sort((a,b)=>(a.sortierung||0)-(b.sortierung||0))
+        .map(s => s.label)
+    }));
+    sortMedList();
+    medListLoaded = true;
+  } catch(err) {
+    console.error('Med-Stammdaten-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Med-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadMedList();
+  const iso = getActiveISO();
+  medEntries = [];
+  medComment = '';
+  try {
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: eRows, error: e1 } = await window.sb
+      .from('med_einnahmen')
+      .select('id, medikament_id, sub_option_id, erfasst_am, dosis, einheit_label, notiz')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', dayStart)
+      .lte('erfasst_am', dayEnd)
+      .order('erfasst_am', { ascending: true });
+    if(e1) throw e1;
+    // Sub-Optionen muessen wir auflösen — Map id->label (aus medList nicht direkt verfuegbar pro id)
+    // Daher Sub-Options separat laden
+    const subIds = [...new Set((eRows||[]).map(r => r.sub_option_id).filter(Boolean))];
+    let subMap = {};
+    if(subIds.length){
+      const { data: subRows } = await window.sb
+        .from('medikament_sub_optionen')
+        .select('id, label')
+        .in('id', subIds);
+      (subRows||[]).forEach(s => { subMap[s.id] = s.label; });
+    }
+    medEntries = (eRows||[]).map(r => {
+      const m = medList.find(x=>x.id===r.medikament_id);
+      return {
+        id: r.id,
+        medId: r.medikament_id,
+        name: m?.name || '?',
+        dose: r.dosis ? parseFloat(r.dosis) : null,
+        unit: r.einheit_label || m?.unit || '',
+        time: timeFromTimestamp(r.erfasst_am),
+        comment: r.notiz || '',
+        subOption: subMap[r.sub_option_id] || ''
+      };
+    });
+    const { data: kRow } = await window.sb
+      .from('tageskommentare')
+      .select('kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('modul', 'med')
+      .eq('tagesdatum', iso)
+      .maybeSingle();
+    medComment = kRow?.kommentar || '';
+  } catch(err) {
+    console.error('Med load error:', err);
+    if(typeof showToast === 'function') showToast('Med-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
+// Sub-Option-ID fuer ein label finden (geht nicht ueber medList, weil die nur labels speichert)
+async function findSubOptionId(medId, label){
+  if(!label || !window.sbUser) return null;
+  try {
+    const { data, error } = await window.sb
+      .from('medikament_sub_optionen')
+      .select('id')
+      .eq('medikament_id', medId)
+      .eq('label', label)
+      .maybeSingle();
+    if(error) throw error;
+    return data?.id || null;
+  } catch(err) {
+    console.error('SubOption-Lookup Fehler:', err);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════
 
+let lastLoadedISO = null;
 function render() {
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI() {
   renderMedListChips();
   renderMedEntryChips();
+  // Tageskommentar in Preview anzeigen
+  const preview = document.getElementById('med-comment-preview');
+  const btn = document.getElementById('med-comment-btn');
+  if(preview && btn){
+    if(medComment && !medCommentOpen){
+      preview.textContent = medComment;
+      preview.style.display = 'block';
+    } else {
+      preview.style.display = 'none';
+    }
+    btn.classList.toggle('has-comment', !!medComment);
+  }
 }
 
 function renderMedListChips() {
@@ -3010,21 +3153,55 @@ function toggleDeleteMode() {
   render();
 }
 
-function deleteMed(id) {
+async function deleteMed(id) {
   const med = medList.find(m => m.id === id);
-  medList = medList.filter(m => m.id !== id);
-  saveMedList();
-  render();
-  showToast(`${med?.name} entfernt`);
-  // Auto-exit delete mode if list empty
-  if (!medList.length) toggleDeleteMode();
+  if(!med) return;
+  if(!confirm(`"${med.name}" wirklich entfernen? Bisherige Einnahmen bleiben in der Datenbank.`)) return;
+  if(!window.sbUser){
+    medList = medList.filter(m => m.id !== id);
+    saveMedList();
+    renderUI();
+    showToast(`${med.name} entfernt`);
+    if (!medList.length) toggleDeleteMode();
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('medikamente')
+      .update({ aktiv: false })
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    medList = medList.filter(m => m.id !== id);
+    renderUI();
+    showToast(`${med.name} entfernt`);
+    if (!medList.length) toggleDeleteMode();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteEntry(id) {
+async function deleteEntry(id) {
   const entry = medEntries.find(e => e.id === id);
-  medEntries = medEntries.filter(e => e.id !== id);
-  render();
-  showToast(`Einnahme ${entry?.name} gelöscht`);
+  if(!window.sbUser){
+    medEntries = medEntries.filter(e => e.id !== id);
+    renderUI();
+    showToast(`Einnahme ${entry?.name} gelöscht`);
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('med_einnahmen')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    medEntries = medEntries.filter(e => e.id !== id);
+    renderUI();
+    showToast(`Einnahme ${entry?.name} gelöscht`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -3087,7 +3264,7 @@ function selectDosePreset(inputId, val, btn) {
   btn.classList.add('selected');
 }
 
-function saveMed() {
+async function saveMed() {
   const name = document.getElementById('med-new-med-name').value.trim();
   const unit = document.getElementById('med-new-med-unit').value;
   const dose = parseFloat(document.getElementById('med-new-med-dose').value) || null;
@@ -3096,13 +3273,44 @@ function saveMed() {
   if (medList.find(m => m.name.toLowerCase() === name.toLowerCase())) {
     showToast('Medikament bereits vorhanden'); return;
   }
-
-  medList.push({ id: uid(), name, unit, defaultDose: dose });
-  sortMedList();
-  saveMedList();
-  closeModal('med-modal-new-med');
-  render();
-  showToast(`${name} hinzugefügt`);
+  if(!window.sbUser){
+    medList.push({ id: uid(), name, unit, defaultDose: dose, subOptions: [] });
+    sortMedList();
+    closeModal('med-modal-new-med');
+    renderUI();
+    showToast(`${name} hinzugefügt`);
+    return;
+  }
+  try {
+    const sortMax = medList.reduce((m,x)=>Math.max(m, x.sortierung||0), 0);
+    const { data, error } = await window.sb
+      .from('medikamente')
+      .insert({
+        user_id: window.sbUser.id,
+        name,
+        dosis_einheit_label: unit,
+        standard_dosis: dose,
+        aktiv: true,
+        sortierung: sortMax + 10
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    medList.push({
+      id: data.id,
+      name: data.name,
+      unit: data.dosis_einheit_label || unit,
+      defaultDose: data.standard_dosis ? parseFloat(data.standard_dosis) : null,
+      sortierung: data.sortierung,
+      subOptions: []
+    });
+    sortMedList();
+    closeModal('med-modal-new-med');
+    renderUI();
+    showToast(`${name} hinzugefügt`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -3110,26 +3318,76 @@ function saveMed() {
 // ═══════════════════════════════════════════
 
 // ── QUICK TAKE (kurzer Tap auf Listen-Chip) ──
-function quickTake(medId) {
+async function quickTake(medId) {
   const med = medList.find(m => m.id === medId);
   if (!med) return;
-  const now = new Date();
-  const t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-  medEntries.push({ id: uid(), medId: med.id, name: med.name, dose: med.defaultDose, unit: med.unit, time: t, comment: '' });
-  render();
-  const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
-  showToast(`${med.name}${doseStr} um ${t} ✓`);
+  const t = nowTime();
+  if(!window.sbUser){
+    medEntries.push({ id: uid(), medId: med.id, name: med.name, dose: med.defaultDose, unit: med.unit, time: t, comment: '' });
+    renderUI();
+    const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
+    showToast(`${med.name}${doseStr} um ${t} ✓`);
+    return;
+  }
+  const iso = getActiveISO();
+  const ts = timestampFromTime(t, iso);
+  try {
+    const { data, error } = await window.sb
+      .from('med_einnahmen')
+      .insert({
+        user_id: window.sbUser.id,
+        medikament_id: med.id,
+        erfasst_am: ts,
+        dosis: med.defaultDose,
+        einheit_label: med.unit
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    medEntries.push({ id: data.id, medId: med.id, name: med.name, dose: med.defaultDose, unit: med.unit, time: t, comment: '' });
+    renderUI();
+    const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
+    showToast(`${med.name}${doseStr} um ${t} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function quickTakeSub(medId, subOption) {
+async function quickTakeSub(medId, subOption) {
   const med = medList.find(m => m.id === medId);
   if (!med) return;
-  const now = new Date();
-  const t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-  medEntries.push({ id: uid(), medId: med.id, name: med.name, dose: med.defaultDose, unit: med.unit, time: t, comment: '', subOption });
-  render();
-  const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
-  showToast(`${med.name} ${subOption}${doseStr} um ${t} ✓`);
+  const t = nowTime();
+  if(!window.sbUser){
+    medEntries.push({ id: uid(), medId: med.id, name: med.name, dose: med.defaultDose, unit: med.unit, time: t, comment: '', subOption });
+    renderUI();
+    const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
+    showToast(`${med.name} ${subOption}${doseStr} um ${t} ✓`);
+    return;
+  }
+  const subId = await findSubOptionId(med.id, subOption);
+  const iso = getActiveISO();
+  const ts = timestampFromTime(t, iso);
+  try {
+    const { data, error } = await window.sb
+      .from('med_einnahmen')
+      .insert({
+        user_id: window.sbUser.id,
+        medikament_id: med.id,
+        sub_option_id: subId,
+        erfasst_am: ts,
+        dosis: med.defaultDose,
+        einheit_label: med.unit
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    medEntries.push({ id: data.id, medId: med.id, name: med.name, dose: med.defaultDose, unit: med.unit, time: t, comment: '', subOption });
+    renderUI();
+    const doseStr = med.defaultDose ? ` · ${med.defaultDose}${med.unit}` : '';
+    showToast(`${med.name} ${subOption}${doseStr} um ${t} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function openTake(medId) {
@@ -3158,13 +3416,14 @@ function updateTakeDoseQuick() {
   ).join('');
 }
 
-function confirmTake() {
+async function confirmTake() {
   if (!takeCtx) return;
   const dose = parseFloat(document.getElementById('med-take-dose-input').value) || null;
   const unit = document.getElementById('med-take-unit-input').value;
   const time = document.getElementById('med-take-time-input').value || nowTime();
   const commentEl = document.getElementById('med-take-comment');
   const comment = commentEl ? commentEl.value.trim() : '';
+  const subOption = window._medSubOption || '';
 
   if (takeCtx.editId) {
     const idx = medEntries.findIndex(e => e.id === takeCtx.editId);
@@ -3173,20 +3432,73 @@ function confirmTake() {
       medEntries[idx].unit = unit;
       medEntries[idx].time = time;
       medEntries[idx].comment = comment;
-      medEntries[idx].subOption = window._medSubOption || medEntries[idx].subOption || '';
+      medEntries[idx].subOption = subOption || medEntries[idx].subOption || '';
     }
+    const editId = takeCtx.editId;
+    const medId = medEntries[idx]?.medId;
     closeModal('med-modal-take-med');
     takeCtx = null;
-    render();
+    renderUI();
     showToast('Einnahme aktualisiert ✓');
+    if(window.sbUser){
+      const iso = getActiveISO();
+      const ts = timestampFromTime(time, iso);
+      try {
+        const subId = (subOption && medId) ? await findSubOptionId(medId, subOption) : null;
+        const { error } = await window.sb
+          .from('med_einnahmen')
+          .update({
+            dosis: dose,
+            einheit_label: unit,
+            erfasst_am: ts,
+            notiz: comment || null,
+            sub_option_id: subId
+          })
+          .eq('id', editId)
+          .eq('user_id', window.sbUser.id);
+        if(error) throw error;
+      } catch(err) {
+        showToast('DB-Fehler: ' + err.message);
+      }
+    }
   } else {
     const { med } = takeCtx;
-    medEntries.push({ id: uid(), medId: med.id, name: med.name, dose, comment: comment || '', unit, time, subOption: window._medSubOption || '' });
-    closeModal('med-modal-take-med');
-    takeCtx = null;
-    render();
-    const doseStr = dose ? ` · ${dose}${unit}` : '';
-    showToast(`${med.name}${doseStr} um ${time} ✓`);
+    if(!window.sbUser){
+      medEntries.push({ id: uid(), medId: med.id, name: med.name, dose, comment, unit, time, subOption });
+      closeModal('med-modal-take-med');
+      takeCtx = null;
+      renderUI();
+      const doseStr = dose ? ` · ${dose}${unit}` : '';
+      showToast(`${med.name}${doseStr} um ${time} ✓`);
+      return;
+    }
+    const iso = getActiveISO();
+    const ts = timestampFromTime(time, iso);
+    try {
+      const subId = subOption ? await findSubOptionId(med.id, subOption) : null;
+      const { data, error } = await window.sb
+        .from('med_einnahmen')
+        .insert({
+          user_id: window.sbUser.id,
+          medikament_id: med.id,
+          sub_option_id: subId,
+          erfasst_am: ts,
+          dosis: dose,
+          einheit_label: unit,
+          notiz: comment || null
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      medEntries.push({ id: data.id, medId: med.id, name: med.name, dose, comment, unit, time, subOption });
+      closeModal('med-modal-take-med');
+      takeCtx = null;
+      renderUI();
+      const doseStr = dose ? ` · ${dose}${unit}` : '';
+      showToast(`${med.name}${doseStr} um ${time} ✓`);
+    } catch(err) {
+      showToast('Fehler: ' + err.message);
+    }
   }
 }
 
@@ -3284,28 +3596,39 @@ function updateEditMedQuick(){
   ).join('');
 }
 
-function saveEditMed(){
+async function saveEditMed(){
   if(!editMedCtx) return;
   const med = medList.find(m => m.id === editMedCtx.medId);
   if(!med) return;
   const name = document.getElementById('med-edit-med-name').value.trim();
   const unit = document.getElementById('med-edit-med-unit').value;
   const dose = parseFloat(document.getElementById('med-edit-med-dose').value) || null;
-  const intervalOn = document.getElementById('med-edit-med-interval-on').checked;
-  const intervalDays = intervalOn ? parseInt(document.getElementById('med-edit-med-interval-days').value) || null : null;
   if(!name){ showToast('Name fehlt'); return; }
   med.name = name; med.unit = unit; med.defaultDose = dose;
-  med.intervalDays = intervalDays;
+  // Update entries cache (icon/name)
+  medEntries.forEach(e => { if(e.medId===med.id){ e.name = name; e.unit = unit; }});
   sortMedList();
+  const medId = editMedCtx.medId;
   editMedCtx = null;
   closeModal('med-modal-edit-med');
   showToast(`${name} gespeichert ✓`);
-  render();
+  renderUI();
+  if(window.sbUser){
+    try {
+      const { error } = await window.sb
+        .from('medikamente')
+        .update({ name, dosis_einheit_label: unit, standard_dosis: dose })
+        .eq('id', medId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
 // ── KOMMENTARE ─────────────────────────────────────────────
 
-let medComment = '';
 let medCommentOpen = false;
 
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -3335,7 +3658,7 @@ function toggleMedComment(){
   btn.classList.toggle('has-comment', !!medComment);
 }
 
-function saveMedComment(){
+async function saveMedComment(){
   const val = document.getElementById('med-comment-text').value.trim();
   medComment = val;
   medCommentOpen = false;
@@ -3347,10 +3670,38 @@ function saveMedComment(){
   if(medComment){
     preview.textContent = medComment;
     preview.style.display = 'block';
-    showToast('Kommentar gespeichert ✓');
   } else {
     preview.style.display = 'none';
-    showToast('Kommentar entfernt');
+  }
+  if(!window.sbUser){
+    showToast(medComment ? 'Kommentar gespeichert ✓' : 'Kommentar entfernt');
+    return;
+  }
+  const iso = getActiveISO();
+  try {
+    if(medComment){
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          modul: 'med',
+          tagesdatum: iso,
+          kommentar: medComment
+        }, { onConflict: 'user_id,modul,tagesdatum' });
+      if(error) throw error;
+      showToast('Kommentar gespeichert ✓');
+    } else {
+      const { error } = await window.sb
+        .from('tageskommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('modul', 'med')
+        .eq('tagesdatum', iso);
+      if(error) throw error;
+      showToast('Kommentar entfernt');
+    }
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
   }
 }
 
