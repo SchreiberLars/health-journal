@@ -5553,27 +5553,10 @@ const BW_COLOR = { gut:'color-mix(in srgb,#27ae60 15%,var(--surface))', unklar:'
 const BW_BORDER = { gut:'#27ae60', unklar:'var(--gold)', schlecht:'var(--delete)' };
 
 // ── TAGS ─────────────────────────────────
-let tags = [
-  {id:'tee',        emoji:'🍵', name:'Tee'},
-  {id:'aufguss',    emoji:'🌿', name:'Aufguss'},
-  {id:'koffein',    emoji:'☕', name:'Koffein'},
-  {id:'alkohol',    emoji:'🍺', name:'Alkohol'},
-  {id:'zucker',     emoji:'🍬', name:'Zucker'},
-  {id:'fermentiert',emoji:'🧫', name:'Fermentiert'},
-];
+let tags = []; // wird aus DB geladen
 
 // ── GETRÄNKE ──────────────────────────────
-let getraenke = [
-  {id:'wasser',   name:'Wasser',      ml:300, tags:[],              bewertung:'gut'},
-  {id:'kaffee',   name:'Kaffee',      ml:250, tags:['koffein'],     bewertung:'unklar'},
-  {id:'oolong',   name:'Oolong',      ml:120, tags:['tee'],         bewertung:'gut'},
-  {id:'gruentee', name:'Grüntee',     ml:250, tags:['tee'],         bewertung:'gut'},
-  {id:'kamille',  name:'Kamillentee', ml:250, tags:['aufguss'],     bewertung:'gut'},
-  {id:'kombucha', name:'Kombucha',    ml:250, tags:['fermentiert'], bewertung:'unklar'},
-  {id:'bier',     name:'Bier',        ml:500, tags:['alkohol'],     bewertung:'schlecht'},
-  {id:'redbull',  name:'Red Bull',    ml:250, tags:['koffein','zucker'], bewertung:'schlecht'},
-];
-getraenke.sort((a,b)=>a.name.localeCompare(b.name,'de')||a.ml-b.ml);
+let getraenke = []; // wird aus DB geladen
 
 let entries = [];
 let delMode = false;
@@ -5590,6 +5573,99 @@ function nowTime(){
 }
 function tagById(id){return tags.find(t=>t.id===id)}
 
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+let stammdatenLoaded = false;
+async function loadStammdaten(){
+  if(!window.sbUser || !window.sb || stammdatenLoaded) return;
+  try {
+    // Tags
+    const { data: tagRows, error: tagErr } = await window.sb
+      .from('get_tags')
+      .select('id, name, emoji, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .order('sortierung', { ascending: true });
+    if(tagErr) throw tagErr;
+    tags = (tagRows||[]).map(t => ({ id: t.id, name: t.name, emoji: t.emoji || '🏷' }));
+
+    // Sorten + ihre Tag-Verknuepfungen
+    const { data: sortenRows, error: sErr } = await window.sb
+      .from('get_sorten')
+      .select('id, name, standard_menge_ml, bewertung, sortierung, get_sorte_tag(tag_id)')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true })
+      .order('name', { ascending: true });
+    if(sErr) throw sErr;
+    getraenke = (sortenRows||[]).map(s => ({
+      id: s.id,
+      name: s.name,
+      ml: s.standard_menge_ml || 250,
+      bewertung: s.bewertung || 'gut',
+      sortierung: s.sortierung,
+      tags: (s.get_sorte_tag || []).map(st => st.tag_id)
+    }));
+    stammdatenLoaded = true;
+  } catch(err) {
+    console.error('Get-Stammdaten-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Get-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadStammdaten();
+  const iso = getActiveISO();
+  entries = [];
+  try {
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data: eRows, error: e1 } = await window.sb
+      .from('get_eintraege')
+      .select('id, sorte_id, erfasst_am, menge_ml, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', dayStart)
+      .lte('erfasst_am', dayEnd)
+      .order('erfasst_am', { ascending: true });
+    if(e1) throw e1;
+    entries = (eRows||[]).map(r => {
+      const g = getraenke.find(x=>x.id===r.sorte_id);
+      return {
+        id: r.id,
+        getraenkId: r.sorte_id,
+        name: g?.name || '?',
+        tags: g?.tags || [],
+        bewertung: g?.bewertung || 'gut',
+        ml: r.menge_ml,
+        time: timeFromTimestamp(r.erfasst_am),
+        kommentar: r.kommentar || ''
+      };
+    });
+  } catch(err) {
+    console.error('Get load error:', err);
+    if(typeof showToast === 'function') showToast('Get-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
 // ── BEWERTUNG CYCLE ───────────────────────
 function cycleBewertung(){
   const idx = BW_CYCLE.indexOf(currentBewertung);
@@ -5605,7 +5681,18 @@ function setBewertung(val){
 }
 
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
   renderGetraenke();
   renderEntries();
 }
@@ -5670,17 +5757,32 @@ function openEditMl(entryId) {
   modal.style.display = 'flex';
 }
 
-function saveEditMl() {
+async function saveEditMl() {
   if(!_editEid) return;
   var val = parseInt(document.getElementById('get-edit-ml-val').value);
   if(!val||val<1) { showToast('Ungültige Menge'); return; }
   var idx = entries.findIndex(x=>x.id===_editEid);
   var kom = document.getElementById('get-edit-ml-kommentar');
+  const editId = _editEid;
   if(idx!==-1){entries[idx].ml=val;if(kom)entries[idx].kommentar=kom.value.trim();}
   document.getElementById('get-edit-ml-modal').style.display = 'none';
   _editEid = null;
-  render();
+  renderUI();
   showToast('Menge aktualisiert');
+  if(window.sbUser){
+    try {
+      const update = { menge_ml: val };
+      if(kom) update.kommentar = kom.value.trim() || null;
+      const { error } = await window.sb
+        .from('get_eintraege')
+        .update(update)
+        .eq('id', editId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
 
@@ -5706,12 +5808,36 @@ function renderEntries(){
 }
 
 // ── QUICK DRINK ───────────────────────────
-function quickDrink(gid){
+async function quickDrink(gid){
   const g=getraenke.find(x=>x.id===gid);
   if(!g)return;
-  entries.push({id:uid(),getraenkId:g.id,name:g.name,tags:g.tags,bewertung:g.bewertung||'gut',ml:g.ml,time:nowTime()});
-  render();
-  showToast(`${BW_ICON[g.bewertung||'gut']} ${g.name} · ${g.ml}ml ✓`);
+  const time = nowTime();
+  if(!window.sbUser){
+    entries.push({id:uid(),getraenkId:g.id,name:g.name,tags:g.tags,bewertung:g.bewertung||'gut',ml:g.ml,time});
+    renderUI();
+    showToast(`${BW_ICON[g.bewertung||'gut']} ${g.name} · ${g.ml}ml ✓`);
+    return;
+  }
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    const { data, error } = await window.sb
+      .from('get_eintraege')
+      .insert({
+        user_id: window.sbUser.id,
+        sorte_id: g.id,
+        erfasst_am: ts,
+        menge_ml: g.ml
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    entries.push({id:data.id,getraenkId:g.id,name:g.name,tags:g.tags,bewertung:g.bewertung||'gut',ml:g.ml,time});
+    renderUI();
+    showToast(`${BW_ICON[g.bewertung||'gut']} ${g.name} · ${g.ml}ml ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── LONG PRESS ────────────────────────────
@@ -5739,20 +5865,59 @@ function pickMl(v,btn){
   btn.classList.add('sel');
 }
 
-function confirmDrink(){
+async function confirmDrink(){
   if(!drinkCtx)return;
   const g=getraenke.find(x=>x.id===drinkCtx.gid);
   if(!g)return;
   const ml=parseInt(document.getElementById('get-m-drink-ml').value)||g.ml;
   const time=document.getElementById('get-m-drink-time').value||nowTime();
   const kommentar = document.getElementById('get-m-drink-kommentar')?.value?.trim()||'';
-  entries.push({id:uid(),getraenkId:g.id,name:g.name,tags:g.tags,bewertung:g.bewertung||'gut',ml,time});
-  closeModal('get-m-drink');drinkCtx=null;
-  render();
-  showToast(`${BW_ICON[g.bewertung||'gut']} ${g.name} · ${ml}ml ✓`);
+  if(!window.sbUser){
+    entries.push({id:uid(),getraenkId:g.id,name:g.name,tags:g.tags,bewertung:g.bewertung||'gut',ml,time,kommentar});
+    closeModal('get-m-drink');drinkCtx=null;
+    renderUI();
+    showToast(`${BW_ICON[g.bewertung||'gut']} ${g.name} · ${ml}ml ✓`);
+    return;
+  }
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    const { data, error } = await window.sb
+      .from('get_eintraege')
+      .insert({
+        user_id: window.sbUser.id,
+        sorte_id: g.id,
+        erfasst_am: ts,
+        menge_ml: ml,
+        kommentar: kommentar || null
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    entries.push({id:data.id,getraenkId:g.id,name:g.name,tags:g.tags,bewertung:g.bewertung||'gut',ml,time,kommentar});
+    closeModal('get-m-drink');drinkCtx=null;
+    renderUI();
+    showToast(`${BW_ICON[g.bewertung||'gut']} ${g.name} · ${ml}ml ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteEntry(id){entries=entries.filter(e=>e.id!==id);render()}
+async function deleteEntry(id){
+  if(!window.sbUser){ entries=entries.filter(e=>e.id!==id); renderUI(); return; }
+  try {
+    const { error } = await window.sb
+      .from('get_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    entries=entries.filter(e=>e.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
 
 // ── DELETE MODE ───────────────────────────
 function toggleDelMode(){
@@ -5775,11 +5940,27 @@ function updateEditBtn(){
   btn.classList.toggle('on',editMode);
   btn.textContent=editMode?'✓ Fertig':'✎ Bearbeiten';
 }
-function deleteGetraenk(gid){
+async function deleteGetraenk(gid){
   const g=getraenke.find(x=>x.id===gid);
-  getraenke=getraenke.filter(x=>x.id!==gid);
-  entries=entries.filter(e=>e.getraenkId!==gid);
-  showToast(`${g?.name} entfernt`);render();
+  if(!confirm(`"${g?.name}" wirklich entfernen? Bisherige Eintraege bleiben in der Datenbank.`)) return;
+  if(!window.sbUser){
+    getraenke=getraenke.filter(x=>x.id!==gid);
+    entries=entries.filter(e=>e.getraenkId!==gid);
+    showToast(`${g?.name} entfernt`);renderUI();
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('get_sorten')
+      .update({ aktiv: false })
+      .eq('id', gid)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    getraenke=getraenke.filter(x=>x.id!==gid);
+    showToast(`${g?.name} entfernt`);renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── NEW / EDIT ────────────────────────────
@@ -5828,22 +6009,80 @@ function pickNewMl(v,btn){
   btn.classList.add('sel');
 }
 
-function saveGetraenk(){
+async function saveGetraenk(){
   const name=document.getElementById('get-m-new-name').value.trim();
   const ml=parseInt(document.getElementById('get-m-new-ml').value)||0;
   const selTags=[...document.querySelectorAll('#get-m-new-tags .tag-btn.sel')].map(b=>b.dataset.tid);
   if(!name){showToast('Name fehlt');return}
   if(ml<=0){showToast('Volumen eingeben');return}
-  if(editCtx){
-    const g=getraenke.find(x=>x.id===editCtx.gid);
-    if(g){g.name=name;g.ml=ml;g.tags=selTags;g.bewertung=currentBewertung;}
-    showToast(`${name} gespeichert ✓`);
-  } else {
-    getraenke.push({id:uid(),name,ml,tags:selTags,bewertung:currentBewertung});
-    showToast(`${name} hinzugefügt`);
+  if(!window.sbUser){
+    if(editCtx){
+      const g=getraenke.find(x=>x.id===editCtx.gid);
+      if(g){g.name=name;g.ml=ml;g.tags=selTags;g.bewertung=currentBewertung;}
+      // sync entries cache
+      entries.forEach(e=>{ if(e.getraenkId===editCtx.gid){ e.name=name; e.tags=selTags; e.bewertung=currentBewertung; }});
+      showToast(`${name} gespeichert ✓`);
+    } else {
+      getraenke.push({id:uid(),name,ml,tags:selTags,bewertung:currentBewertung});
+      showToast(`${name} hinzugefügt`);
+    }
+    getraenke.sort((a,b)=>a.name.localeCompare(b.name,'de')||a.ml-b.ml);
+    editCtx=null;closeModal('get-m-new');renderUI();
+    return;
   }
-  getraenke.sort((a,b)=>a.name.localeCompare(b.name,'de')||a.ml-b.ml);
-  editCtx=null;closeModal('get-m-new');render();
+  try {
+    let sorteId;
+    if(editCtx){
+      const { error } = await window.sb
+        .from('get_sorten')
+        .update({ name, standard_menge_ml: ml, bewertung: currentBewertung })
+        .eq('id', editCtx.gid)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      sorteId = editCtx.gid;
+      const g=getraenke.find(x=>x.id===sorteId);
+      if(g){g.name=name;g.ml=ml;g.bewertung=currentBewertung;g.tags=selTags;}
+      // Update entries cache
+      entries.forEach(e=>{ if(e.getraenkId===sorteId){ e.name=name; e.tags=selTags; e.bewertung=currentBewertung; }});
+    } else {
+      const sortMax = getraenke.reduce((m,x)=>Math.max(m, x.sortierung||0), 0);
+      const { data, error } = await window.sb
+        .from('get_sorten')
+        .insert({
+          user_id: window.sbUser.id,
+          name,
+          standard_menge_ml: ml,
+          bewertung: currentBewertung,
+          aktiv: true,
+          sortierung: sortMax + 10
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      sorteId = data.id;
+      getraenke.push({id:sorteId,name,ml,bewertung:currentBewertung,tags:selTags,sortierung:data.sortierung});
+    }
+    // Sync tag-Verknuepfungen: alle alten loeschen, alle neuen anlegen
+    {
+      const { error: e1 } = await window.sb
+        .from('get_sorte_tag')
+        .delete()
+        .eq('sorte_id', sorteId);
+      if(e1) throw e1;
+      if(selTags.length){
+        const rows = selTags.map(tid => ({ sorte_id: sorteId, tag_id: tid }));
+        const { error: e2 } = await window.sb
+          .from('get_sorte_tag')
+          .insert(rows);
+        if(e2) throw e2;
+      }
+    }
+    getraenke.sort((a,b)=>a.name.localeCompare(b.name,'de')||a.ml-b.ml);
+    editCtx=null;closeModal('get-m-new');renderUI();
+    showToast(editCtx ? `${name} gespeichert ✓` : `${name} hinzugefügt`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── TAG MANAGER ───────────────────────────
@@ -5855,19 +6094,59 @@ function renderTagMgrList(){
         style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:0;margin-left:4px">✕</button>
     </div>`).join('');
 }
-function addTag(){
+async function addTag(){
   const emoji=document.getElementById('get-new-tag-emoji').value.trim()||'🏷';
   const name=document.getElementById('get-new-tag-name').value.trim();
   if(!name){showToast('Name fehlt');return}
-  tags.push({id:'c_'+uid(),emoji,name});
-  document.getElementById('get-new-tag-emoji').value='';
-  document.getElementById('get-new-tag-name').value='';
-  renderTagMgrList();showToast(`"${name}" hinzugefügt`);
+  if(!window.sbUser){
+    tags.push({id:'c_'+uid(),emoji,name});
+    document.getElementById('get-new-tag-emoji').value='';
+    document.getElementById('get-new-tag-name').value='';
+    renderTagMgrList();showToast(`"${name}" hinzugefügt`);
+    return;
+  }
+  try {
+    const sortMax = tags.reduce((m,t)=>Math.max(m, t.sortierung||0), 0);
+    const { data, error } = await window.sb
+      .from('get_tags')
+      .insert({
+        user_id: window.sbUser.id,
+        name,
+        emoji,
+        sortierung: sortMax + 10
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    tags.push({id:data.id,name:data.name,emoji:data.emoji||'🏷'});
+    document.getElementById('get-new-tag-emoji').value='';
+    document.getElementById('get-new-tag-name').value='';
+    renderTagMgrList();showToast(`"${name}" hinzugefügt`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
-function deleteTag(id){
-  tags=tags.filter(t=>t.id!==id);
-  getraenke.forEach(g=>g.tags=g.tags.filter(tid=>tid!==id));
-  renderTagMgrList();render();
+async function deleteTag(id){
+  if(!confirm('Tag wirklich entfernen?')) return;
+  if(!window.sbUser){
+    tags=tags.filter(t=>t.id!==id);
+    getraenke.forEach(g=>g.tags=g.tags.filter(tid=>tid!==id));
+    renderTagMgrList();renderUI();
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('get_tags')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    tags=tags.filter(t=>t.id!==id);
+    getraenke.forEach(g=>g.tags=g.tags.filter(tid=>tid!==id));
+    renderTagMgrList();renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── MODALS ────────────────────────────────
