@@ -4740,6 +4740,13 @@ function intervalStatus(prod){
 // ── RENDER ────────────────────────────────
 function render(){
   document.getElementById('haut-stacks').innerHTML=GROUPS.map(renderGroup).join('');
+  // Anker-Indikator: erfasst wenn mind. 1 Item in der jeweiligen Routine markiert
+  if(typeof setAnkerStatus === 'function'){
+    setAnkerStatus('haut', {
+      morgen: doneCount('morgen') > 0,
+      abend:  doneCount('abend')  > 0
+    });
+  }
 }
 
 function renderGroup(grp){
