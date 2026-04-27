@@ -11108,6 +11108,8 @@ let currentAkutType = null;
 // Tages-Daten: { morgen: { metrikId:wert }, mittag:{}, abend:{} }
 let ankerData = { morgen:{}, mittag:{}, abend:{} };
 let ankerOpen = { morgen:true, mittag:false, abend:false };
+let ankerComments = { morgen:'', mittag:'', abend:'' };
+let ankerCommentOpen = { morgen:false, mittag:false, abend:false };
 
 // Akut-Signale: [{id, typId, detail, time, note}]
 let akutList = [];
@@ -11172,6 +11174,7 @@ async function loadFromDb(){
   await loadStammdaten();
   const iso = getActiveISO();
   ankerData = { morgen:{}, mittag:{}, abend:{} };
+  ankerComments = { morgen:'', mittag:'', abend:'' };
   akutList = [];
   try {
     const { data: vRows, error: e1 } = await window.sb
@@ -11182,6 +11185,15 @@ async function loadFromDb(){
     if(e1) throw e1;
     (vRows||[]).forEach(r => {
       if(ankerData[r.anker]) ankerData[r.anker][r.metrik_id] = parseFloat(r.wert);
+    });
+    const { data: kRows, error: e3 } = await window.sb
+      .from('stress_anker_kommentare')
+      .select('anker, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(e3) throw e3;
+    (kRows||[]).forEach(r => {
+      if(ankerComments[r.anker] !== undefined) ankerComments[r.anker] = r.kommentar;
     });
     const dayStart = iso + 'T00:00:00';
     const dayEnd   = iso + 'T23:59:59';
@@ -11250,12 +11262,13 @@ function renderUI(){
   renderAnker();
   renderAkut();
   updateBadge();
-  // Anker-Indikator: erfasst wenn mindestens eine Metrik > 0
+  // Anker-Indikator: erfasst wenn mindestens eine Metrik > 0 ODER Kommentar gesetzt
   if(typeof setAnkerStatus === 'function'){
     const status = {};
     ['morgen','abend'].forEach(a => {
       const vals = Object.values(ankerData[a]||{}).filter(v=>typeof v==='number' && v>0);
-      status[a] = vals.length > 0;
+      const hasComment = !!(ankerComments[a] && ankerComments[a].trim());
+      status[a] = vals.length > 0 || hasComment;
     });
     // Mittag mappen wir nicht - der Indikator hat nur ☀/🌙
     setAnkerStatus('stress', status);
@@ -11277,6 +11290,7 @@ function renderAnker(){
     const body = open ? `
       <div class="anker-body">
         ${metriken.map(m=>renderMetricRow(a.id, m)).join('')}
+        ${renderCommentArea(a.id)}
       </div>` : '';
     const badge = ankerBadge(a.id);
     return `<div class="anker-card">
@@ -11290,6 +11304,74 @@ function renderAnker(){
       <div style="display:${open?'block':'none'}">${body}</div>
     </div>`;
   }).join('');
+}
+
+function renderCommentArea(ankerId){
+  const txt = ankerComments[ankerId] || '';
+  const isOpen = ankerCommentOpen[ankerId];
+  if(isOpen){
+    return `<div style="margin-top:8px">
+      <textarea class="comment-textarea" id="stress-comment-${ankerId}"
+        placeholder="Kommentar zu diesem Anker...">${escHtml(txt)}</textarea>
+      <div class="comment-actions">
+        <button class="comment-clear" onclick="document.getElementById('stress-comment-${ankerId}').value=''">Leeren</button>
+        <button class="comment-save" onclick="window.stress_saveAnkerComment('${ankerId}')">Speichern</button>
+      </div>
+    </div>`;
+  }
+  if(txt){
+    return `<div class="comment-preview" onclick="window.stress_toggleAnkerComment('${ankerId}')">${escHtml(txt)}</div>`;
+  }
+  return `<div style="margin-top:8px">
+    <button class="btn-ghost" onclick="window.stress_toggleAnkerComment('${ankerId}')">+ Kommentar</button>
+  </div>`;
+}
+
+function toggleAnkerComment(ankerId){
+  ankerCommentOpen[ankerId] = !ankerCommentOpen[ankerId];
+  if(ankerCommentOpen[ankerId]) ankerOpen[ankerId] = true;
+  renderUI();
+  if(ankerCommentOpen[ankerId]){
+    setTimeout(()=>{
+      const ta=document.getElementById('stress-comment-'+ankerId);
+      if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); }
+    },50);
+  }
+}
+
+async function saveAnkerComment(ankerId){
+  const ta = document.getElementById('stress-comment-'+ankerId);
+  const val = ta ? ta.value.trim() : '';
+  ankerComments[ankerId] = val;
+  ankerCommentOpen[ankerId] = false;
+  renderUI();
+  if(val) showToast('Kommentar gespeichert ✓');
+  else    showToast('Kommentar entfernt');
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(val){
+      const { error } = await window.sb
+        .from('stress_anker_kommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          anker: ankerId,
+          kommentar: val
+        }, { onConflict: 'user_id,tagesdatum,anker' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('stress_anker_kommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('anker', ankerId);
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 function renderMetricRow(ankerId, m){
@@ -11560,6 +11642,8 @@ function updateBadge(){
 // ── EXPORTS ───────────────────────────────
 window.stress_render = render;
 window.stress_toggleAnker = toggleAnker;
+window.stress_toggleAnkerComment = toggleAnkerComment;
+window.stress_saveAnkerComment = saveAnkerComment;
 window.stress_setMetric = setMetric;
 window.stress_openAkut = openAkut;
 window.stress_saveAkut = saveAkut;
