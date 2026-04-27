@@ -5740,8 +5740,10 @@ function renderGetraenke(){
 let _editEid = null;
 
 function openEditMl(entryId) {
+  console.log('[get] openEditMl', entryId);
   const e = entries.find(x=>x.id===entryId);
-  if(!e) { showToast('Eintrag nicht gefunden'); return; }
+  if(!e) { console.warn('[get] entry not found'); showToast('Eintrag nicht gefunden'); return; }
+  console.log('[get] entry:', e);
   _editEid = entryId;
   const g = getraenke.find(x=>x.id===e.getraenkId);
   const base = g ? g.ml : e.ml;
@@ -5751,11 +5753,14 @@ function openEditMl(entryId) {
   ])].filter(v=>v>=50&&v<=2000).sort((a,b)=>a-b);
   document.getElementById('get-edit-ml-title').textContent = e.name + ' — Menge';
   document.getElementById('get-edit-ml-val').value = e.ml;
+  const komEl = document.getElementById('get-edit-ml-kommentar');
+  if(komEl) komEl.value = e.kommentar || '';
   document.getElementById('get-edit-ml-presets').innerHTML = presets.map(v=>
-    '<button class="chip" style="'+(v===e.ml?'background:var(--accent);color:#f5f0e8;border-color:var(--accent)':'')+'" onclick="document.getElementById(\'get-edit-ml-val\').value='+v+'">'+v+'ml</button>'
+    '<button type="button" class="chip" style="'+(v===e.ml?'background:var(--accent);color:#f5f0e8;border-color:var(--accent)':'')+'" onclick="document.getElementById(\'get-edit-ml-val\').value='+v+'">'+v+'ml</button>'
   ).join('');
   var modal = document.getElementById('get-edit-ml-modal');
   modal.style.display = 'flex';
+  console.log('[get] modal opened, _editEid=', _editEid);
 }
 
 async function saveEditMl() {
