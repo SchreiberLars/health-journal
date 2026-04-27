@@ -3885,19 +3885,10 @@ const STACKS = [
   {id:'schlaf',label:'🌙 Schlaf'},
 ];
 
-// ── STATE (in-memory only) ─────────────────
-let suppList = [
-  {id:'coq10', name:'CoQ10',              unit:'Kps.',    dose:1, stacks:['morgen']},
-  {id:'d3k2',  name:'D3+K2',              unit:'Tropfen', dose:1, stacks:['morgen']},
-  {id:'glycin',name:'Glycin',             unit:'g',       dose:5, stacks:['schlaf']},
-  {id:'mag',   name:'Magnesium Komplex',  unit:'Kps.',    dose:1, stacks:['abend']},
-  {id:'omega3',name:'Omega-3 Complete',   unit:'Kps.',    dose:1, stacks:['morgen']},
-  {id:'querc', name:'Quercetin Liposomal',unit:'Kps.',    dose:1, stacks:['morgen']},
-  {id:'vitc',  name:'Vitamin-C Komplex',  unit:'Kps.',    dose:1, stacks:['morgen']},
-];
-suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+// ── STATE ─────────────────────────────────
+let suppList = []; // wird aus DB geladen
 
-// takenMap: { 'suppId__stackId': { taken:bool, overrideDose:number|null } }
+// takenMap: { 'suppId__stackId': { taken:bool, overrideDose:number|null, einnahmeId:uuid|null } }
 let takenMap = {};
 let doseMemory = {};
 let delMode = false;
@@ -3913,20 +3904,107 @@ let lpTimer = null, lpFired = false;
 function uid(){return Math.random().toString(36).slice(2,9)}
 function isTaken(sid,stk){return takenMap[sid+'__'+stk]?.taken===true}
 function getODose(sid,stk){return takenMap[sid+'__'+stk]?.overrideDose??null}
-function setTaken(sid,stk,val,od=null){
+function getEinnahmeId(sid,stk){return takenMap[sid+'__'+stk]?.einnahmeId||null}
+function setTaken(sid,stk,val,od=null,einnahmeId=null){
   const k=sid+'__'+stk;
   if(!val){
     if(takenMap[k]) takenMap[k].taken=false;
     return;
   }
   const existingOd=takenMap[k]?.overrideDose??null;
-  takenMap[k]={taken:true,overrideDose:od!==null?od:existingOd};
+  const existingId=takenMap[k]?.einnahmeId||null;
+  takenMap[k]={taken:true,overrideDose:od!==null?od:existingOd,einnahmeId:einnahmeId||existingId};
 }
 function stackSupps(stk){return suppList.filter(s=>s.stacks.includes(stk))}
 function takenCount(stk){return stackSupps(stk).filter(s=>isTaken(s.id,stk)).length}
 
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+let suppListLoaded = false;
+async function loadSuppList(){
+  if(!window.sbUser || !window.sb || suppListLoaded) return;
+  try {
+    const { data, error } = await window.sb
+      .from('supplements')
+      .select('id, name, dosis_einheit_label, standard_dosis, stacks, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true })
+      .order('name', { ascending: true });
+    if(error) throw error;
+    suppList = (data||[]).map(s => ({
+      id: s.id,
+      name: s.name,
+      unit: s.dosis_einheit_label || 'Kps.',
+      dose: s.standard_dosis ? parseFloat(s.standard_dosis) : null,
+      stacks: Array.isArray(s.stacks) ? s.stacks : [],
+      sortierung: s.sortierung
+    }));
+    suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    suppListLoaded = true;
+  } catch(err) {
+    console.error('Supp-Stammdaten-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Supp-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadSuppList();
+  const iso = getActiveISO();
+  takenMap = {};
+  comments = {};
+  try {
+    // Einnahmen heute
+    const { data: eRows, error: e1 } = await window.sb
+      .from('supp_einnahmen')
+      .select('id, supplement_id, stack, dosis')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(e1) throw e1;
+    (eRows||[]).forEach(r => {
+      if(!r.stack || !r.supplement_id) return;
+      const k = r.supplement_id + '__' + r.stack;
+      const supp = suppList.find(s=>s.id===r.supplement_id);
+      const od = (r.dosis != null && supp && parseFloat(r.dosis) !== supp.dose) ? parseFloat(r.dosis) : null;
+      takenMap[k] = { taken: true, overrideDose: od, einnahmeId: r.id };
+    });
+    // Kommentare
+    const { data: cRows, error: c1 } = await window.sb
+      .from('supp_stack_kommentare')
+      .select('stack, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(c1) throw c1;
+    (cRows||[]).forEach(r => { comments[r.stack] = r.kommentar; });
+  } catch(err) {
+    console.error('Supp load error:', err);
+    if(typeof showToast === 'function') showToast('Supp-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
   document.getElementById('supp-stacks').innerHTML=STACKS.map(renderStack).join('');
 }
 
@@ -4002,7 +4080,7 @@ function toggleComment(stackId){
   commentOpen[stackId]=!commentOpen[stackId];
   // Make sure stack is open
   if(commentOpen[stackId]) openStacks[stackId]=true;
-  render();
+  renderUI();
   if(commentOpen[stackId]){
     setTimeout(()=>{
       const ta=document.getElementById('comment-'+stackId);
@@ -4011,7 +4089,7 @@ function toggleComment(stackId){
   }
 }
 
-function saveComment(stackId){
+async function saveComment(stackId){
   const ta=document.getElementById('comment-'+stackId);
   const val=ta?ta.value.trim():'';
   if(val){
@@ -4022,7 +4100,32 @@ function saveComment(stackId){
     showToast('Kommentar entfernt');
   }
   commentOpen[stackId]=false;
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(val){
+      const { error } = await window.sb
+        .from('supp_stack_kommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          stack: stackId,
+          kommentar: val
+        }, { onConflict: 'user_id,tagesdatum,stack' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('supp_stack_kommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('stack', stackId);
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 function clearComment(stackId){
@@ -4035,17 +4138,50 @@ function previewComment(stackId){
 }
 
 // ── TAP + LONG PRESS ──────────────────────
-function tapChip(sid,stk){
+async function tapChip(sid,stk){
   // short tap: toggle taken
   const cur=isTaken(sid,stk);
+  const s=suppList.find(x=>x.id===sid);
   if(cur){
+    const einnahmeId = getEinnahmeId(sid,stk);
     setTaken(sid,stk,false);
-    render();
+    renderUI();
+    if(window.sbUser && einnahmeId){
+      try {
+        const { error } = await window.sb
+          .from('supp_einnahmen')
+          .delete()
+          .eq('id', einnahmeId)
+          .eq('user_id', window.sbUser.id);
+        if(error) throw error;
+        // Aus takenMap komplett entfernen
+        delete takenMap[sid+'__'+stk];
+      } catch(err) { showToast('Fehler: ' + err.message); }
+    }
   } else {
     setTaken(sid,stk,true,null);
-    const s=suppList.find(x=>x.id===sid);
     showToast(`${s?.name} ✓`);
-    render();
+    renderUI();
+    if(window.sbUser){
+      const iso = getActiveISO();
+      try {
+        const { data, error } = await window.sb
+          .from('supp_einnahmen')
+          .upsert({
+            user_id: window.sbUser.id,
+            supplement_id: sid,
+            stack: stk,
+            tagesdatum: iso,
+            erfasst_am: new Date().toISOString(),
+            dosis: s?.dose || null,
+            einheit_label: s?.unit || null
+          }, { onConflict: 'user_id,supplement_id,tagesdatum,stack' })
+          .select()
+          .single();
+        if(error) throw error;
+        setTaken(sid,stk,true,null,data.id);
+      } catch(err) { showToast('Fehler: ' + err.message); }
+    }
   }
 }
 
@@ -4055,12 +4191,57 @@ document.addEventListener('click',e=>{
 },true);
 
 // ── ALLE ──────────────────────────────────
-function toggleAll(stk){
+async function toggleAll(stk){
   const supps=stackSupps(stk);
   const all=supps.every(s=>isTaken(s.id,stk));
-  supps.forEach(s=>setTaken(s.id,stk,!all,null));
+  if(!window.sbUser){
+    supps.forEach(s=>setTaken(s.id,stk,!all,null));
+    showToast(all?'Alle abgewählt':`Alle ${supps.length} ✓`);
+    renderUI();
+    return;
+  }
+  const iso = getActiveISO();
   showToast(all?'Alle abgewählt':`Alle ${supps.length} ✓`);
-  render();
+  if(all){
+    // delete all
+    const ids = supps.map(s => getEinnahmeId(s.id,stk)).filter(Boolean);
+    supps.forEach(s=>setTaken(s.id,stk,false));
+    renderUI();
+    if(ids.length){
+      try {
+        const { error } = await window.sb
+          .from('supp_einnahmen')
+          .delete()
+          .in('id', ids)
+          .eq('user_id', window.sbUser.id);
+        if(error) throw error;
+        supps.forEach(s => delete takenMap[s.id+'__'+stk]);
+      } catch(err) { showToast('Fehler: ' + err.message); }
+    }
+  } else {
+    // insert all (upsert)
+    supps.forEach(s=>setTaken(s.id,stk,true,null));
+    renderUI();
+    const rows = supps.map(s => ({
+      user_id: window.sbUser.id,
+      supplement_id: s.id,
+      stack: stk,
+      tagesdatum: iso,
+      erfasst_am: new Date().toISOString(),
+      dosis: s.dose || null,
+      einheit_label: s.unit || null
+    }));
+    try {
+      const { data, error } = await window.sb
+        .from('supp_einnahmen')
+        .upsert(rows, { onConflict: 'user_id,supplement_id,tagesdatum,stack' })
+        .select();
+      if(error) throw error;
+      (data||[]).forEach(r => {
+        setTaken(r.supplement_id, r.stack, true, null, r.id);
+      });
+    } catch(err) { showToast('Fehler: ' + err.message); }
+  }
 }
 
 // ── DELETE MODE ───────────────────────────
@@ -4070,15 +4251,42 @@ function toggleDelMode(){
   btn.classList.toggle('on',delMode);
   btn.textContent=delMode?'✓ Fertig':'🗑 Löschen';
   if(delMode)STACKS.forEach(s=>openStacks[s.id]=true);
-  render();
+  renderUI();
 }
-function delSupp(sid,stk){
+async function delSupp(sid,stk){
   const s=suppList.find(x=>x.id===sid);
   if(!s)return;
   s.stacks=s.stacks.filter(x=>x!==stk);
-  if(!s.stacks.length){suppList=suppList.filter(x=>x.id!==sid);showToast(`${s.name} entfernt`)}
-  else showToast(`${s.name} aus Stack entfernt`);
-  render();
+  const newStacks = [...s.stacks];
+  const willDelete = newStacks.length === 0;
+  if(willDelete){
+    suppList=suppList.filter(x=>x.id!==sid);
+    showToast(`${s.name} entfernt`);
+  } else {
+    showToast(`${s.name} aus Stack entfernt`);
+  }
+  renderUI();
+  if(!window.sbUser) return;
+  try {
+    if(willDelete){
+      // Soft-Delete: aktiv=false
+      const { error } = await window.sb
+        .from('supplements')
+        .update({ aktiv: false })
+        .eq('id', sid)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('supplements')
+        .update({ stacks: newStacks })
+        .eq('id', sid)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── DOSE MODAL ────────────────────────────
@@ -4100,7 +4308,7 @@ function pickDose(v,btn){
   btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
 }
-function confirmDose(){
+async function confirmDose(){
   if(!doseCtx)return;
   const {sid,stk,s}=doseCtx;
   const d=parseFloat(document.getElementById('supp-m-dose-val').value)||null;
@@ -4108,15 +4316,50 @@ function confirmDose(){
   setTaken(sid,stk,true,d);
   closeModal('supp-m-dose');doseCtx=null;
   showToast(`${s.name}${d?` · ${d}${s.unit}`:''} ✓`);
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    const { data, error } = await window.sb
+      .from('supp_einnahmen')
+      .upsert({
+        user_id: window.sbUser.id,
+        supplement_id: sid,
+        stack: stk,
+        tagesdatum: iso,
+        erfasst_am: new Date().toISOString(),
+        dosis: d,
+        einheit_label: s.unit || null
+      }, { onConflict: 'user_id,supplement_id,tagesdatum,stack' })
+      .select()
+      .single();
+    if(error) throw error;
+    setTaken(sid,stk,true,d,data.id);
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
-function cancelDose(){
+async function cancelDose(){
   if(!doseCtx)return;
   const {sid,stk,s}=doseCtx;
+  const einnahmeId = getEinnahmeId(sid,stk);
   setTaken(sid,stk,false);
   closeModal('supp-m-dose');doseCtx=null;
   showToast(`${s.name} abgewählt`);
-  render();
+  renderUI();
+  if(window.sbUser && einnahmeId){
+    try {
+      const { error } = await window.sb
+        .from('supp_einnahmen')
+        .delete()
+        .eq('id', einnahmeId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      delete takenMap[sid+'__'+stk];
+    } catch(err) {
+      showToast('DB-Fehler: ' + err.message);
+    }
+  }
 }
 
 // ── NEW SUPP MODAL ────────────────────────
@@ -4142,7 +4385,7 @@ function pickNew(v,btn){
   btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
 }
-function saveNew(){
+async function saveNew(){
   const name=document.getElementById('supp-m-new-name').value.trim();
   const unit=document.getElementById('supp-m-new-unit').value;
   const dose=parseFloat(document.getElementById('supp-m-new-dose').value)||null;
@@ -4150,9 +4393,47 @@ function saveNew(){
   if(!name){showToast('Name fehlt');return}
   if(!stacks.length){showToast('Stack wählen');return}
   const ex=suppList.find(s=>s.name.toLowerCase()===name.toLowerCase());
-  if(ex){stacks.forEach(st=>{if(!ex.stacks.includes(st))ex.stacks.push(st)});showToast(`${name} aktualisiert`)}
-  else{suppList.push({id:uid(),name,unit,dose,stacks});suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));showToast(`${name} hinzugefügt`)}
-  closeModal('supp-m-new');render();
+  if(!window.sbUser){
+    if(ex){stacks.forEach(st=>{if(!ex.stacks.includes(st))ex.stacks.push(st)});showToast(`${name} aktualisiert`)}
+    else{suppList.push({id:uid(),name,unit,dose,stacks});suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));showToast(`${name} hinzugefügt`)}
+    closeModal('supp-m-new');renderUI();
+    return;
+  }
+  try {
+    if(ex){
+      const merged = [...new Set([...ex.stacks, ...stacks])];
+      ex.stacks = merged;
+      const { error } = await window.sb
+        .from('supplements')
+        .update({ stacks: merged })
+        .eq('id', ex.id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      showToast(`${name} aktualisiert`);
+    } else {
+      const sortMax = suppList.reduce((m,x)=>Math.max(m, x.sortierung||0), 0);
+      const { data, error } = await window.sb
+        .from('supplements')
+        .insert({
+          user_id: window.sbUser.id,
+          name,
+          dosis_einheit_label: unit,
+          standard_dosis: dose,
+          stacks: stacks,
+          aktiv: true,
+          sortierung: sortMax + 10
+        })
+        .select()
+        .single();
+      if(error) throw error;
+      suppList.push({id:data.id,name,unit,dose,stacks,sortierung:data.sortierung});
+      suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+      showToast(`${name} hinzugefügt`);
+    }
+    closeModal('supp-m-new');renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── EDIT ─────────────────────────────────
@@ -4182,7 +4463,7 @@ function pickEdit(v,btn){
   btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
 }
-function saveEdit(){
+async function saveEdit(){
   if(!editCtx)return;
   const s=suppList.find(x=>x.id===editCtx.sid);
   if(!s)return;
@@ -4192,12 +4473,29 @@ function saveEdit(){
   const stacks=[...document.querySelectorAll('#supp-m-edit-stacks .stk-btn.sel')].map(b=>b.dataset.s);
   if(!name){showToast('Name fehlt');return}
   if(!stacks.length){showToast('Stack wählen');return}
+  const sid = editCtx.sid;
   s.name=name;s.unit=unit;s.dose=dose;s.stacks=stacks;
   suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));
   editCtx=null;
   closeModal('supp-m-edit');
   showToast(`${name} gespeichert ✓`);
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('supplements')
+      .update({
+        name,
+        dosis_einheit_label: unit,
+        standard_dosis: dose,
+        stacks: stacks
+      })
+      .eq('id', sid)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── MODALS ────────────────────────────────
