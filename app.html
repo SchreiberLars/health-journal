@@ -1828,6 +1828,8 @@ function injectModules() {
     <label class="ml">Menge heute</label>
     <div class="dq" id="haut-m-dose-quick"></div>
     <input class="mi" id="haut-m-dose-val" type="number" min="0" step="any" placeholder="Andere Menge...">
+    <label class="ml" style="margin-top:14px">Verschieben in</label>
+    <div class="dq" id="haut-m-dose-stacks"></div>
     <div class="mbr">
       <button class="bs" onclick="window.haut_cancelDose()">Abwählen</button>
       <button class="bp" onclick="window.haut_confirmDose()">Übernehmen</button>
@@ -4678,29 +4680,18 @@ const PRESETS = {
   'Stk':         [0.5,1,2],
 };
 
-const GROUPS = [
-  {id:'morgen', label:'🌅 Morgen-Routine'},
-  {id:'abend',  label:'🌆 Abend-Routine'},
-];
-
 // ── STATE ─────────────────────────────────
-// products: [{id, name, unit, dose, groups:[], intervalDays:null, lastUsed:null}]
-// lastUsed: ISO date string 'YYYY-MM-DD' — would be persisted in real app
-let products = [
-  {id:'ant',  name:'Anthelios 50+',    unit:'Pumps',  dose:2,    groups:['morgen'], intervalDays:null, lastUsed:null},
-  {id:'cica', name:'Cicaplast Mains',  unit:'Pumps',  dose:1,    groups:['morgen','abend'], intervalDays:null, lastUsed:null},
-  {id:'lip1', name:'Lipikar Baume AP+M',unit:'Pumps', dose:3,    groups:['morgen','abend'], intervalDays:null, lastUsed:null},
-  {id:'lip2', name:'Lipikar Syndet AP+',unit:'ml',    dose:10,   groups:['morgen'], intervalDays:null, lastUsed:null},
-  {id:'terz', name:'Terzolin 2%',      unit:'ml',     dose:5,    groups:['morgen'], intervalDays:2,    lastUsed:'2025-04-06'},
-  {id:'tol',  name:'Toleriane Creme',  unit:'Pumps',  dose:2,    groups:['morgen'], intervalDays:null, lastUsed:null},
-  {id:'toln', name:'Toleriane Nuit',   unit:'Pumps',  dose:2,    groups:['abend'],  intervalDays:null, lastUsed:null},
-];
-products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+// products: [{id, name, unit, dose, groups:[grpId], intervalDays:null, lastUsed:null}]
+//   wobei unit/dose pro Produkt + groups dynamisch aus haut_routine_produkte
+//   intervalDays/lastUsed kommen ebenfalls aus haut_routine_produkte (pro Routine)
+// groupsList: [{id, label, sortierung}] aus haut_routinen
+let products = [];
+let GROUPS = [];
 
-// doneMap: { 'prodId__groupId': { done:bool, overrideDose:number|null } }
+// doneMap: { 'prodId__groupId': { done:bool, overrideDose:number|null, anwId:uuid|null } }
 let doneMap = {};
 let delMode = false;
-let openGroups = {morgen:true, abend:false};
+let openGroups = {};
 let comments = {};
 let commentOpen = {};
 let doseCtx = null;
@@ -4708,44 +4699,188 @@ let lpTimer = null, lpFired = false;
 
 // ── HELPERS ───────────────────────────────
 function uid(){return Math.random().toString(36).slice(2,9)}
-// ── DATUM-SIMULATOR ──────────────────────
 function today(){
   return new Date().toISOString().slice(0,10);
 }
 
 function isDone(pid,grp){return !!(doneMap[pid+'__'+grp]?.done)}
 function getODose(pid,grp){return doneMap[pid+'__'+grp]?.overrideDose??null}
-function setDone(pid,grp,val,od=null){
+function getAnwId(pid,grp){return doneMap[pid+'__'+grp]?.anwId||null}
+function setDone(pid,grp,val,od=null,anwId=null){
   const k=pid+'__'+grp;
   if(!val){delete doneMap[k];return}
-  doneMap[k]={done:true,overrideDose:od};
+  const existingId = doneMap[k]?.anwId || null;
+  doneMap[k]={done:true,overrideDose:od,anwId:anwId||existingId};
 }
 
 function groupProds(grp){return products.filter(p=>p.groups.includes(grp))}
 function doneCount(grp){return groupProds(grp).filter(p=>isDone(p.id,grp)).length}
 
-// ── INTERVAL LOGIC ────────────────────────
-function intervalStatus(prod){
-  if(!prod.intervalDays)return null; // no interval
-  if(!prod.lastUsed)return {due:true, label:'noch nie verwendet → heute fällig', days:0};
-  const last = new Date(prod.lastUsed);
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+let stammdatenLoaded = false;
+async function loadStammdaten(){
+  if(!window.sbUser || !window.sb || stammdatenLoaded) return;
+  try {
+    // 1. Routinen
+    const { data: rData, error: rErr } = await window.sb
+      .from('haut_routinen')
+      .select('id, name, emoji, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .order('sortierung', { ascending: true });
+    if(rErr) throw rErr;
+    GROUPS = (rData||[]).map(r => ({
+      id: r.id,
+      label: `${r.emoji||''} ${r.name}`.trim()
+    }));
+    GROUPS.forEach(g => { if(openGroups[g.id] === undefined) openGroups[g.id] = false; });
+    // Erste Routine standardmaessig auf
+    if(GROUPS.length) openGroups[GROUPS[0].id] = true;
+
+    // 2. Produkte
+    const { data: pData, error: pErr } = await window.sb
+      .from('haut_produkte')
+      .select('id, name, dosis_einheit_label, standard_dosis, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true });
+    if(pErr) throw pErr;
+
+    // 3. Routine-Zuordnungen (welche Produkte in welcher Routine, mit Dosis + Intervall)
+    const { data: rpData, error: rpErr } = await window.sb
+      .from('haut_routine_produkte')
+      .select('routine_id, produkt_id, dosis, intervall_tage, letzte_anwendung_datum, sortierung');
+    if(rpErr) throw rpErr;
+
+    // Pro Produkt: in welchen Routinen ist es?
+    const groupsByProd = {};
+    const routineSpecificData = {}; // {prodId__groupId: {dosis, intervall, lastUsed}}
+    (rpData||[]).forEach(rp => {
+      if(!groupsByProd[rp.produkt_id]) groupsByProd[rp.produkt_id] = [];
+      groupsByProd[rp.produkt_id].push(rp.routine_id);
+      routineSpecificData[rp.produkt_id+'__'+rp.routine_id] = {
+        dosis: rp.dosis,
+        intervall: rp.intervall_tage,
+        lastUsed: rp.letzte_anwendung_datum
+      };
+    });
+
+    products = (pData||[]).map(p => ({
+      id: p.id,
+      name: p.name,
+      unit: p.dosis_einheit_label || 'Pumps',
+      dose: p.standard_dosis ? parseFloat(p.standard_dosis) : null,
+      groups: groupsByProd[p.id] || [],
+      intervalDays: null,  // pro Routine, nicht pro Produkt - wird in renderGroup aufgeloest
+      lastUsed: null
+    }));
+    // routineSpecific in window-Scope fuer Lookup in renderGroup
+    window.__hautRP = routineSpecificData;
+    products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    stammdatenLoaded = true;
+  } catch(err) {
+    console.error('Haut-Stammdaten-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Haut-Lade-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadStammdaten();
+  const iso = getActiveISO();
+  doneMap = {};
+  comments = {};
+  try {
+    // Anwendungen heute
+    const { data: aRows, error: aErr } = await window.sb
+      .from('haut_anwendungen')
+      .select('id, produkt_id, routine_id, dosis')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(aErr) throw aErr;
+    (aRows||[]).forEach(r => {
+      if(!r.routine_id || !r.produkt_id) return;
+      const k = r.produkt_id + '__' + r.routine_id;
+      const prod = products.find(p => p.id === r.produkt_id);
+      const od = (r.dosis != null && prod && parseFloat(r.dosis) !== prod.dose) ? parseFloat(r.dosis) : null;
+      doneMap[k] = { done: true, overrideDose: od, anwId: r.id };
+    });
+    // Kommentare
+    const { data: cRows, error: cErr } = await window.sb
+      .from('haut_routine_kommentare')
+      .select('routine_id, kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(cErr) throw cErr;
+    (cRows||[]).forEach(r => { comments[r.routine_id] = r.kommentar; });
+  } catch(err) {
+    console.error('Haut-Anwendungen-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Haut-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
+// ── INTERVAL LOGIC (pro Routine!) ─────────
+function intervalStatusFor(prod, grpId){
+  const rp = (window.__hautRP||{})[prod.id+'__'+grpId];
+  if(!rp || !rp.intervall) return null;
+  if(!rp.lastUsed) return {due:true, label:'noch nie verwendet → heute fällig', days:0};
+  const last = new Date(rp.lastUsed);
   const now = new Date(today());
   const diff = Math.round((now-last)/(1000*60*60*24));
-  const remaining = prod.intervalDays - diff;
-  if(remaining<=0) return {due:true,  label:`zuletzt vor ${diff}d → heute fällig`, days:diff};
-  if(remaining===1) return {due:false, label:`zuletzt vor ${diff}d → morgen fällig`, days:diff};
-  return {due:false, label:`zuletzt vor ${diff}d → in ${remaining}d fällig`, days:diff};
+  const remaining = rp.intervall - diff;
+  if(remaining<=0) return {due:true,  label:`zuletzt vor ${diff}d → heute fällig`, days:diff, remaining};
+  if(remaining===1) return {due:false, label:`zuletzt vor ${diff}d → morgen fällig`, days:diff, remaining};
+  return {due:false, label:`zuletzt vor ${diff}d → in ${remaining}d fällig`, days:diff, remaining};
+}
+// Kept for backwards compatibility with renderGroup (uses prod alone, no grp)
+function intervalStatus(prod){ return null; }
+
+// Routine-spezifische Dosis (aus haut_routine_produkte) - Fallback auf Produkt-Standard
+function doseFor(prod, grpId){
+  const rp = (window.__hautRP||{})[prod.id+'__'+grpId];
+  if(rp && rp.dosis != null) return parseFloat(rp.dosis);
+  return prod.dose;
 }
 
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
-  document.getElementById('haut-stacks').innerHTML=GROUPS.map(renderGroup).join('');
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
+  const host = document.getElementById('haut-stacks');
+  if(!host) return;
+  host.innerHTML=GROUPS.map(renderGroup).join('');
   // Anker-Indikator: erfasst wenn mind. 1 Item in der jeweiligen Routine markiert
+  // ODER Kommentar gesetzt
   if(typeof setAnkerStatus === 'function'){
-    setAnkerStatus('haut', {
-      morgen: doneCount('morgen') > 0,
-      abend:  doneCount('abend')  > 0
-    });
+    // Map Routine-IDs auf 'morgen'/'abend' (heuristisch via Sortierung: 1. = morgen, letzte = abend)
+    const status = {morgen:false, abend:false};
+    if(GROUPS.length >= 1){
+      const morgenG = GROUPS[0];
+      status.morgen = doneCount(morgenG.id) > 0 || !!(comments[morgenG.id]&&comments[morgenG.id].trim());
+    }
+    if(GROUPS.length >= 2){
+      const abendG = GROUPS[GROUPS.length-1];
+      status.abend = doneCount(abendG.id) > 0 || !!(comments[abendG.id]&&comments[abendG.id].trim());
+    }
+    setAnkerStatus('haut', status);
   }
 }
 
@@ -4764,10 +4899,11 @@ function renderGroup(grp){
   const chips=prods.map(p=>{
     const done=isDone(p.id,grp.id);
     const od=getODose(p.id,grp.id);
-    const d=od!==null?od:p.dose;
+    const stdDose=doseFor(p, grp.id);
+    const d=od!==null?od:stdDose;
     const ds=p.unit&&d?`${d} ${p.unit}`:'';
-    const changed=od!==null&&od!==p.dose;
-    const ivs=intervalStatus(p);
+    const changed=od!==null&&od!==stdDose;
+    const ivs=intervalStatusFor(p, grp.id);
 
     // Interval chip classes
     let chipClass='chip';
@@ -4777,7 +4913,7 @@ function renderGroup(grp){
       subText=ds?`${ds} angewendet`:'angewendet';
     } else if(ivs){
       chipClass+=ivs.due?' due':' not-due';
-      subText=`<span class="${ivs.due?'interval-due':remaining(p)===1?'interval-soon':'interval-wait'}">${ivs.label}</span>`;
+      subText=`<span class="${ivs.due?'interval-due':ivs.remaining===1?'interval-soon':'interval-wait'}">${ivs.label}</span>`;
     } else {
       subText=ds?`Standard: ${ds}`:'';
     }
@@ -4844,7 +4980,7 @@ function remaining(p){
   return p.intervalDays-diff;
 }
 
-function toggleGrp(id){openGroups[id]=!openGroups[id];render()}
+function toggleGrp(id){openGroups[id]=!openGroups[id];renderUI()}
 
 // ── COMMENTS ─────────────────────────────
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
@@ -4852,7 +4988,7 @@ function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(
 function toggleComment(grpId){
   commentOpen[grpId]=!commentOpen[grpId];
   if(commentOpen[grpId]) openGroups[grpId]=true;
-  render();
+  renderUI();
   if(commentOpen[grpId]){
     setTimeout(()=>{
       const ta=document.getElementById('comment-'+grpId);
@@ -4861,13 +4997,38 @@ function toggleComment(grpId){
   }
 }
 
-function saveComment(grpId){
+async function saveComment(grpId){
   const ta=document.getElementById('comment-'+grpId);
   const val=ta?ta.value.trim():'';
   if(val){comments[grpId]=val;showToast('Kommentar gespeichert ✓')}
   else{delete comments[grpId];showToast('Kommentar entfernt')}
   commentOpen[grpId]=false;
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(val){
+      const { error } = await window.sb
+        .from('haut_routine_kommentare')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          routine_id: grpId,
+          kommentar: val
+        }, { onConflict: 'user_id,tagesdatum,routine_id' });
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('haut_routine_kommentare')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('routine_id', grpId);
+      if(error) throw error;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 function clearComment(grpId){
@@ -4876,18 +5037,59 @@ function clearComment(grpId){
 }
 
 // ── TAP + LONG PRESS ──────────────────────
-function tapChip(pid,grp){
+async function tapChip(pid,grp){
   const cur=isDone(pid,grp);
+  const p=products.find(x=>x.id===pid);
   if(cur){
+    const anwId = getAnwId(pid,grp);
     setDone(pid,grp,false);
-    render();
+    renderUI();
+    if(window.sbUser && anwId){
+      try {
+        const { error } = await window.sb
+          .from('haut_anwendungen')
+          .delete()
+          .eq('id', anwId)
+          .eq('user_id', window.sbUser.id);
+        if(error) throw error;
+      } catch(err) { showToast('Fehler: ' + err.message); }
+    }
   } else {
     setDone(pid,grp,true,null);
-    // Update lastUsed for interval products
-    const p=products.find(x=>x.id===pid);
-    if(p&&p.intervalDays) p.lastUsed=today();
     showToast(`${p?.name} ✓`);
-    render();
+    renderUI();
+    if(window.sbUser){
+      const iso = getActiveISO();
+      const dose = doseFor(p, grp);
+      try {
+        const { data, error } = await window.sb
+          .from('haut_anwendungen')
+          .upsert({
+            user_id: window.sbUser.id,
+            produkt_id: pid,
+            routine_id: grp,
+            tagesdatum: iso,
+            erfasst_am: new Date().toISOString(),
+            dosis: dose,
+            einheit_label: p?.unit || null
+          }, { onConflict: 'user_id,produkt_id,tagesdatum,routine_id' })
+          .select()
+          .single();
+        if(error) throw error;
+        setDone(pid,grp,true,null,data.id);
+        // Bei Intervall-Produkten: letzte_anwendung_datum updaten
+        const rp = (window.__hautRP||{})[pid+'__'+grp];
+        if(rp && rp.intervall){
+          await window.sb
+            .from('haut_routine_produkte')
+            .update({ letzte_anwendung_datum: iso })
+            .eq('routine_id', grp)
+            .eq('produkt_id', pid);
+          rp.lastUsed = iso;
+          renderUI();
+        }
+      } catch(err) { showToast('Fehler: ' + err.message); }
+    }
   }
 }
 
@@ -4896,15 +5098,66 @@ document.addEventListener('click',e=>{
 },true);
 
 // ── ALLE ──────────────────────────────────
-function toggleAll(grp){
+async function toggleAll(grp){
   const prods=groupProds(grp);
   const all=prods.every(p=>isDone(p.id,grp));
-  prods.forEach(p=>{
-    setDone(p.id,grp,!all,null);
-    if(!all&&p.intervalDays) p.lastUsed=today();
-  });
   showToast(all?'Alle abgewählt':`Alle ${prods.length} angewendet ✓`);
-  render();
+  if(!window.sbUser){
+    prods.forEach(p=>setDone(p.id,grp,!all,null));
+    renderUI();
+    return;
+  }
+  const iso = getActiveISO();
+  if(all){
+    const ids = prods.map(p => getAnwId(p.id,grp)).filter(Boolean);
+    prods.forEach(p=>setDone(p.id,grp,false));
+    renderUI();
+    if(ids.length){
+      try {
+        const { error } = await window.sb
+          .from('haut_anwendungen').delete()
+          .in('id', ids).eq('user_id', window.sbUser.id);
+        if(error) throw error;
+      } catch(err) { showToast('Fehler: ' + err.message); }
+    }
+  } else {
+    prods.forEach(p=>setDone(p.id,grp,true,null));
+    renderUI();
+    const rows = prods.map(p => ({
+      user_id: window.sbUser.id,
+      produkt_id: p.id,
+      routine_id: grp,
+      tagesdatum: iso,
+      erfasst_am: new Date().toISOString(),
+      dosis: doseFor(p, grp),
+      einheit_label: p.unit || null
+    }));
+    try {
+      const { data, error } = await window.sb
+        .from('haut_anwendungen')
+        .upsert(rows, { onConflict: 'user_id,produkt_id,tagesdatum,routine_id' })
+        .select();
+      if(error) throw error;
+      (data||[]).forEach(r => setDone(r.produkt_id, r.routine_id, true, null, r.id));
+      // Intervall-Produkte: letzte_anwendung_datum updaten
+      const intervalIds = prods.filter(p => {
+        const rp = (window.__hautRP||{})[p.id+'__'+grp];
+        return rp && rp.intervall;
+      }).map(p=>p.id);
+      if(intervalIds.length){
+        await window.sb
+          .from('haut_routine_produkte')
+          .update({ letzte_anwendung_datum: iso })
+          .eq('routine_id', grp)
+          .in('produkt_id', intervalIds);
+        intervalIds.forEach(pid => {
+          const rp = (window.__hautRP||{})[pid+'__'+grp];
+          if(rp) rp.lastUsed = iso;
+        });
+        renderUI();
+      }
+    } catch(err) { showToast('Fehler: ' + err.message); }
+  }
 }
 
 // ── DELETE MODE ───────────────────────────
@@ -4914,52 +5167,166 @@ function toggleDelMode(){
   btn.classList.toggle('on',delMode);
   btn.textContent=delMode?'✓ Fertig':'🗑 Löschen';
   if(delMode)GROUPS.forEach(g=>openGroups[g.id]=true);
-  render();
+  renderUI();
 }
-function delProd(pid,grp){
+async function delProd(pid,grp){
   const p=products.find(x=>x.id===pid);
   if(!p)return;
   p.groups=p.groups.filter(g=>g!==grp);
-  if(!p.groups.length){products=products.filter(x=>x.id!==pid);showToast(`${p.name} entfernt`)}
-  else showToast(`${p.name} aus Gruppe entfernt`);
-  render();
+  const willDelete = p.groups.length === 0;
+  if(willDelete){
+    products=products.filter(x=>x.id!==pid);
+    showToast(`${p.name} entfernt`);
+  } else {
+    showToast(`${p.name} aus Gruppe entfernt`);
+  }
+  renderUI();
+  if(!window.sbUser) return;
+  try {
+    // Aus dieser Routine entfernen (n:m-Tabelle)
+    const { error: e1 } = await window.sb
+      .from('haut_routine_produkte')
+      .delete()
+      .eq('routine_id', grp)
+      .eq('produkt_id', pid);
+    if(e1) throw e1;
+    delete (window.__hautRP||{})[pid+'__'+grp];
+    if(willDelete){
+      // Soft-Delete des Produkts
+      const { error: e2 } = await window.sb
+        .from('haut_produkte')
+        .update({ aktiv: false })
+        .eq('id', pid)
+        .eq('user_id', window.sbUser.id);
+      if(e2) throw e2;
+    }
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── DOSE MODAL ────────────────────────────
 function openDoseModal(pid,grp){
   const p=products.find(x=>x.id===pid);
   if(!p)return;
-  doseCtx={pid,grp,p};
+  doseCtx={pid,grp,p,targetGroup:grp};
   document.getElementById('haut-m-dose-title').textContent=`✎ ${p.name} — Menge heute`;
-  const cur=getODose(pid,grp)??p.dose;
+  const cur=getODose(pid,grp)??doseFor(p,grp);
   document.getElementById('haut-m-dose-val').value=cur||'';
   const ps=PRESETS[p.unit]||[];
   document.getElementById('haut-m-dose-quick').innerHTML=ps.map(v=>
     `<button class="db${parseFloat(cur)===v?' sel':''}" onclick="window.haut_pickDose(${v},this)">${v}${p.unit?' '+p.unit:''}</button>`
   ).join('');
+  // Routine-Verschieben (analog Supplements)
+  const stacksEl = document.getElementById('haut-m-dose-stacks');
+  if(stacksEl){
+    stacksEl.innerHTML = GROUPS.map(g =>
+      `<button class="db${g.id===grp?' sel':''}" onclick="window.haut_pickStack('${g.id}',this)">${g.label}</button>`
+    ).join('');
+  }
   openModal('haut-m-dose');
+}
+function pickStack(grp, btn){
+  if(!doseCtx) return;
+  doseCtx.targetGroup = grp;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
 }
 function pickDose(v,btn){
   document.getElementById('haut-m-dose-val').value=v;
   btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
 }
-function confirmDose(){
+async function confirmDose(){
   if(!doseCtx)return;
   const {pid,grp,p}=doseCtx;
+  const targetGroup = doseCtx.targetGroup || grp;
+  const moved = (targetGroup !== grp);
   const d=parseFloat(document.getElementById('haut-m-dose-val').value)||null;
-  setDone(pid,grp,true,d);
+
+  // Stack-Move: Produkt-Stammdaten anpassen
+  if(moved){
+    p.groups = p.groups.filter(g => g !== grp);
+    if(!p.groups.includes(targetGroup)) p.groups.push(targetGroup);
+  }
+  const oldAnwId = getAnwId(pid, grp);
+  if(moved) delete doneMap[pid+'__'+grp];
+  setDone(pid, targetGroup, true, d);
   closeModal('haut-m-dose');doseCtx=null;
-  showToast(`${p.name}${d&&p.unit?` · ${d} ${p.unit}`:''} ✓`);
-  render();
+  if(moved){
+    const targetLabel = GROUPS.find(g=>g.id===targetGroup)?.label || '?';
+    showToast(`${p.name} → ${targetLabel} ✓`);
+  } else {
+    showToast(`${p.name}${d&&p.unit?` · ${d} ${p.unit}`:''} ✓`);
+  }
+  renderUI();
+  if(!window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    if(moved){
+      // Alte Anwendung loeschen
+      if(oldAnwId){
+        await window.sb.from('haut_anwendungen').delete()
+          .eq('id', oldAnwId).eq('user_id', window.sbUser.id);
+      }
+      // Routine-Zuordnung anpassen: alte raus, neue rein
+      await window.sb.from('haut_routine_produkte').delete()
+        .eq('routine_id', grp).eq('produkt_id', pid);
+      const sortMax = Object.keys(window.__hautRP||{})
+        .filter(k=>k.endsWith('__'+targetGroup))
+        .reduce((m,k)=>Math.max(m, (window.__hautRP[k].sortierung||0)), 0);
+      const { data: rpNew, error: rpErr } = await window.sb
+        .from('haut_routine_produkte')
+        .insert({
+          routine_id: targetGroup,
+          produkt_id: pid,
+          dosis: d || p.dose,
+          sortierung: (sortMax||0) + 10
+        })
+        .select().single();
+      if(rpErr) throw rpErr;
+      delete (window.__hautRP||{})[pid+'__'+grp];
+      window.__hautRP[pid+'__'+targetGroup] = {
+        dosis: rpNew.dosis,
+        intervall: rpNew.intervall_tage,
+        lastUsed: rpNew.letzte_anwendung_datum
+      };
+    }
+    const { data, error } = await window.sb
+      .from('haut_anwendungen')
+      .upsert({
+        user_id: window.sbUser.id,
+        produkt_id: pid,
+        routine_id: targetGroup,
+        tagesdatum: iso,
+        erfasst_am: new Date().toISOString(),
+        dosis: d,
+        einheit_label: p.unit || null
+      }, { onConflict: 'user_id,produkt_id,tagesdatum,routine_id' })
+      .select()
+      .single();
+    if(error) throw error;
+    setDone(pid, targetGroup, true, d, data.id);
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
-function cancelDose(){
+async function cancelDose(){
   if(!doseCtx)return;
   const {pid,grp,p}=doseCtx;
+  const anwId = getAnwId(pid,grp);
   setDone(pid,grp,false);
   closeModal('haut-m-dose');doseCtx=null;
   showToast(`${p.name} abgewählt`);
-  render();
+  renderUI();
+  if(window.sbUser && anwId){
+    try {
+      const { error } = await window.sb
+        .from('haut_anwendungen').delete()
+        .eq('id', anwId).eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    } catch(err) { showToast('DB-Fehler: ' + err.message); }
+  }
 }
 
 // ── EDIT PRODUCT ──────────────────────────
@@ -4973,12 +5340,23 @@ function openEdit(pid){
   document.getElementById('haut-m-edit-name').value=p.name;
   document.getElementById('haut-m-edit-unit').value=p.unit||'';
   document.getElementById('haut-m-edit-dose').value=p.dose||'';
-  document.querySelectorAll('#haut-m-edit-stacks .stk-btn').forEach(b=>
-    b.classList.toggle('sel',p.groups.includes(b.dataset.s)));
-  const hasInterval=!!p.intervalDays;
+  // Dynamische Stack-Buttons
+  const stacksEl = document.getElementById('haut-m-edit-stacks');
+  if(stacksEl){
+    stacksEl.innerHTML = GROUPS.map(g =>
+      `<button class="stk-btn${p.groups.includes(g.id)?' sel':''}" data-s="${g.id}" onclick="this.classList.toggle('sel')">${g.label}</button>`
+    ).join('');
+  }
+  // Intervall: schau in der ersten Routine wo Produkt drin ist
+  let firstInterval = null;
+  for(const g of p.groups){
+    const rp = (window.__hautRP||{})[pid+'__'+g];
+    if(rp && rp.intervall){ firstInterval = rp.intervall; break; }
+  }
+  const hasInterval = !!firstInterval;
   document.getElementById('haut-m-edit-interval-on').checked=hasInterval;
   document.getElementById('haut-m-edit-interval-days').disabled=!hasInterval;
-  document.getElementById('haut-m-edit-interval-days').value=p.intervalDays||2;
+  document.getElementById('haut-m-edit-interval-days').value=firstInterval||2;
   updateEditQuick();
   openModal('haut-m-edit');
   setTimeout(()=>document.getElementById('haut-m-edit-name').focus(),100);
@@ -5003,7 +5381,7 @@ function pickEdit(v,btn){
   btn.classList.add('sel');
 }
 
-function saveEdit(){
+async function saveEdit(){
   if(!editCtx)return;
   const p=products.find(x=>x.id===editCtx.pid);
   if(!p)return;
@@ -5011,16 +5389,70 @@ function saveEdit(){
   const unit=document.getElementById('haut-m-edit-unit').value||null;
   const dose=parseFloat(document.getElementById('haut-m-edit-dose').value)||null;
   const groups=[...document.querySelectorAll('#haut-m-edit-stacks .stk-btn.sel')].map(b=>b.dataset.s);
-  const intervalOn=document.getElementById('haut-m-edit-interval-on').checked;
-  const intervalDays=intervalOn?parseInt(document.getElementById('haut-m-edit-interval-days').value)||null:null;
+  const intervalOnEl = document.getElementById('haut-m-edit-interval-on');
+  const intervalOn = intervalOnEl ? intervalOnEl.checked : false;
+  const intervalDaysEl = document.getElementById('haut-m-edit-interval-days');
+  const intervalDays = intervalOn ? (intervalDaysEl?parseInt(intervalDaysEl.value)||null:null) : null;
   if(!name){showToast('Name fehlt');return}
   if(!groups.length){showToast('Tageszeit wählen');return}
-  p.name=name; p.unit=unit; p.dose=dose; p.groups=groups; p.intervalDays=intervalDays;
+  const oldGroups = [...p.groups];
+  p.name=name; p.unit=unit; p.dose=dose; p.groups=groups;
   products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  const pid = editCtx.pid;
   editCtx=null;
   closeModal('haut-m-edit');
   showToast(`${name} gespeichert ✓`);
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  try {
+    // Produkt-Stammdaten
+    const { error: e1 } = await window.sb
+      .from('haut_produkte')
+      .update({
+        name,
+        dosis_einheit_label: unit,
+        standard_dosis: dose
+      })
+      .eq('id', pid)
+      .eq('user_id', window.sbUser.id);
+    if(e1) throw e1;
+    // Routine-Zuordnungen synchronisieren (n:m)
+    const removed = oldGroups.filter(g => !groups.includes(g));
+    const added   = groups.filter(g => !oldGroups.includes(g));
+    if(removed.length){
+      await window.sb.from('haut_routine_produkte').delete()
+        .eq('produkt_id', pid).in('routine_id', removed);
+      removed.forEach(g => delete (window.__hautRP||{})[pid+'__'+g]);
+    }
+    if(added.length){
+      const newRows = added.map(g => ({
+        routine_id: g, produkt_id: pid, dosis: dose, intervall_tage: intervalDays, sortierung: 100
+      }));
+      const { data, error } = await window.sb
+        .from('haut_routine_produkte').insert(newRows).select();
+      if(error) throw error;
+      (data||[]).forEach(rp => {
+        window.__hautRP[pid+'__'+rp.routine_id] = {
+          dosis: rp.dosis, intervall: rp.intervall_tage, lastUsed: rp.letzte_anwendung_datum
+        };
+      });
+    }
+    // Intervall fuer alle bestehenden Routinen updaten
+    const stillThere = groups.filter(g => oldGroups.includes(g));
+    if(stillThere.length){
+      await window.sb.from('haut_routine_produkte')
+        .update({ intervall_tage: intervalDays, dosis: dose })
+        .eq('produkt_id', pid)
+        .in('routine_id', stillThere);
+      stillThere.forEach(g => {
+        const rp = (window.__hautRP||{})[pid+'__'+g];
+        if(rp){ rp.intervall = intervalDays; rp.dosis = dose; }
+      });
+    }
+    renderUI();
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── NEW PRODUCT MODAL ─────────────────────
@@ -5031,8 +5463,13 @@ function openNew(preGrp){
   document.getElementById('haut-m-new-interval-on').checked=false;
   document.getElementById('haut-m-new-interval-days').disabled=true;
   document.getElementById('haut-m-new-interval-days').value=2;
-  document.querySelectorAll('#haut-m-new-stacks .stk-btn').forEach(b=>
-    b.classList.toggle('sel',b.dataset.s===preGrp));
+  // Dynamische Stack-Buttons aus GROUPS
+  const stacksEl = document.getElementById('haut-m-new-stacks');
+  if(stacksEl){
+    stacksEl.innerHTML = GROUPS.map(g =>
+      `<button class="stk-btn${g.id===preGrp?' sel':''}" data-s="${g.id}" onclick="this.classList.toggle('sel')">${g.label}</button>`
+    ).join('');
+  }
   updateNewQuick();
   openModal('haut-m-new');
   setTimeout(()=>document.getElementById('haut-m-new-name').focus(),100);
@@ -5053,7 +5490,7 @@ function pickNew(v,btn){
   btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
 }
-function saveNew(){
+async function saveNew(){
   const name=document.getElementById('haut-m-new-name').value.trim();
   const unit=document.getElementById('haut-m-new-unit').value||null;
   const dose=parseFloat(document.getElementById('haut-m-new-dose').value)||null;
@@ -5063,16 +5500,75 @@ function saveNew(){
   if(!name){showToast('Name fehlt');return}
   if(!groups.length){showToast('Tageszeit wählen');return}
   const ex=products.find(p=>p.name.toLowerCase()===name.toLowerCase());
-  if(ex){
-    groups.forEach(g=>{if(!ex.groups.includes(g))ex.groups.push(g)});
-    if(intervalDays)ex.intervalDays=intervalDays;
-    showToast(`${name} aktualisiert`);
-  } else {
-    products.push({id:uid(),name,unit,dose,groups,intervalDays,lastUsed:null});
-    products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
-    showToast(`${name} hinzugefügt`);
+  if(!window.sbUser){
+    if(ex){
+      groups.forEach(g=>{if(!ex.groups.includes(g))ex.groups.push(g)});
+      showToast(`${name} aktualisiert`);
+    } else {
+      products.push({id:uid(),name,unit,dose,groups,intervalDays,lastUsed:null});
+      products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+      showToast(`${name} hinzugefügt`);
+    }
+    closeModal('haut-m-new');renderUI();
+    return;
   }
-  closeModal('haut-m-new');render();
+  try {
+    let prodId;
+    if(ex){
+      // Bestehendes Produkt: Routinen erweitern (n:m)
+      const newGroups = groups.filter(g => !ex.groups.includes(g));
+      ex.groups = [...new Set([...ex.groups, ...groups])];
+      prodId = ex.id;
+      if(newGroups.length){
+        const rows = newGroups.map(g => ({
+          routine_id: g, produkt_id: prodId, dosis: dose, intervall_tage: intervalDays, sortierung: 100
+        }));
+        const { data, error } = await window.sb
+          .from('haut_routine_produkte').insert(rows).select();
+        if(error) throw error;
+        (data||[]).forEach(rp => {
+          window.__hautRP[prodId+'__'+rp.routine_id] = {
+            dosis: rp.dosis, intervall: rp.intervall_tage, lastUsed: rp.letzte_anwendung_datum
+          };
+        });
+      }
+      showToast(`${name} aktualisiert`);
+    } else {
+      // Neues Produkt anlegen
+      const sortMax = products.reduce((m,x)=>Math.max(m, 0), 0);
+      const { data: pNew, error: e1 } = await window.sb
+        .from('haut_produkte')
+        .insert({
+          user_id: window.sbUser.id,
+          name,
+          dosis_einheit_label: unit,
+          standard_dosis: dose,
+          aktiv: true,
+          sortierung: (sortMax||0) + 10
+        })
+        .select().single();
+      if(e1) throw e1;
+      prodId = pNew.id;
+      // Routine-Zuordnungen
+      const rows = groups.map(g => ({
+        routine_id: g, produkt_id: prodId, dosis: dose, intervall_tage: intervalDays, sortierung: 100
+      }));
+      const { data: rpData, error: e2 } = await window.sb
+        .from('haut_routine_produkte').insert(rows).select();
+      if(e2) throw e2;
+      (rpData||[]).forEach(rp => {
+        window.__hautRP[prodId+'__'+rp.routine_id] = {
+          dosis: rp.dosis, intervall: rp.intervall_tage, lastUsed: rp.letzte_anwendung_datum
+        };
+      });
+      products.push({id:prodId, name, unit, dose, groups, intervalDays:null, lastUsed:null});
+      products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+      showToast(`${name} hinzugefügt`);
+    }
+    closeModal('haut-m-new');renderUI();
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── MODALS ────────────────────────────────
@@ -5095,6 +5591,7 @@ window.haut_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==un
   window.haut_openEdit = openEdit;
   window.haut_openNew = openNew;
   window.haut_pickDose = pickDose;
+  window.haut_pickStack = pickStack;
   window.haut_pickEdit = pickEdit;
   window.haut_pickNew = pickNew;
   window.haut_saveComment = saveComment;
