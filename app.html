@@ -81,6 +81,11 @@ body.sort-mode .sort-controls{display:inline-flex}
 .sort-btn:disabled{opacity:.3;cursor:not-allowed}
 #btn-sort-mode.active{background:var(--accent);color:#f5f0e8;border-color:var(--accent)}
 
+/* ── KATEGORIE-TRENNER ─────────────────── */
+.kategorie-divider{display:flex;align-items:center;gap:10px;padding:18px 16px 8px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.kategorie-divider .kd-line{flex:1;height:1px;background:var(--border)}
+.kategorie-divider .kd-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--muted);font-weight:600;white-space:nowrap}
+
 /* ── STACK CARD ─────────────────────────── */
 .stack-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
 .stack-header{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;cursor:pointer;user-select:none}
@@ -1292,6 +1297,14 @@ function setAnkerStatus(modulKey, status){
 // MODUL-SORTIERUNG (persistiert pro User)
 // ═══════════════════════════════════════════
 const MODUL_KEYS = ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp'];
+
+// Kategorien: Maßnahmen vs. Beobachtungen (alles Andere)
+const KATEGORIE_MASSNAHMEN = ['med','supp','haut','get','ern','akt'];
+const KATEGORIE_BEOBACHTUNG = ['bef','stress','entz','schmerz','stuhl','regen','messw','fam','hyp'];
+function getKategorie(key){
+  if(KATEGORIE_MASSNAHMEN.includes(key)) return 'massnahmen';
+  return 'beobachtung';
+}
 let sortMode = false;
 
 // Sort-Buttons in jede Section injizieren (nach DOM-Aufbau)
@@ -1331,28 +1344,38 @@ function getCurrentOrder(){
     .filter(k => MODUL_KEYS.includes(k));
 }
 
+// Order pro Kategorie (Schluessel-Liste mit Reihenfolge wie im DOM)
+function getCategoryOrder(kat){
+  return getCurrentOrder().filter(k => getKategorie(k) === kat);
+}
+
 function updateSortButtonStates(){
-  const order = getCurrentOrder();
-  order.forEach(function(key, idx){
-    const sec = document.getElementById('sec-'+key);
-    if(!sec) return;
-    const btns = sec.querySelectorAll('.sort-controls .sort-btn');
-    if(btns.length === 2){
-      btns[0].disabled = (idx === 0);
-      btns[1].disabled = (idx === order.length - 1);
-    }
+  // Pro Kategorie separat: erstes/letztes Modul disabled
+  ['massnahmen','beobachtung'].forEach(kat => {
+    const order = getCategoryOrder(kat);
+    order.forEach(function(key, idx){
+      const sec = document.getElementById('sec-'+key);
+      if(!sec) return;
+      const btns = sec.querySelectorAll('.sort-controls .sort-btn');
+      if(btns.length === 2){
+        btns[0].disabled = (idx === 0);
+        btns[1].disabled = (idx === order.length - 1);
+      }
+    });
   });
 }
 
 async function moveModul(key, direction){
   const tab = document.getElementById('tab-journal');
   if(!tab) return;
-  const order = getCurrentOrder();
+  // Innerhalb der Kategorie verschieben
+  const kat = getKategorie(key);
+  const order = getCategoryOrder(kat);
   const idx = order.indexOf(key);
   if(idx === -1) return;
   const newIdx = idx + direction;
   if(newIdx < 0 || newIdx >= order.length) return;
-  // DOM-Reorder
+  // DOM-Reorder (zwischen den Modulen der gleichen Kategorie)
   const sec = document.getElementById('sec-'+key);
   const target = document.getElementById('sec-'+order[newIdx]);
   if(!sec || !target) return;
@@ -1393,17 +1416,56 @@ async function loadOrderAndApply(){
       .eq('user_id', window.sbUser.id)
       .order('sortierung', { ascending: true });
     if(error) throw error;
-    if(!data || !data.length) return; // keine Custom-Order
     const tab = document.getElementById('tab-journal');
     if(!tab) return;
-    // Module-Sektionen in der gespeicherten Reihenfolge an das Ende verschieben
-    data.forEach(function(row){
-      const sec = document.getElementById('sec-'+row.modul);
-      if(sec) tab.appendChild(sec);
-    });
+    // Wenn Custom-Order da: Module in der gespeicherten Reihenfolge ans Ende
+    if(data && data.length){
+      data.forEach(function(row){
+        const sec = document.getElementById('sec-'+row.modul);
+        if(sec) tab.appendChild(sec);
+      });
+    }
+    // Egal ob Custom-Order: nach Kategorien gruppieren
+    applyCategoryGrouping();
   } catch(err) {
     console.error('Sort-Lade-Fehler:', err);
+    // Trotzdem gruppieren
+    try { applyCategoryGrouping(); } catch(e){}
   }
+}
+
+// Kategorien-Trenner einfuegen + Module nach Kategorie umsortieren
+// (innerhalb Kategorie bleibt Reihenfolge erhalten)
+function applyCategoryGrouping(){
+  const tab = document.getElementById('tab-journal');
+  if(!tab) return;
+  // Bestehende Trenner entfernen
+  tab.querySelectorAll('.kategorie-divider').forEach(d=>d.remove());
+  // Aktuelle Module einsammeln
+  const allSections = Array.from(tab.querySelectorAll('.section[id^="sec-"]'));
+  const massnahmen = [];
+  const beobachtung = [];
+  allSections.forEach(sec => {
+    const key = sec.id.replace(/^sec-/,'');
+    if(getKategorie(key) === 'massnahmen') massnahmen.push(sec);
+    else beobachtung.push(sec);
+  });
+  // Trenner-Helper
+  function makeDivider(label){
+    const d = document.createElement('div');
+    d.className = 'kategorie-divider';
+    d.innerHTML = `<span class="kd-line"></span><span class="kd-label">${label}</span><span class="kd-line"></span>`;
+    return d;
+  }
+  // Reihenfolge: [Trenner Maßnahmen] [Maßnahmen-Module] [Trenner Beobachtung] [Beobachtung-Module]
+  const massnahmenDiv = makeDivider('🛠 MASSNAHMEN');
+  const beobachtungDiv = makeDivider('📊 BEOBACHTUNG & KONTEXT');
+  // Erst alle aus dem Tab raus, dann in Reihenfolge wieder rein
+  // (appendChild verschiebt automatisch)
+  tab.appendChild(massnahmenDiv);
+  massnahmen.forEach(s => tab.appendChild(s));
+  tab.appendChild(beobachtungDiv);
+  beobachtung.forEach(s => tab.appendChild(s));
 }
 
 // ═══════════════════════════════════════════
