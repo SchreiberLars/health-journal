@@ -1660,6 +1660,8 @@ function injectModules() {
     <label class="ml">Dosis heute</label>
     <div class="dq" id="supp-m-dose-quick"></div>
     <input class="mi" id="supp-m-dose-val" type="number" min="0" step="any" placeholder="Andere Dosis...">
+    <label class="ml" style="margin-top:14px">Verschieben in</label>
+    <div class="dq" id="supp-m-dose-stacks"></div>
     <div class="mbr">
       <button class="bs" onclick="window.supp_cancelDose()">Abwählen</button>
       <button class="bp" onclick="window.supp_confirmDose()">Übernehmen</button>
@@ -4293,7 +4295,7 @@ async function delSupp(sid,stk){
 function openDoseModal(sid,stk){
   const s=suppList.find(x=>x.id===sid);
   if(!s)return;
-  doseCtx={sid,stk,s};
+  doseCtx={sid,stk,s,targetStack:stk};
   document.getElementById('supp-m-dose-title').textContent=`✎ ${s.name} — Dosis heute`;
   const cur=getODose(sid,stk)??s.dose;
   document.getElementById('supp-m-dose-val').value=cur||'';
@@ -4301,7 +4303,17 @@ function openDoseModal(sid,stk){
   document.getElementById('supp-m-dose-quick').innerHTML=ps.map(v=>
     `<button class="db${parseFloat(cur)===v?' sel':''}" onclick="window.supp_pickDose(${v},this)">${v}${s.unit}</button>`
   ).join('');
+  // Stack-Auswahl: aktueller Stack ist markiert, Klick = move-target
+  document.getElementById('supp-m-dose-stacks').innerHTML=STACKS.map(st=>
+    `<button class="db${st.id===stk?' sel':''}" onclick="window.supp_pickStack('${st.id}',this)">${st.label}</button>`
+  ).join('');
   openModal('supp-m-dose');
+}
+function pickStack(stk,btn){
+  if(!doseCtx) return;
+  doseCtx.targetStack = stk;
+  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
 }
 function pickDose(v,btn){
   document.getElementById('supp-m-dose-val').value=v;
@@ -4311,21 +4323,51 @@ function pickDose(v,btn){
 async function confirmDose(){
   if(!doseCtx)return;
   const {sid,stk,s}=doseCtx;
+  const targetStack = doseCtx.targetStack || stk;
+  const moved = (targetStack !== stk);
   const d=parseFloat(document.getElementById('supp-m-dose-val').value)||null;
-  if(d!=null) doseMemory[sid+'__'+stk]=d;
-  setTaken(sid,stk,true,d);
+  
+  // Stack-Move: Supplement-Stammdaten anpassen
+  if(moved){
+    // alten Stack raus, neuen rein (idempotent)
+    s.stacks = s.stacks.filter(x => x !== stk);
+    if(!s.stacks.includes(targetStack)) s.stacks.push(targetStack);
+  }
+  
+  // Lokal: alten Eintrag entfernen, neuen anlegen
+  const oldEinnahmeId = getEinnahmeId(sid,stk);
+  if(moved) delete takenMap[sid+'__'+stk];
+  if(d!=null) doseMemory[sid+'__'+targetStack]=d;
+  setTaken(sid,targetStack,true,d);
   closeModal('supp-m-dose');doseCtx=null;
-  showToast(`${s.name}${d?` · ${d}${s.unit}`:''} ✓`);
+  if(moved){
+    const targetLabel = STACKS.find(x=>x.id===targetStack)?.label || targetStack;
+    showToast(`${s.name} → ${targetLabel} ✓`);
+  } else {
+    showToast(`${s.name}${d?` · ${d}${s.unit}`:''} ✓`);
+  }
   renderUI();
   if(!window.sbUser) return;
   const iso = getActiveISO();
   try {
+    // Bei Move: alten Einnahme-Eintrag loeschen + Stammdaten-stacks updaten
+    if(moved){
+      if(oldEinnahmeId){
+        await window.sb.from('supp_einnahmen').delete()
+          .eq('id', oldEinnahmeId).eq('user_id', window.sbUser.id);
+      }
+      const { error: e1 } = await window.sb.from('supplements')
+        .update({ stacks: s.stacks })
+        .eq('id', sid).eq('user_id', window.sbUser.id);
+      if(e1) throw e1;
+    }
+    // Neuen Eintrag im Ziel-Stack
     const { data, error } = await window.sb
       .from('supp_einnahmen')
       .upsert({
         user_id: window.sbUser.id,
         supplement_id: sid,
-        stack: stk,
+        stack: targetStack,
         tagesdatum: iso,
         erfasst_am: new Date().toISOString(),
         dosis: d,
@@ -4334,7 +4376,7 @@ async function confirmDose(){
       .select()
       .single();
     if(error) throw error;
-    setTaken(sid,stk,true,d,data.id);
+    setTaken(sid,targetStack,true,d,data.id);
   } catch(err) {
     showToast('DB-Fehler: ' + err.message);
   }
@@ -4518,6 +4560,7 @@ window.supp_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==un
   window.supp_openEdit = openEdit;
   window.supp_openNew = openNew;
   window.supp_pickDose = pickDose;
+  window.supp_pickStack = pickStack;
   window.supp_pickEdit = pickEdit;
   window.supp_pickNew = pickNew;
   window.supp_saveComment = saveComment;
