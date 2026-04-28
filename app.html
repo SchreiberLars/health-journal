@@ -2658,8 +2658,25 @@ function injectModules() {
     <select class="ms" id="ern-m-add-meal"></select>
 
     <label class="ml">Menge <span style="color:var(--muted);font-size:9px">(optional)</span></label>
-    <div class="dq" id="ern-m-add-quick"></div>
-    <input class="mi" id="ern-m-add-menge" type="text" placeholder="z.B. 150g, 1 Stk, 2 EL...">
+    <div style="display:flex;gap:6px;margin-top:4px">
+      <input class="mi" id="ern-m-add-wert" type="number" step="any" placeholder="Wert" style="flex:1;margin:0">
+      <select class="ms" id="ern-m-add-einheit" style="flex:1;margin:0" onchange="window.ern_onEinheitChange('ern-m-add')">
+        <option value="">Einheit…</option>
+        <option value="g">g</option>
+        <option value="kg">kg</option>
+        <option value="ml">ml</option>
+        <option value="l">l</option>
+        <option value="Stk">Stk</option>
+        <option value="Portion">Portion</option>
+        <option value="EL">EL</option>
+        <option value="TL">TL</option>
+        <option value="Tasse">Tasse</option>
+        <option value="Scheibe">Scheibe</option>
+        <option value="Prise">Prise</option>
+        <option value="__custom__">Andere…</option>
+      </select>
+    </div>
+    <input class="mi" id="ern-m-add-einheit-custom" type="text" placeholder="Eigene Einheit" style="display:none;margin-top:6px">
 
     <div class="mbr">
       <button class="bs" onclick="closeModal('ern-m-add')">Abbrechen</button>
@@ -8562,13 +8579,22 @@ async function loadBibliothek(){
     if(e1) throw e1;
     const { data: gz, error: e2 } = await window.sb
       .from('ern_gericht_zutaten')
-      .select('gericht_id, zutat_id, menge, sortierung')
+      .select('gericht_id, zutat_id, menge, menge_wert, menge_einheit, sortierung')
       .order('sortierung', { ascending: true });
     if(e2) throw e2;
     const zutByGericht = {};
     (gz||[]).forEach(z => {
       if(!zutByGericht[z.gericht_id]) zutByGericht[z.gericht_id] = [];
-      zutByGericht[z.gericht_id].push({ id: z.zutat_id, menge: z.menge || '' });
+      // Display-String aus wert + einheit, oder Fallback auf altes menge-Feld
+      const display = (z.menge_wert != null)
+        ? `${z.menge_wert}${z.menge_einheit ? ' '+z.menge_einheit : ''}`
+        : (z.menge || '');
+      zutByGericht[z.gericht_id].push({
+        id: z.zutat_id,
+        menge: display,
+        menge_wert: z.menge_wert,
+        menge_einheit: z.menge_einheit
+      });
     });
     bibliothek = (lbm||[]).map(l => ({
       id: l.id,
@@ -8596,7 +8622,7 @@ async function loadFromDb(){
   try {
     const { data: mahls, error: e1 } = await window.sb
       .from('ern_mahlzeiten')
-      .select('id, typ, kommentar, ern_mahlzeit_items(id, lebensmittel_id, menge, bewertung_snapshot, erfasst_am, sortierung)')
+      .select('id, typ, kommentar, ern_mahlzeit_items(id, lebensmittel_id, menge, menge_wert, menge_einheit, bewertung_snapshot, erfasst_am, sortierung)')
       .eq('user_id', window.sbUser.id)
       .eq('tagesdatum', iso);
     if(e1) throw e1;
@@ -8611,11 +8637,16 @@ async function loadFromDb(){
           label: m.kommentar || '',
           items: items.map(i => {
             const lib = bibliothek.find(x => x.id === i.lebensmittel_id);
+            const display = (i.menge_wert != null)
+              ? `${i.menge_wert}${i.menge_einheit ? ' '+i.menge_einheit : ''}`
+              : (i.menge || '');
             return {
               itemId: i.lebensmittel_id,
               name: lib?.name || (i.menge ? '' : '?'),
               bewertung: i.bewertung_snapshot || lib?.bewertung || 'unklar',
-              menge: i.menge || ''
+              menge: display,
+              menge_wert: i.menge_wert,
+              menge_einheit: i.menge_einheit
             };
           })
         });
@@ -8630,11 +8661,16 @@ async function loadFromDb(){
         if(mealEntries[m.typ]){
           mealEntries[m.typ] = items.map(i => {
             const lib = bibliothek.find(x => x.id === i.lebensmittel_id);
+            const display = (i.menge_wert != null)
+              ? `${i.menge_wert}${i.menge_einheit ? ' '+i.menge_einheit : ''}`
+              : (i.menge || '');
             return {
               id: i.id,
               itemId: i.lebensmittel_id,
               name: lib?.name || '?',
-              menge: i.menge || '',
+              menge: display,
+              menge_wert: i.menge_wert,
+              menge_einheit: i.menge_einheit,
               bewertung: i.bewertung_snapshot || lib?.bewertung || 'unklar',
               time: timeFromTimestamp(i.erfasst_am)
             };
@@ -8727,32 +8763,60 @@ function toggleZutatenSection(){
   if(type==='gericht') renderZutatenChips();
 }
 
-let selectedZutaten = new Map(); // id → menge
+let selectedZutaten = new Map(); // id → {wert, einheit}
 
+const EINHEITEN = ['g','kg','ml','l','Stk','Portion','EL','TL','Tasse','Scheibe','Prise'];
 
 function toggleZutat(id){
   if(selectedZutaten.has(id)) selectedZutaten.delete(id);
-  else selectedZutaten.set(id,'');
+  else selectedZutaten.set(id, {wert: null, einheit: null});
   renderZutatenChips();
 }
-function setZutatMenge(id, menge){
-  if(selectedZutaten.has(id)) selectedZutaten.set(id, menge);
+function setZutatWert(id, wertStr){
+  if(!selectedZutaten.has(id)) return;
+  const cur = selectedZutaten.get(id);
+  cur.wert = wertStr === '' ? null : parseFloat(wertStr);
+  if(isNaN(cur.wert)) cur.wert = null;
+}
+function setZutatEinheit(id, einheit){
+  if(!selectedZutaten.has(id)) return;
+  const cur = selectedZutaten.get(id);
+  if(einheit === '__custom__'){
+    const eingabe = prompt('Eigene Einheit:');
+    cur.einheit = (eingabe || '').trim() || null;
+    renderZutatenChips();
+    return;
+  }
+  cur.einheit = einheit || null;
 }
 function renderZutatenChips(){
   const container = document.getElementById('ern-m-new-zutaten-chips');
   if(!container) return;
   const lm = bibliothek.filter(x=>x.type==='lebensmittel');
-  // Selected zutaten with menge inputs
-  const selectedHtml = [...selectedZutaten.entries()].map(([id,menge])=>{
+  // Selected zutaten with split menge inputs
+  const selectedHtml = [...selectedZutaten.entries()].map(([id, m])=>{
     const item = bibliothek.find(x=>x.id===id);
     if(!item) return '';
     const bw = item.bewertung||'gut';
-    return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
-      <button class="chip" style="background:${BW_COLOR[bw]};border-color:${BW_BORDER[bw]};flex:1">${item.name}</button>
-      <input class="mi" value="${menge}" placeholder="Menge"
-        autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
-        style="width:80px;margin:0;font-size:11px;padding:4px 8px"
-        oninput="window.ern_setZutatMenge('${id}',this.value)">
+    const wert = (m.wert != null) ? m.wert : '';
+    const einheit = m.einheit || '';
+    // Falls einheit nicht in EINHEITEN ist -> "Andere..." auswaehlen und Wert anzeigen
+    const isCustomEinheit = einheit && !EINHEITEN.includes(einheit);
+    const einheitOpts = EINHEITEN.map(e =>
+      `<option value="${e}"${e===einheit?' selected':''}>${e}</option>`
+    ).join('');
+    const customOpt = `<option value="__custom__"${isCustomEinheit?' selected':''}>${isCustomEinheit ? einheit : 'Andere…'}</option>`;
+    return `<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px;flex-wrap:wrap">
+      <button class="chip" style="background:${BW_COLOR[bw]};border-color:${BW_BORDER[bw]};flex:1;min-width:80px">${item.name}</button>
+      <input class="mi" value="${wert}" placeholder="Wert" type="number" step="any"
+        style="width:60px;margin:0;font-size:11px;padding:4px 6px"
+        oninput="window.ern_setZutatWert('${id}',this.value)">
+      <select class="ms" style="width:90px;margin:0;font-size:11px;padding:4px 6px"
+        onchange="window.ern_setZutatEinheit('${id}',this.value)">
+        <option value="">—</option>
+        ${einheitOpts}
+        ${customOpt}
+      </select>
       <button onclick="window.ern_toggleZutat('${id}')"
         style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px">✕</button>
     </div>`;
@@ -8896,6 +8960,8 @@ async function saveSpontan(){
         mahlzeit_id: m.id,
         lebensmittel_id: i.itemId,
         menge: i.menge || null,
+        menge_wert: i.menge_wert ?? null,
+        menge_einheit: i.menge_einheit ?? null,
         bewertung_snapshot: i.bewertung,
         sortierung: (idx+1) * 10,
         erfasst_am: ts
@@ -9131,13 +9197,23 @@ async function quickAdd(itemId){
   await addItemToMeal(targetMeal, itemId, '');
 }
 
-async function addItemToMeal(mealId, itemId, menge){
+async function addItemToMeal(mealId, itemId, menge, menge_wert, menge_einheit){
   const item = itemById(itemId);
   if(!item) return;
   const localId = uid();
   const time = nowTime();
+  // Display-String aus wert+einheit ableiten falls nicht direkt gegeben
+  const display = menge || (menge_wert != null ? `${menge_wert}${menge_einheit ? ' '+menge_einheit : ''}` : '');
   // Optimistisch lokal
-  mealEntries[mealId].push({ id:localId, itemId, name:item.name, menge:menge||'', bewertung:item.bewertung, time });
+  mealEntries[mealId].push({
+    id:localId, itemId,
+    name:item.name,
+    menge: display,
+    menge_wert: menge_wert ?? null,
+    menge_einheit: menge_einheit ?? null,
+    bewertung:item.bewertung,
+    time
+  });
   renderUI();
   showToast(`${BW_ICON[item.bewertung]} ${item.name} → ${MEALS.find(m=>m.id===mealId)?.label}`);
   if(!window.sbUser) return;
@@ -9149,7 +9225,9 @@ async function addItemToMeal(mealId, itemId, menge){
       .insert({
         mahlzeit_id: mahlzeitId,
         lebensmittel_id: itemId,
-        menge: menge || null,
+        menge: display || null,
+        menge_wert: menge_wert ?? null,
+        menge_einheit: menge_einheit ?? null,
         bewertung_snapshot: item.bewertung,
         sortierung: (mealEntries[mealId].length) * 10,
         erfasst_am: new Date().toISOString()
@@ -9177,23 +9255,43 @@ function openAddModal(itemId){
   if(!item) return;
   addCtx = {itemId};
   document.getElementById('ern-m-add-title').textContent = `${BW_ICON[item.bewertung]} ${item.name}`;
-  document.getElementById('ern-m-add-menge').value = '';
+  document.getElementById('ern-m-add-wert').value = '';
+  document.getElementById('ern-m-add-einheit').value = '';
+  document.getElementById('ern-m-add-einheit-custom').style.display = 'none';
+  document.getElementById('ern-m-add-einheit-custom').value = '';
   // Populate meal select
   const openMeal = MEALS.find(m=>mealOpen[m.id]);
   document.getElementById('ern-m-add-meal').innerHTML = MEALS.map(m=>
     `<option value="${m.id}"${m.id===(openMeal?.id||'fruehstueck')?' selected':''}>${m.label}</option>`
   ).join('');
-  // Quick presets
-  document.getElementById('ern-m-add-quick').innerHTML = MENGE_QUICK.map(v=>
-    `<button class="db" onclick="window.ern_pickMenge('${v}',this)">${v}</button>`
-  ).join('');
   openModal('ern-m-add');
 }
 
-function pickMenge(v,btn){
-  document.getElementById('ern-m-add-menge').value=v;
-  btn.closest('.dq').querySelectorAll('.db').forEach(b=>b.classList.remove('sel'));
-  btn.classList.add('sel');
+function readMengeFromModal(prefix){
+  // prefix: 'ern-m-add' oder 'ern-m-zut' (fuer Zutaten-Modal spaeter)
+  const wertEl = document.getElementById(prefix+'-wert');
+  const einheitSel = document.getElementById(prefix+'-einheit');
+  const einheitCustom = document.getElementById(prefix+'-einheit-custom');
+  const wert = wertEl.value !== '' ? parseFloat(wertEl.value) : null;
+  let einheit = einheitSel.value || null;
+  if(einheit === '__custom__'){
+    einheit = (einheitCustom.value || '').trim() || null;
+  }
+  if(isNaN(wert)) return { wert: null, einheit, display: einheit || '' };
+  if(wert == null && !einheit) return { wert: null, einheit: null, display: '' };
+  const display = wert != null ? `${wert}${einheit ? ' '+einheit : ''}` : (einheit || '');
+  return { wert, einheit, display };
+}
+
+function onEinheitChange(prefix){
+  const sel = document.getElementById(prefix+'-einheit');
+  const custom = document.getElementById(prefix+'-einheit-custom');
+  if(sel.value === '__custom__'){
+    custom.style.display = 'block';
+    setTimeout(()=>custom.focus(), 50);
+  } else {
+    custom.style.display = 'none';
+  }
 }
 
 async function confirmAdd(){
@@ -9201,9 +9299,9 @@ async function confirmAdd(){
   const item = itemById(addCtx.itemId);
   if(!item) return;
   const mealId = document.getElementById('ern-m-add-meal').value;
-  const menge  = document.getElementById('ern-m-add-menge').value.trim();
+  const m = readMengeFromModal('ern-m-add');
   closeModal('ern-m-add'); addCtx=null;
-  await addItemToMeal(mealId, item.id, menge);
+  await addItemToMeal(mealId, item.id, m.display, m.wert, m.einheit);
 }
 
 // ── BIBLIOTHEK CRUD ───────────────────────
@@ -9228,8 +9326,15 @@ function openEditItem(itemId){
   bewertungUserSet = true; // existing item: keep stored bewertung, don't auto-overwrite
   const rawZ = Array.isArray(item.zutaten) ? item.zutaten : [];
   rawZ.forEach(z => {
-    if(typeof z === 'string') selectedZutaten.set(z, '');
-    else selectedZutaten.set(z.id, z.menge||'');
+    if(typeof z === 'string'){
+      selectedZutaten.set(z, {wert:null, einheit:null});
+    } else {
+      // {id, menge, menge_wert, menge_einheit}
+      selectedZutaten.set(z.id, {
+        wert: (z.menge_wert != null) ? z.menge_wert : null,
+        einheit: z.menge_einheit || null
+      });
+    }
   });
   document.getElementById('ern-m-new-title').textContent='Lebensmittel bearbeiten';
   document.getElementById('ern-m-new-name').value=item.name;
@@ -9245,7 +9350,17 @@ async function saveItem(){
   const name    = document.getElementById('ern-m-new-name').value.trim();
   const type    = document.getElementById('ern-m-new-type').value;
   const zutaten = type==='gericht'
-    ? [...selectedZutaten.entries()].map(([id,menge])=>({id,menge}))
+    ? [...selectedZutaten.entries()].map(([id, m])=>{
+        const display = (m.wert != null)
+          ? `${m.wert}${m.einheit ? ' '+m.einheit : ''}`
+          : (m.einheit || '');
+        return {
+          id,
+          menge: display,
+          menge_wert: m.wert,
+          menge_einheit: m.einheit
+        };
+      })
     : [];
   if(!name){showToast('Name fehlt');return}
 
@@ -9280,7 +9395,12 @@ async function saveItem(){
         await window.sb.from('ern_gericht_zutaten').delete().eq('gericht_id', itemId);
         if(zutaten.length){
           const rows = zutaten.map((z,idx)=>({
-            gericht_id: itemId, zutat_id: z.id, menge: z.menge||null, sortierung: (idx+1)*10
+            gericht_id: itemId,
+            zutat_id: z.id,
+            menge: z.menge || null,
+            menge_wert: z.menge_wert ?? null,
+            menge_einheit: z.menge_einheit ?? null,
+            sortierung: (idx+1)*10
           }));
           const { error: e2 } = await window.sb.from('ern_gericht_zutaten').insert(rows);
           if(e2) throw e2;
@@ -9301,7 +9421,12 @@ async function saveItem(){
       itemId = data.id;
       if(type==='gericht' && zutaten.length){
         const rows = zutaten.map((z,idx)=>({
-          gericht_id: itemId, zutat_id: z.id, menge: z.menge||null, sortierung: (idx+1)*10
+          gericht_id: itemId,
+          zutat_id: z.id,
+          menge: z.menge || null,
+          menge_wert: z.menge_wert ?? null,
+          menge_einheit: z.menge_einheit ?? null,
+          sortierung: (idx+1)*10
         }));
         const { error: e2 } = await window.sb.from('ern_gericht_zutaten').insert(rows);
         if(e2) throw e2;
@@ -9422,7 +9547,7 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_deleteItem = deleteItem;
   window.ern_deleteSpontan = deleteSpontan;
   window.ern_openEditItem = openEditItem;
-  window.ern_pickMenge = pickMenge;
+  window.ern_onEinheitChange = onEinheitChange;
   window.ern_quickAdd = quickAdd;
   window.ern_saveComment = saveComment;
   window.ern_toggleComment = toggleComment;
@@ -9435,7 +9560,8 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_openSpontanModal = openSpontanModal;
   window.ern_render = render;
   window.ern_toggleZutat = toggleZutat;
-  window.ern_setZutatMenge = setZutatMenge;
+  window.ern_setZutatWert = setZutatWert;
+  window.ern_setZutatEinheit = setZutatEinheit;
   window.ern_saveItem = saveItem;
   window.ern_saveSpontan = saveSpontan;
   window.ern_toggleDelMode = toggleDelMode;
