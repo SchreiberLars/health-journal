@@ -7231,22 +7231,53 @@ function renderBadge(anker){
 }
 
 
-function copyFromPrevDay(anker) {
-  // Get previous day's data from localStorage key
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yKey = 'entz_' + yesterday.toISOString().slice(0,10);
+async function copyFromPrevDay(anker) {
+  if(!window.sbUser || !window.sb){
+    showToast('Nicht eingeloggt');
+    return;
+  }
+  // Tag vor dem aktiven Tag berechnen
+  const cur = (typeof activeDate !== 'undefined' && activeDate) ? new Date(activeDate) : new Date();
+  cur.setDate(cur.getDate() - 1);
+  const prevISO = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
   try {
-    const prev = JSON.parse(localStorage.getItem(yKey) || '{}');
-    if(prev[anker] && Object.keys(prev[anker]).length > 0) {
-      ankerData[anker] = Object.assign({}, prev[anker]);
-      render();
-      showToast('Vortageswerte übernommen ✓');
-    } else {
+    const { data, error } = await window.sb
+      .from('entz_anker_werte')
+      .select('region_id, wert')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', prevISO)
+      .eq('anker', anker);
+    if(error) throw error;
+    if(!data || !data.length){
       showToast('Keine Vortageswerte vorhanden');
+      return;
     }
-  } catch(e) {
-    showToast('Keine Vortageswerte vorhanden');
+    // Lokal anzeigen
+    const newVals = {};
+    data.forEach(r => { if(r.wert != null) newVals[r.region_id] = parseFloat(r.wert); });
+    ankerData[anker] = newVals;
+    renderRegions(anker);
+    renderBadge(anker);
+    updateAnkerIndicator();
+    // In DB fuer aktiven Tag uebernehmen (UPSERT)
+    const todayISO = getActiveISO();
+    const rows = Object.entries(newVals).map(([rid, val]) => ({
+      user_id: window.sbUser.id,
+      tagesdatum: todayISO,
+      anker,
+      region_id: rid,
+      wert: val
+    }));
+    if(rows.length){
+      const { error: upErr } = await window.sb
+        .from('entz_anker_werte')
+        .upsert(rows, { onConflict: 'user_id,tagesdatum,anker,region_id' });
+      if(upErr) throw upErr;
+    }
+    showToast(`${rows.length} Vortageswerte übernommen ✓`);
+  } catch(err){
+    console.error('copyFromPrevDay-Fehler:', err);
+    showToast('Fehler: ' + err.message);
   }
 }
 function renderRegions(anker){
@@ -9768,22 +9799,59 @@ function renderBadge(anker){
 }
 
 
-function copyFromPrevDay(anker) {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yKey = 'schmerz_' + yesterday.toISOString().slice(0,10);
+async function copyFromPrevDay(anker) {
+  if(!window.sbUser || !window.sb){
+    showToast('Nicht eingeloggt');
+    return;
+  }
+  const cur = (typeof activeDate !== 'undefined' && activeDate) ? new Date(activeDate) : new Date();
+  cur.setDate(cur.getDate() - 1);
+  const prevISO = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
   try {
-    const prev = JSON.parse(localStorage.getItem(yKey) || '{}');
-    if(prev[anker] && Object.keys(prev[anker]).length > 0) {
-      ankerData[anker] = Object.assign({}, prev[anker]);
-      if(prev['allo_'+anker]) allodynie[anker] = Object.assign({}, prev['allo_'+anker]);
-      renderUI();
-      showToast('Vortageswerte übernommen ✓');
-    } else {
+    const { data, error } = await window.sb
+      .from('schmerz_anker_werte')
+      .select('region_id, wert, nur_aufstehen, allodynie')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', prevISO)
+      .eq('anker', anker);
+    if(error) throw error;
+    if(!data || !data.length){
       showToast('Keine Vortageswerte vorhanden');
+      return;
     }
-  } catch(e) {
-    showToast('Keine Vortageswerte vorhanden');
+    // Lokal anwenden
+    const newVals = {};
+    const newAllo = {};
+    data.forEach(r => {
+      if(r.wert != null){
+        newVals[r.region_id] = { val: parseFloat(r.wert), nurAufstehen: !!r.nur_aufstehen };
+      }
+      if(r.allodynie) newAllo[r.region_id] = true;
+    });
+    ankerData[anker] = newVals;
+    allodynie[anker] = newAllo;
+    renderUI();
+    // In DB fuer aktiven Tag uebernehmen
+    const todayISO = getActiveISO();
+    const rows = data.map(r => ({
+      user_id: window.sbUser.id,
+      tagesdatum: todayISO,
+      anker,
+      region_id: r.region_id,
+      wert: r.wert,
+      nur_aufstehen: r.nur_aufstehen,
+      allodynie: r.allodynie
+    }));
+    if(rows.length){
+      const { error: upErr } = await window.sb
+        .from('schmerz_anker_werte')
+        .upsert(rows, { onConflict: 'user_id,tagesdatum,anker,region_id' });
+      if(upErr) throw upErr;
+    }
+    showToast(`${rows.length} Vortageswerte übernommen ✓`);
+  } catch(err){
+    console.error('copyFromPrevDay-Fehler:', err);
+    showToast('Fehler: ' + err.message);
   }
 }
 function renderRegions(anker){
