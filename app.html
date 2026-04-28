@@ -1585,7 +1585,8 @@ const TIMELINE_MODULES = [
   {key:'stuhl',   icon:'💩', label:'Stuhlgang',        color:'var(--c-stuhl)'},
   {key:'stress',  icon:'⚡', label:'Akut-Signal',      color:'var(--c-bef)'},
   {key:'schmerz', icon:'💪', label:'Schmerz-Episode',  color:'var(--c-schmerz)'},
-  {key:'notes',   icon:'📝', label:'Notiz',            color:'var(--muted)'}
+  {key:'notes',   icon:'📝', label:'Notiz',            color:'var(--muted)'},
+  {key:'garmin',  icon:'⌚', label:'Garmin',           color:'var(--c-regen)'}
 ];
 
 let timelineLastDate = null;
@@ -1787,6 +1788,52 @@ async function collectTimelineItems(iso){
     title: 'Notiz',
     detail: r.text || ''
   }));
+
+  // 12. Garmin Schlaf-Events (Einschlafen + Aufwachen)
+  // schlaf_ende ist immer am tagesdatum; schlaf_start kann am Vortag (häufig) oder am tagesdatum (nach Mitternacht) sein.
+  // → Wir holen alle Einträge wo entweder schlaf_start ODER schlaf_ende am aktuellen Tag liegt.
+  const garminEnde = await safeQuery(()=> window.sb
+    .from('garmin_taeglich')
+    .select('tagesdatum, schlaf_start, schlaf_ende, schlaf_dauer_min, schlaf_score')
+    .eq('user_id', window.sbUser.id)
+    .eq('tagesdatum', iso));
+  (garminEnde?.data||[]).forEach(r => {
+    if(r.schlaf_ende){
+      const dur = r.schlaf_dauer_min;
+      const dauerStr = dur ? `${Math.floor(dur/60)}h ${dur%60}m` : '';
+      const scoreStr = r.schlaf_score != null ? `Score ${r.schlaf_score}` : '';
+      items.push({
+        ts: r.schlaf_ende, mod:'garmin',
+        title: '☀ Aufwachen',
+        detail: [dauerStr, scoreStr].filter(Boolean).join(' · ')
+      });
+    }
+    // Einschlafen wenn am gleichen Tag (Schlaf nach Mitternacht begonnen)
+    if(r.schlaf_start && r.schlaf_start.slice(0,10) === iso){
+      items.push({
+        ts: r.schlaf_start, mod:'garmin',
+        title: '🌙 Einschlafen',
+        detail: ''
+      });
+    }
+  });
+  // Einschlafen für DEN aktuellen Tag = aus Eintrag des Folgetags lesen (Schlaf am Vorabend)
+  const nextDay = new Date(iso); nextDay.setDate(nextDay.getDate()+1);
+  const nextISO = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,'0')}-${String(nextDay.getDate()).padStart(2,'0')}`;
+  const garminStart = await safeQuery(()=> window.sb
+    .from('garmin_taeglich')
+    .select('schlaf_start')
+    .eq('user_id', window.sbUser.id)
+    .eq('tagesdatum', nextISO));
+  (garminStart?.data||[]).forEach(r => {
+    if(r.schlaf_start && r.schlaf_start.slice(0,10) === iso){
+      items.push({
+        ts: r.schlaf_start, mod:'garmin',
+        title: '🌙 Einschlafen',
+        detail: ''
+      });
+    }
+  });
 
   return items;
 }
