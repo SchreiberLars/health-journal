@@ -1853,7 +1853,25 @@ function renderTimelineList(items, iso){
     </div>`;
   } else {
     html += `<div class="timeline-list">`;
-    items.forEach(item => {
+    let prevTs = null;
+    items.forEach((item, idx) => {
+      // Gap-Marker einfuegen wenn >=30 Min seit dem vorigen Eintrag
+      if(prevTs && item.ts){
+        const diffMin = Math.round((new Date(item.ts) - new Date(prevTs)) / 60000);
+        if(diffMin >= 30){
+          const h = Math.floor(diffMin/60);
+          const m = diffMin%60;
+          const dauerStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+          // Style abhaengig von Dauer
+          const isLong = diffMin >= 120;  // >= 2h
+          const opacity = isLong ? 0.6 : 0.4;
+          const lineHeight = Math.min(40, 8 + Math.log2(diffMin)*4);
+          html += `<div class="timeline-gap" style="opacity:${opacity};padding:4px 0 4px 56px;font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:8px">
+            <div style="width:1px;height:${lineHeight}px;background:var(--border);margin-left:4px"></div>
+            <span>⏱ ${dauerStr}${isLong ? ' Pause' : ''}</span>
+          </div>`;
+        }
+      }
       const meta = TIMELINE_MODULES.find(m => m.key === item.mod) || {icon:'•', label:item.mod, color:'var(--muted)'};
       const time = timelineHHMM(item.ts);
       html += `<div class="timeline-item" style="border-left-color:${meta.color}">
@@ -1864,6 +1882,7 @@ function renderTimelineList(items, iso){
           <div class="timeline-mod">${meta.label}</div>
         </div>
       </div>`;
+      prevTs = item.ts;
     });
     html += `</div>`;
   }
