@@ -246,63 +246,6 @@ def fetch_taeglich(client, d):
     return row
 
 
-def fetch_workouts(client, von, bis):
-    """Holt Workouts im Zeitraum."""
-    activities = []
-    try:
-        # Garmin gibt max ~limit zurueck, also Pagination
-        offset = 0
-        limit = 100
-        while True:
-            batch = client.get_activities(offset, limit)
-            if not batch:
-                break
-            for a in batch:
-                start_str = a.get("startTimeLocal") or a.get("startTimeGMT")
-                if not start_str:
-                    continue
-                try:
-                    start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
-                except ValueError:
-                    start_dt = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
-                tagesdatum = start_dt.date()
-                if tagesdatum < von:
-                    return activities  # alle aelteren ueberspringen
-                if tagesdatum > bis:
-                    continue
-                
-                row = {
-                    "id": str(a.get("activityId")),
-                    "tagesdatum": tagesdatum.isoformat(),
-                    "start_zeit": start_dt.isoformat(),
-                    "dauer_min": round(safe_float(a.get("duration") or 0)/60, 1) or None,
-                    "typ": a.get("activityType", {}).get("typeKey"),
-                    "name": a.get("activityName"),
-                    "distanz_km": round(safe_float(a.get("distance") or 0)/1000, 2) or None,
-                    "hf_avg": safe_int(a.get("averageHR")),
-                    "hf_max": safe_int(a.get("maxHR")),
-                    "kalorien": safe_int(a.get("calories")),
-                    "hoehenmeter": safe_int(a.get("elevationGain")),
-                    "training_effekt_aerob": safe_float(a.get("aerobicTrainingEffect")),
-                    "training_effekt_anaerob": safe_float(a.get("anaerobicTrainingEffect")),
-                    "training_load": safe_float(a.get("activityTrainingLoad")),
-                    "geschwindigkeit_avg_kmh": round(safe_float(a.get("averageSpeed") or 0)*3.6, 2) or None,
-                }
-                # Pace nur fuer running/walking
-                if row["typ"] in ("running", "walking", "trail_running") and a.get("averageSpeed"):
-                    pace = 1000 / (a["averageSpeed"] * 60)  # min/km
-                    row["pace_avg_min_per_km"] = round(pace, 2)
-                
-                activities.append(row)
-            
-            if len(batch) < limit:
-                break
-            offset += limit
-    except Exception as e:
-        print(f"  ⚠ Aktivitaeten-Fehler: {e}")
-    return activities
-
-
 # ═══════════════════════════════════════════
 # SUPABASE UPLOAD
 # ═══════════════════════════════════════════
@@ -325,30 +268,13 @@ def upsert_taeglich(rows, user_id, access_token):
     return len(rows)
 
 
-def upsert_workouts(rows, user_id, access_token):
-    if not rows:
-        return 0
-    for r in rows:
-        r["user_id"] = user_id
-    r = requests.post(
-        f"{SUPABASE_URL}/rest/v1/garmin_workouts",
-        headers={**sb_headers(access_token), "Prefer": "resolution=merge-duplicates,return=minimal"},
-        json=rows,
-        timeout=30
-    )
-    if r.status_code >= 400:
-        print(f"  ⚠ Upsert-Fehler ({r.status_code}): {r.text[:200]}")
-        return 0
-    return len(rows)
-
-
-def log_sync(user_id, access_token, von, bis, tage, workouts, status, fehler=None):
+def log_sync(user_id, access_token, von, bis, tage, status, fehler=None):
     payload = {
         "user_id": user_id,
         "zeitraum_von": von.isoformat(),
         "zeitraum_bis": bis.isoformat(),
         "tage_synced": tage,
-        "workouts_synced": workouts,
+        "workouts_synced": 0,
         "status": status,
         "beendet_am": datetime.now(timezone.utc).isoformat()
     }
@@ -406,11 +332,6 @@ def main():
     
     print(f"\n→ {len(taeglich_rows)} Tage mit Daten gefunden")
     
-    # Workouts holen
-    print("\n--- Workouts ---")
-    workouts = fetch_workouts(gc, von, bis)
-    print(f"→ {len(workouts)} Workouts gefunden")
-    
     # Bulk-Upload
     print("\n--- Upload zu Supabase ---")
     # In Chunks von 100, sonst Payload-Limit
@@ -420,14 +341,8 @@ def main():
         n_taeglich += upsert_taeglich(chunk, user_id, access_token)
     print(f"  ✓ {n_taeglich} Tagesdaten hochgeladen")
     
-    n_workouts = 0
-    for i in range(0, len(workouts), 100):
-        chunk = workouts[i:i+100]
-        n_workouts += upsert_workouts(chunk, user_id, access_token)
-    print(f"  ✓ {n_workouts} Workouts hochgeladen")
-    
     # Log
-    log_sync(user_id, access_token, von, bis, n_taeglich, n_workouts, "success")
+    log_sync(user_id, access_token, von, bis, n_taeglich, "success")
     
     print("\n" + "=" * 60)
     print("  ✓ Import abgeschlossen!")

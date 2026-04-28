@@ -35,7 +35,7 @@ python garmin_import.py
 2. Bei aktiver MFA: kommt der **Code per SMS/App** und wird eingegeben
 3. Garmin-Tokens werden in `~/.garminconnect` gecacht (für die nächsten Aufrufe)
 4. Du wirst nach deinen **Health-Journal-Credentials** gefragt
-5. Skript läuft durch — kann **20-30 Minuten** dauern bei 12 Monaten,
+5. Skript läuft durch — kann **15-25 Minuten** dauern bei 12 Monaten,
    weil pro Tag mehrere API-Calls gemacht werden müssen
 6. Garmin hat **Rate-Limits** — falls Fehler kommen einfach Skript erneut starten,
    die schon importierten Tage werden übersprungen (UPSERT)
@@ -53,18 +53,13 @@ python garmin_import.py
 - VO2max
 - Atemfrequenz
 
-**Pro Workout** (`garmin_workouts`):
-- Typ, Name, Start, Dauer
-- Distanz, HF avg/max, Kalorien, Höhenmeter
-- Trainingseffekt (aerob/anaerob), Training Load
-- Pace, Geschwindigkeit
+**Workouts:** werden NICHT importiert — Krafttraining kommt aus Strong (separater Importer geplant). Cardio über Garmin könnte später nachgezogen werden falls relevant.
 
 ## Mehrfaches Ausführen
 
 Sicher — UPSERT-Logik. Bei jeder Ausführung werden:
 - **Existierende Tage überschrieben** (mit aktuellsten Garmin-Daten)
 - **Fehlende Tage ergänzt**
-- **Neue Workouts hinzugefügt**
 
 So kannst du das Skript einfach jeden Monat erneut laufen lassen.
 
