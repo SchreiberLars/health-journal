@@ -728,6 +728,11 @@ window.sbUser = null;
 <!-- ── TAB: JOURNAL ── -->
 <div id="tab-journal">
 
+<!-- TAGESKOMMENTAR (oben, modul-unabhaengig) -->
+<div id="tageskommentar-card" style="margin:0 16px 12px;padding:12px 14px;background:var(--surface2);border-radius:10px;border:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--muted);min-height:24px" onclick="openTageskommentar()">
+  <div id="tageskommentar-display">+ Tageskommentar</div>
+</div>
+
 <!-- 1. MEDIKAMENTE -->
 <div class="section" id="sec-med" style="border-left-color:var(--c-med)">
   <div class="section-header" onclick="toggleSection('med')">
@@ -1021,11 +1026,6 @@ window.sbUser = null;
       <span class="section-label">💡 Hypothesen</span>
       <button class="btn-ghost" onclick="openNewHyp()">+ Neue Hypothese</button>
     </div>
-    <div style="font-size:10px;color:var(--muted);line-height:1.6;margin-bottom:14px;
-      padding:10px 12px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--c-hyp)">
-      Was glaubst du womit deine Beschwerden zusammenhängen?<br>
-      Das Tracking liefert die Antwort.
-    </div>
     <div id="hyp-list"></div>
   </div>
 </div>
@@ -1098,6 +1098,20 @@ window.sbUser = null;
     <div class="mbr">
       <button class="bs" onclick="closeModal('m-cal')">Abbrechen</button>
       <button class="bp" onclick="confirmDate()">Auswählen</button>
+    </div>
+  </div>
+</div>
+
+<!-- TAGESKOMMENTAR MODAL -->
+<div class="modal-overlay" id="m-tageskommentar">
+  <div class="modal-sheet">
+    <div class="mt">Tageskommentar</div>
+    <div class="mt-sub">Was beeinflusste diesen Tag? z.B. "Power BI-Training gegeben"</div>
+    <textarea class="comment-textarea" id="tageskommentar-text" style="height:120px;margin-top:0" placeholder="Notiz für diesen Tag..."></textarea>
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('m-tageskommentar')">Abbrechen</button>
+      <button class="bs" onclick="deleteTageskommentar()" style="color:var(--delete)">Löschen</button>
+      <button class="bp" onclick="saveTageskommentar()">Speichern</button>
     </div>
   </div>
 </div>
@@ -1319,11 +1333,98 @@ function rerenderAllModulesForDate(){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+' rerender:',e.message);}
   });
+  // Tageskommentar laden
+  if(typeof renderTageskommentar === 'function') renderTageskommentar();
   // Timeline auch neu laden wenn Tab aktiv ist
   if(typeof currentTab !== 'undefined' && currentTab === 'timeline'){
     if(typeof renderTimeline === 'function') renderTimeline();
   }
 }
+
+// ═══════════════════════════════════════════
+// TAGESKOMMENTAR (modul-unabhaengig, pro Tag)
+// ═══════════════════════════════════════════
+let tagesKommentarLoaded = null;  // {iso, text}
+async function renderTageskommentar(){
+  const card = document.getElementById('tageskommentar-card');
+  const display = document.getElementById('tageskommentar-display');
+  if(!card || !display) return;
+  if(!window.sb || !window.sbUser){
+    display.textContent = '+ Tageskommentar';
+    card.style.borderStyle = 'dashed';
+    card.style.color = 'var(--muted)';
+    return;
+  }
+  const iso = isoDate(activeDate);
+  try {
+    const {data, error} = await window.sb
+      .from('tageskommentar')
+      .select('kommentar')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso)
+      .maybeSingle();
+    if(error) throw error;
+    if(data && data.kommentar){
+      display.textContent = data.kommentar;
+      card.style.borderStyle = 'solid';
+      card.style.color = 'var(--text)';
+      tagesKommentarLoaded = {iso, text: data.kommentar};
+    } else {
+      display.textContent = '+ Tageskommentar';
+      card.style.borderStyle = 'dashed';
+      card.style.color = 'var(--muted)';
+      tagesKommentarLoaded = {iso, text: ''};
+    }
+  } catch(err){
+    console.error('Tageskommentar load:', err);
+  }
+}
+
+function openTageskommentar(){
+  const text = (tagesKommentarLoaded && tagesKommentarLoaded.text) || '';
+  document.getElementById('tageskommentar-text').value = text;
+  openModal('m-tageskommentar');
+  setTimeout(()=> document.getElementById('tageskommentar-text').focus(), 50);
+}
+
+async function saveTageskommentar(){
+  if(!window.sb || !window.sbUser){ closeModal('m-tageskommentar'); return; }
+  const text = document.getElementById('tageskommentar-text').value.trim();
+  const iso = isoDate(activeDate);
+  try {
+    if(!text){
+      // Leer = loeschen
+      await window.sb.from('tageskommentar')
+        .delete()
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso);
+    } else {
+      await window.sb.from('tageskommentar')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          kommentar: text,
+          updated_at: new Date().toISOString()
+        }, {onConflict: 'user_id,tagesdatum'});
+    }
+    closeModal('m-tageskommentar');
+    showToast(text ? 'Tageskommentar gespeichert ✓' : 'Tageskommentar gelöscht');
+    renderTageskommentar();
+    if(currentTab === 'timeline' && typeof renderTimeline === 'function') renderTimeline();
+  } catch(err){
+    console.error('Tageskommentar save:', err);
+    showToast('Fehler beim Speichern');
+  }
+}
+
+async function deleteTageskommentar(){
+  document.getElementById('tageskommentar-text').value = '';
+  await saveTageskommentar();
+}
+window.openTageskommentar = openTageskommentar;
+window.saveTageskommentar = saveTageskommentar;
+window.deleteTageskommentar = deleteTageskommentar;
+window.renderTageskommentar = renderTageskommentar;
 
 // Anker-Status-Indikator setzen (☀️/🌙 in Section-Header)
 // modulKey: 'bef', 'fam', etc.
@@ -1586,7 +1687,8 @@ const TIMELINE_MODULES = [
   {key:'stress',  icon:'⚡', label:'Akut-Signal',      color:'var(--c-bef)'},
   {key:'schmerz', icon:'💪', label:'Schmerz-Episode',  color:'var(--c-schmerz)'},
   {key:'notes',   icon:'📝', label:'Notiz',            color:'var(--muted)'},
-  {key:'garmin',  icon:'⌚', label:'Garmin',           color:'var(--c-regen)'}
+  {key:'garmin',  icon:'⌚', label:'Garmin',           color:'var(--c-regen)'},
+  {key:'tagkomm', icon:'📌', label:'Tageskommentar',   color:'var(--c-bef)'}
 ];
 
 let timelineLastDate = null;
@@ -1789,6 +1891,23 @@ async function collectTimelineItems(iso){
     detail: r.text || ''
   }));
 
+  // 11b. Tageskommentar (modul-unabhaengig, erscheint ganz oben)
+  const tagkomm = await safeQuery(()=> window.sb
+    .from('tageskommentar')
+    .select('kommentar')
+    .eq('user_id', window.sbUser.id)
+    .eq('tagesdatum', iso)
+    .maybeSingle());
+  if(tagkomm?.data?.kommentar){
+    items.push({
+      ts: iso + 'T00:00:00',  // kuenstlich frueh damit oben
+      mod: 'tagkomm',
+      title: 'Tag im Überblick',
+      detail: tagkomm.data.kommentar,
+      _hideTime: true  // Marker fuer Render
+    });
+  }
+
   // 12. Garmin Schlaf-Events (Einschlafen + Aufwachen)
   // schlaf_ende ist immer am tagesdatum; schlaf_start kann am Vortag (häufig) oder am tagesdatum (nach Mitternacht) sein.
   // → Wir holen alle Einträge wo entweder schlaf_start ODER schlaf_ende am aktuellen Tag liegt.
@@ -1874,8 +1993,8 @@ function renderTimelineList(items, iso){
     html += `<div class="timeline-list">`;
     let prevTs = null;
     groups.forEach(group => {
-      // Gap-Marker einfuegen wenn >=30 Min seit dem vorigen Eintrag
-      if(prevTs && group.ts){
+      // Gap-Marker einfuegen wenn >=30 Min seit dem vorigen Eintrag (nicht fuer Tageskommentar)
+      if(prevTs && group.ts && group.mod !== 'tagkomm'){
         const diffMin = Math.round((new Date(group.ts) - new Date(prevTs)) / 60000);
         if(diffMin >= 30){
           const h = Math.floor(diffMin/60);
@@ -1895,7 +2014,7 @@ function renderTimelineList(items, iso){
       if(group.items.length === 1){
         // Einzelner Eintrag - wie bisher
         const item = group.items[0];
-        const time = timelineHHMM(item.ts);
+        const time = item._hideTime ? '' : timelineHHMM(item.ts);
         html += `<div class="timeline-item" style="border-left-color:${meta.color}">
           <div class="timeline-time">${time}</div>
           <div class="timeline-body">
@@ -1925,7 +2044,7 @@ function renderTimelineList(items, iso){
           </div>
         </div>`;
       }
-      prevTs = group.lastTs;
+      if(group.mod !== 'tagkomm') prevTs = group.lastTs;
     });
     html += `</div>`;
   }
@@ -3401,12 +3520,6 @@ function injectModules() {
   <div class="section-row">
     <div class="section-title">Hypothesen</div>
     <button class="btn-ghost" onclick="window.hyp_openNewHyp()">+ Neue Hypothese</button>
-  </div>
-
-  <div style="font-size:10px;color:var(--muted);line-height:1.6;margin-bottom:14px;
-    padding:10px 12px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--c-hyp)">
-    Was glaubst du womit deine Beschwerden zusammenhängen?<br>
-    Formuliere es als These — das Tracking liefert die Antwort.
   </div>
 
   <div id="hyp-list-cards"></div>
@@ -14057,6 +14170,8 @@ async function initAllModules(){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+':',e.message);}
   });
+  // Tageskommentar initial laden
+  if(typeof renderTageskommentar === 'function') renderTageskommentar();
   renderDateHeader();
   setTimeout(function(){
     // Set to collapsed first, then toggle expands all (matches button label flow)
