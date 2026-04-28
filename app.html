@@ -1852,18 +1852,36 @@ function renderTimelineList(items, iso){
       <span style="font-size:11px">Anker-basierte Daten (Befinden, Stress-Anker etc.) sind hier nicht enthalten.</span>
     </div>`;
   } else {
+    // Gruppiere aufeinanderfolgende Eintraege gleichen Moduls (max 5 Min Abstand)
+    const GROUP_GAP_MS = 5 * 60 * 1000;
+    const GROUPABLE_MODS = ['med', 'supp', 'haut', 'get'];  // sinnvoll zu gruppieren
+    const groups = [];
+    items.forEach(item => {
+      const last = groups[groups.length - 1];
+      const canGroup = last
+        && last.mod === item.mod
+        && GROUPABLE_MODS.includes(item.mod)
+        && item.ts && last.lastTs
+        && (new Date(item.ts) - new Date(last.lastTs)) <= GROUP_GAP_MS;
+      if(canGroup){
+        last.items.push(item);
+        last.lastTs = item.ts;
+      } else {
+        groups.push({mod: item.mod, ts: item.ts, lastTs: item.ts, items: [item]});
+      }
+    });
+
     html += `<div class="timeline-list">`;
     let prevTs = null;
-    items.forEach((item, idx) => {
+    groups.forEach(group => {
       // Gap-Marker einfuegen wenn >=30 Min seit dem vorigen Eintrag
-      if(prevTs && item.ts){
-        const diffMin = Math.round((new Date(item.ts) - new Date(prevTs)) / 60000);
+      if(prevTs && group.ts){
+        const diffMin = Math.round((new Date(group.ts) - new Date(prevTs)) / 60000);
         if(diffMin >= 30){
           const h = Math.floor(diffMin/60);
           const m = diffMin%60;
           const dauerStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
-          // Style abhaengig von Dauer
-          const isLong = diffMin >= 120;  // >= 2h
+          const isLong = diffMin >= 120;
           const opacity = isLong ? 0.6 : 0.4;
           const lineHeight = Math.min(40, 8 + Math.log2(diffMin)*4);
           html += `<div class="timeline-gap" style="opacity:${opacity};padding:4px 0 4px 56px;font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:8px">
@@ -1872,17 +1890,42 @@ function renderTimelineList(items, iso){
           </div>`;
         }
       }
-      const meta = TIMELINE_MODULES.find(m => m.key === item.mod) || {icon:'•', label:item.mod, color:'var(--muted)'};
-      const time = timelineHHMM(item.ts);
-      html += `<div class="timeline-item" style="border-left-color:${meta.color}">
-        <div class="timeline-time">${time}</div>
-        <div class="timeline-body">
-          <div class="timeline-title"><span style="font-size:13px">${meta.icon}</span> ${timelineEsc(item.title)}</div>
-          ${item.detail ? `<div class="timeline-detail">${timelineEsc(item.detail)}</div>` : ''}
-          <div class="timeline-mod">${meta.label}</div>
-        </div>
-      </div>`;
-      prevTs = item.ts;
+      const meta = TIMELINE_MODULES.find(m => m.key === group.mod) || {icon:'•', label:group.mod, color:'var(--muted)'};
+
+      if(group.items.length === 1){
+        // Einzelner Eintrag - wie bisher
+        const item = group.items[0];
+        const time = timelineHHMM(item.ts);
+        html += `<div class="timeline-item" style="border-left-color:${meta.color}">
+          <div class="timeline-time">${time}</div>
+          <div class="timeline-body">
+            <div class="timeline-title"><span style="font-size:13px">${meta.icon}</span> ${timelineEsc(item.title)}</div>
+            ${item.detail ? `<div class="timeline-detail">${timelineEsc(item.detail)}</div>` : ''}
+            <div class="timeline-mod">${meta.label}</div>
+          </div>
+        </div>`;
+      } else {
+        // Gruppierte Eintraege
+        const firstTime = timelineHHMM(group.items[0].ts);
+        const lastTime  = timelineHHMM(group.items[group.items.length-1].ts);
+        const timeRange = firstTime === lastTime ? firstTime : `${firstTime}–${lastTime}`;
+        const subItems = group.items.map(it => {
+          const subTime = timelineHHMM(it.ts);
+          return `<div style="display:flex;gap:8px;font-size:11px;padding:2px 0;color:var(--text)">
+            <span style="font-family:'JetBrains Mono',monospace;color:var(--muted);min-width:36px">${subTime}</span>
+            <span style="flex:1">${timelineEsc(it.title)}${it.detail ? ` <span style="color:var(--muted)">· ${timelineEsc(it.detail)}</span>` : ''}</span>
+          </div>`;
+        }).join('');
+        html += `<div class="timeline-item" style="border-left-color:${meta.color}">
+          <div class="timeline-time">${timeRange}</div>
+          <div class="timeline-body">
+            <div class="timeline-title"><span style="font-size:13px">${meta.icon}</span> ${meta.label} <span style="color:var(--muted);font-weight:normal">(${group.items.length})</span></div>
+            <div style="margin-top:4px">${subItems}</div>
+            <div class="timeline-mod">${meta.label}</div>
+          </div>
+        </div>`;
+      }
+      prevTs = group.lastTs;
     });
     html += `</div>`;
   }
