@@ -8505,25 +8505,12 @@ const MEALS = [
 ];
 
 // ── BIBLIOTHEK ────────────────────────────
-let bibliothek = [
-  {id:'haferflocken', name:'Haferflocken',  type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'apfel',        name:'Apfel',         type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'blaubeeren',   name:'Blaubeeren',    type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'eier',         name:'Eier',          type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'lachs',        name:'Lachs',         type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'brokkoli',     name:'Brokkoli',      type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'suessk',       name:'Süßkartoffel',  type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'joghurt',      name:'Joghurt',       type:'lebensmittel', zutaten:[], bewertung:'unklar'},
-  {id:'brot',         name:'Brot (Weizen)', type:'lebensmittel', zutaten:[], bewertung:'unklar'},
-  {id:'bonbon',       name:'Bonbon',        type:'lebensmittel', zutaten:[], bewertung:'schlecht'},
-  {id:'schwein',      name:'Schweinefleisch',  type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'paniermehl',    name:'Paniermehl',       type:'lebensmittel', zutaten:[], bewertung:'unklar'},
-  {id:'zitrone',       name:'Zitrone',          type:'lebensmittel', zutaten:[], bewertung:'gut'},
-  {id:'schnitzel',     name:'Wiener Schnitzel', type:'gericht',      zutaten:[{id:'schwein',menge:'200g'},{id:'paniermehl',menge:'50g'},{id:'eier',menge:'1 Stk'},{id:'zitrone',menge:'½ Stk'}], bewertung:'unklar'},
-];
-bibliothek.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+let bibliothek = []; // wird aus DB geladen, jedes Item: {id, name, type, zutaten:[{id,menge}], bewertung}
 
-// mealEntries: { mahlzeitId: [{id, itemId, name, menge, bewertung}] }
+// mahlzeitIds: { fruehstueck: 'uuid', mittagessen: 'uuid', ... } pro Tag
+let mahlzeitIds = {};
+
+// mealEntries: { mahlzeitId: [{id, itemId, name, menge, bewertung, time}] }
 let mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[], snack:[] };
 let mealOpen    = { fruehstueck:false, mittagessen:true, abendessen:false, snack:false };
 let mealComments = { fruehstueck:'', mittagessen:'', abendessen:'', snack:'' };
@@ -8539,6 +8526,162 @@ let currentBewertung = 'gut';
 let bewertungUserSet = false;
 let lpTimer = null, lpFired = false;
 let bibliFilter = '';
+
+// ── DB HELPERS ────────────────────────────
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d = activeDate;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeFromTimestamp(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function timestampFromTime(timeStr, isoDate){
+  if(!timeStr) return new Date().toISOString();
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+
+let bibliLoaded = false;
+async function loadBibliothek(){
+  if(!window.sbUser || !window.sb || bibliLoaded) return;
+  try {
+    const { data: lbm, error: e1 } = await window.sb
+      .from('ern_lebensmittel')
+      .select('id, name, typ, bewertung, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true });
+    if(e1) throw e1;
+    const { data: gz, error: e2 } = await window.sb
+      .from('ern_gericht_zutaten')
+      .select('gericht_id, zutat_id, menge, sortierung')
+      .order('sortierung', { ascending: true });
+    if(e2) throw e2;
+    const zutByGericht = {};
+    (gz||[]).forEach(z => {
+      if(!zutByGericht[z.gericht_id]) zutByGericht[z.gericht_id] = [];
+      zutByGericht[z.gericht_id].push({ id: z.zutat_id, menge: z.menge || '' });
+    });
+    bibliothek = (lbm||[]).map(l => ({
+      id: l.id,
+      name: l.name,
+      type: l.typ,
+      bewertung: l.bewertung,
+      zutaten: zutByGericht[l.id] || []
+    }));
+    bibliothek.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    bibliLoaded = true;
+  } catch(err) {
+    console.error('Ern-Bibliothek-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Bibliothek-Fehler: ' + err.message);
+  }
+}
+
+async function loadFromDb(){
+  if(!window.sbUser || !window.sb) return;
+  await loadBibliothek();
+  const iso = getActiveISO();
+  mahlzeitIds = {};
+  mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[], snack:[] };
+  mealComments = { fruehstueck:'', mittagessen:'', abendessen:'', snack:'' };
+  spontanEntries = [];
+  try {
+    const { data: mahls, error: e1 } = await window.sb
+      .from('ern_mahlzeiten')
+      .select('id, typ, kommentar, ern_mahlzeit_items(id, lebensmittel_id, menge, bewertung_snapshot, erfasst_am, sortierung)')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(e1) throw e1;
+    (mahls||[]).forEach(m => {
+      if(m.typ === 'spontan'){
+        // Spontan-Mahlzeit: Items als ein Sammeleintrag
+        const items = (m.ern_mahlzeit_items||[]).slice().sort((a,b)=>(a.sortierung||0)-(b.sortierung||0));
+        const time = items.length && items[0].erfasst_am ? timeFromTimestamp(items[0].erfasst_am) : '';
+        spontanEntries.push({
+          id: m.id,
+          time,
+          label: m.kommentar || '',
+          items: items.map(i => {
+            const lib = bibliothek.find(x => x.id === i.lebensmittel_id);
+            return {
+              itemId: i.lebensmittel_id,
+              name: lib?.name || (i.menge ? '' : '?'),
+              bewertung: i.bewertung_snapshot || lib?.bewertung || 'unklar',
+              menge: i.menge || ''
+            };
+          })
+        });
+      } else {
+        mahlzeitIds[m.typ] = m.id;
+        if(m.kommentar) mealComments[m.typ] = m.kommentar;
+        const items = (m.ern_mahlzeit_items||[]).slice().sort((a,b)=>{
+          const ta = a.erfasst_am || '';
+          const tb = b.erfasst_am || '';
+          return ta.localeCompare(tb);
+        });
+        if(mealEntries[m.typ]){
+          mealEntries[m.typ] = items.map(i => {
+            const lib = bibliothek.find(x => x.id === i.lebensmittel_id);
+            return {
+              id: i.id,
+              itemId: i.lebensmittel_id,
+              name: lib?.name || '?',
+              menge: i.menge || '',
+              bewertung: i.bewertung_snapshot || lib?.bewertung || 'unklar',
+              time: timeFromTimestamp(i.erfasst_am)
+            };
+          });
+        }
+      }
+    });
+  } catch(err) {
+    console.error('Ern-Lade-Fehler:', err);
+    if(typeof showToast === 'function') showToast('Ern-Lade-Fehler: ' + err.message);
+  }
+  renderUI();
+}
+
+// Mahlzeit fuer einen Typ holen oder anlegen (Lazy-Init)
+async function ensureMahlzeit(typ){
+  if(mahlzeitIds[typ]) return mahlzeitIds[typ];
+  if(!window.sbUser) return null;
+  const iso = getActiveISO();
+  try {
+    // Erst schauen ob's eine gibt (UPSERT mit RETURNING wäre sauberer)
+    const { data: existing, error: e0 } = await window.sb
+      .from('ern_mahlzeiten')
+      .select('id')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso)
+      .eq('typ', typ)
+      .maybeSingle();
+    if(e0) throw e0;
+    if(existing){ mahlzeitIds[typ] = existing.id; return existing.id; }
+    const { data, error } = await window.sb
+      .from('ern_mahlzeiten')
+      .insert({
+        user_id: window.sbUser.id,
+        tagesdatum: iso,
+        typ,
+        erfasst_am: new Date().toISOString()
+      })
+      .select().single();
+    if(error) throw error;
+    mahlzeitIds[typ] = data.id;
+    return data.id;
+  } catch(err) {
+    showToast('Mahlzeit-Fehler: ' + err.message);
+    return null;
+  }
+}
 
 
 function gerichtBewertung(item) {
@@ -8656,7 +8799,17 @@ function setBewertung(val){
 }
 
 // ── RENDER ────────────────────────────────
+let lastLoadedISO = null;
 function render(){
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+function renderUI(){
   renderMeals();
   renderBibliothek();
   renderSpontan();
@@ -8702,25 +8855,89 @@ function toggleSpItem(itemId){
   renderSpItemChips();
 }
 
-function saveSpontan(){
+async function saveSpontan(){
   const time  = document.getElementById('ern-sp-time').value || nowTime();
   const label = document.getElementById('ern-sp-label').value.trim();
   const custom = document.getElementById('ern-sp-custom').value.trim();
   const items = [...spontanSelected].map(id=>{
     const item = itemById(id);
-    return { name:item.name, bewertung:item.bewertung||'gut' };
+    return { itemId:id, name:item.name, bewertung:item.bewertung||'gut', menge:'' };
   });
-  if(custom) items.push({ name:custom, bewertung:'unklar' });
+  if(custom) items.push({ itemId:null, name:custom, bewertung:'unklar', menge:'' });
   if(!items.length){ showToast('Bitte etwas auswählen oder eingeben'); return; }
-  spontanEntries.push({ id:uid(), time, label, items });
-  closeModal('ern-m-spontan');
-  render();
-  showToast(`${items.length} Item${items.length>1?'s':''} um ${time} ✓`);
+
+  if(!window.sbUser){
+    spontanEntries.push({ id:uid(), time, label, items });
+    closeModal('ern-m-spontan');
+    renderUI();
+    showToast(`${items.length} Item${items.length>1?'s':''} um ${time} ✓`);
+    return;
+  }
+
+  const iso = getActiveISO();
+  const ts = timestampFromTime(time, iso);
+  try {
+    // Neue Spontan-Mahlzeit
+    const { data: m, error: e1 } = await window.sb
+      .from('ern_mahlzeiten')
+      .insert({
+        user_id: window.sbUser.id,
+        tagesdatum: iso,
+        typ: 'spontan',
+        erfasst_am: ts,
+        kommentar: label || null
+      })
+      .select().single();
+    if(e1) throw e1;
+    // Items - aber nur die mit lebensmittel_id (custom items haben keine FK)
+    const itemRows = items
+      .filter(i => i.itemId)
+      .map((i, idx) => ({
+        mahlzeit_id: m.id,
+        lebensmittel_id: i.itemId,
+        menge: i.menge || null,
+        bewertung_snapshot: i.bewertung,
+        sortierung: (idx+1) * 10,
+        erfasst_am: ts
+      }));
+    if(itemRows.length){
+      const { error: e2 } = await window.sb
+        .from('ern_mahlzeit_items').insert(itemRows);
+      if(e2) throw e2;
+    }
+    // Custom-Item: aktuell verlieren wir den, da wir keine FK-Zeile anlegen koennen
+    // -> als "freie" Bibliothek-Eintraege koennten wir die anlegen; pragmatisch: nur Hinweis
+    if(items.some(i => !i.itemId)){
+      showToast('Hinweis: Freitext-Items wurden nicht gespeichert. Erst zur Bibliothek hinzufuegen.');
+    }
+    spontanEntries.push({ id:m.id, time, label, items: items.filter(i=>i.itemId) });
+    closeModal('ern-m-spontan');
+    renderUI();
+    showToast(`${itemRows.length} Item${itemRows.length>1?'s':''} um ${time} ✓`);
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteSpontan(id){
-  spontanEntries = spontanEntries.filter(e=>e.id!==id);
-  render();
+async function deleteSpontan(id){
+  if(!window.sbUser){
+    spontanEntries = spontanEntries.filter(e=>e.id!==id);
+    renderUI();
+    return;
+  }
+  try {
+    // Cascade-Delete via FK
+    const { error } = await window.sb
+      .from('ern_mahlzeiten')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    spontanEntries = spontanEntries.filter(e=>e.id!==id);
+    renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function renderMeals(){
@@ -8851,43 +9068,103 @@ function toggleMeal(id){
   Object.keys(mealOpen).forEach(k=>mealOpen[k]=false);
   // open clicked one only if it was closed
   if(!wasOpen) mealOpen[id]=true;
-  render();
+  renderUI();
 }
 
-function deleteEntry(mealId, entryId){
+async function deleteEntry(mealId, entryId){
   mealEntries[mealId] = mealEntries[mealId].filter(e=>e.id!==entryId);
-  render();
+  renderUI();
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('ern_mahlzeit_items')
+      .delete()
+      .eq('id', entryId);
+    if(error) throw error;
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 // ── COMMENTS ─────────────────────────────
 function toggleComment(mealId){
   mealCommentOpen[mealId]=!mealCommentOpen[mealId];
   if(mealCommentOpen[mealId]) mealOpen[mealId]=true;
-  render();
+  renderUI();
   if(mealCommentOpen[mealId]){
     setTimeout(()=>{const ta=document.getElementById('ta-'+mealId);if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}},50);
   }
 }
-function saveComment(mealId){
+async function saveComment(mealId){
   const ta=document.getElementById('ta-'+mealId);
-  mealComments[mealId]=ta?ta.value.trim():'';
+  const val = ta?ta.value.trim():'';
+  mealComments[mealId] = val;
   mealCommentOpen[mealId]=false;
-  showToast(mealComments[mealId]?'Kommentar gespeichert ✓':'Kommentar entfernt');
-  render();
+  showToast(val?'Kommentar gespeichert ✓':'Kommentar entfernt');
+  renderUI();
+  if(!window.sbUser) return;
+  // Mahlzeit muss existieren wenn wir nen Kommentar speichern wollen
+  const mahlzeitId = await ensureMahlzeit(mealId);
+  if(!mahlzeitId) return;
+  try {
+    const { error } = await window.sb
+      .from('ern_mahlzeiten')
+      .update({ kommentar: val || null })
+      .eq('id', mahlzeitId);
+    if(error) throw error;
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── QUICK ADD (kurzer Tap) ─────────────────
-function quickAdd(itemId){
-  const targetMeal = MEALS.find(m=>mealOpen[m.id])?.id;
-  if(!targetMeal){
-    showToast('Bitte zuerst eine Mahlzeit öffnen');
+async function quickAdd(itemId){
+  const openMeals = MEALS.filter(m=>mealOpen[m.id]);
+  // Hybrid: keine offen oder mehrere -> Modal mit Mahlzeit-Wahl
+  if(openMeals.length !== 1){
+    openAddModal(itemId);
     return;
   }
+  const targetMeal = openMeals[0].id;
   const item = itemById(itemId);
   if(!item) return;
-  mealEntries[targetMeal].push({ id:uid(), itemId, name:item.name, menge:'', bewertung:item.bewertung });
-  render();
-  showToast(`${BW_ICON[item.bewertung]} ${item.name} → ${MEALS.find(m=>m.id===targetMeal)?.label}`);
+  await addItemToMeal(targetMeal, itemId, '');
+}
+
+async function addItemToMeal(mealId, itemId, menge){
+  const item = itemById(itemId);
+  if(!item) return;
+  const localId = uid();
+  const time = nowTime();
+  // Optimistisch lokal
+  mealEntries[mealId].push({ id:localId, itemId, name:item.name, menge:menge||'', bewertung:item.bewertung, time });
+  renderUI();
+  showToast(`${BW_ICON[item.bewertung]} ${item.name} → ${MEALS.find(m=>m.id===mealId)?.label}`);
+  if(!window.sbUser) return;
+  const mahlzeitId = await ensureMahlzeit(mealId);
+  if(!mahlzeitId) return;
+  try {
+    const { data, error } = await window.sb
+      .from('ern_mahlzeit_items')
+      .insert({
+        mahlzeit_id: mahlzeitId,
+        lebensmittel_id: itemId,
+        menge: menge || null,
+        bewertung_snapshot: item.bewertung,
+        sortierung: (mealEntries[mealId].length) * 10,
+        erfasst_am: new Date().toISOString()
+      })
+      .select().single();
+    if(error) throw error;
+    // Lokale ID auf DB-ID umbiegen
+    const local = mealEntries[mealId].find(e => e.id === localId);
+    if(local) local.id = data.id;
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+    // Rollback
+    mealEntries[mealId] = mealEntries[mealId].filter(e => e.id !== localId);
+    renderUI();
+  }
 }
 
 // ── LONG PRESS → modal ────────────────────
@@ -8919,16 +9196,14 @@ function pickMenge(v,btn){
   btn.classList.add('sel');
 }
 
-function confirmAdd(){
+async function confirmAdd(){
   if(!addCtx) return;
   const item = itemById(addCtx.itemId);
   if(!item) return;
   const mealId = document.getElementById('ern-m-add-meal').value;
   const menge  = document.getElementById('ern-m-add-menge').value.trim();
-  mealEntries[mealId].push({ id:uid(), itemId:item.id, name:item.name, menge, bewertung:item.bewertung });
   closeModal('ern-m-add'); addCtx=null;
-  render();
-  showToast(`${BW_ICON[item.bewertung]} ${item.name}${menge?' · '+menge:''} ✓`);
+  await addItemToMeal(mealId, item.id, menge);
 }
 
 // ── BIBLIOTHEK CRUD ───────────────────────
@@ -8966,30 +9241,98 @@ function openEditItem(itemId){
   setTimeout(()=>{setBewertung(item.bewertung);document.getElementById('ern-m-new-name').focus();},50);
 }
 
-function saveItem(){
+async function saveItem(){
   const name    = document.getElementById('ern-m-new-name').value.trim();
   const type    = document.getElementById('ern-m-new-type').value;
   const zutaten = type==='gericht'
     ? [...selectedZutaten.entries()].map(([id,menge])=>({id,menge}))
     : [];
   if(!name){showToast('Name fehlt');return}
-  if(editCtx){
-    const item=itemById(editCtx.itemId);
-    if(item){item.name=name;item.type=type;item.zutaten=zutaten;item.bewertung=currentBewertung;}
-    showToast(`${name} gespeichert ✓`);
-  } else {
-    bibliothek.push({id:uid(),name,type,zutaten,bewertung:currentBewertung});
-    showToast(`${name} hinzugefügt`);
+
+  if(!window.sbUser){
+    if(editCtx){
+      const item=itemById(editCtx.itemId);
+      if(item){item.name=name;item.type=type;item.zutaten=zutaten;item.bewertung=currentBewertung;}
+      showToast(`${name} gespeichert ✓`);
+    } else {
+      bibliothek.push({id:uid(),name,type,zutaten,bewertung:currentBewertung});
+      showToast(`${name} hinzugefügt`);
+    }
+    bibliothek.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    editCtx=null; closeModal('ern-m-new'); renderUI();
+    return;
   }
-  bibliothek.sort((a,b)=>a.name.localeCompare(b.name,'de'));
-  editCtx=null; closeModal('ern-m-new'); render();
+
+  try {
+    let itemId;
+    if(editCtx){
+      itemId = editCtx.itemId;
+      const { error } = await window.sb
+        .from('ern_lebensmittel')
+        .update({ name, typ: type, bewertung: currentBewertung })
+        .eq('id', itemId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      const item=itemById(itemId);
+      if(item){item.name=name;item.type=type;item.zutaten=zutaten;item.bewertung=currentBewertung;}
+      // Bei Gericht: Zutaten ersetzen
+      if(type==='gericht'){
+        await window.sb.from('ern_gericht_zutaten').delete().eq('gericht_id', itemId);
+        if(zutaten.length){
+          const rows = zutaten.map((z,idx)=>({
+            gericht_id: itemId, zutat_id: z.id, menge: z.menge||null, sortierung: (idx+1)*10
+          }));
+          const { error: e2 } = await window.sb.from('ern_gericht_zutaten').insert(rows);
+          if(e2) throw e2;
+        }
+      }
+      showToast(`${name} gespeichert ✓`);
+    } else {
+      const sortMax = bibliothek.reduce((m,x)=>Math.max(m,0),0);
+      const { data, error } = await window.sb
+        .from('ern_lebensmittel')
+        .insert({
+          user_id: window.sbUser.id,
+          name, typ: type, bewertung: currentBewertung,
+          aktiv: true, sortierung: (sortMax||0)+10
+        })
+        .select().single();
+      if(error) throw error;
+      itemId = data.id;
+      if(type==='gericht' && zutaten.length){
+        const rows = zutaten.map((z,idx)=>({
+          gericht_id: itemId, zutat_id: z.id, menge: z.menge||null, sortierung: (idx+1)*10
+        }));
+        const { error: e2 } = await window.sb.from('ern_gericht_zutaten').insert(rows);
+        if(e2) throw e2;
+      }
+      bibliothek.push({id:itemId,name,type,zutaten,bewertung:currentBewertung});
+      showToast(`${name} hinzugefügt`);
+    }
+    bibliothek.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    editCtx=null; closeModal('ern-m-new'); renderUI();
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
 }
 
-function deleteItem(itemId){
+async function deleteItem(itemId){
   const item=itemById(itemId);
+  // Lokal entfernen (vor DB damit UI sofort reagiert)
   bibliothek=bibliothek.filter(x=>x.id!==itemId);
-  showToast(`${item?.name} entfernt`);
-  render();
+  showToast(`${item?.name||'Item'} entfernt`);
+  renderUI();
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('ern_lebensmittel')
+      .update({ aktiv: false })
+      .eq('id', itemId)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── MOVE ENTRY ───────────────────────────
@@ -9010,7 +9353,7 @@ function openMoveModal(fromMealId, entryId, name){
   openModal('ern-m-move');
 }
 
-function confirmMove(toMealId){
+async function confirmMove(toMealId){
   if(!moveCtx) return;
   const {fromMealId, entryId} = moveCtx;
   const idx = mealEntries[fromMealId].findIndex(e=>e.id===entryId);
@@ -9022,9 +9365,22 @@ function confirmMove(toMealId){
   mealOpen[toMealId] = true;
   moveCtx = null;
   closeModal('ern-m-move');
-  render();
+  renderUI();
   const destLabel = MEALS.find(m=>m.id===toMealId)?.label;
   showToast(`${entry.name} → ${destLabel} ✓`);
+  if(!window.sbUser) return;
+  // Item in DB der neuen Mahlzeit zuordnen
+  const targetMahlzeitId = await ensureMahlzeit(toMealId);
+  if(!targetMahlzeitId) return;
+  try {
+    const { error } = await window.sb
+      .from('ern_mahlzeit_items')
+      .update({ mahlzeit_id: targetMahlzeitId })
+      .eq('id', entryId);
+    if(error) throw error;
+  } catch(err) {
+    showToast('DB-Fehler: ' + err.message);
+  }
 }
 
 // ── DELETE / EDIT MODE ────────────────────
@@ -9034,12 +9390,12 @@ function toggleDelMode(){
   const btn=document.getElementById('ern-btn-del');
   btn.classList.toggle('on',delMode);
   btn.textContent=delMode?'✓ Fertig':'🗑 Löschen';
-  render();
+  renderUI();
 }
 function toggleEditMode(){
   editMode=!editMode;
   if(editMode){delMode=false;document.getElementById('ern-btn-del').classList.remove('on');document.getElementById('ern-btn-del').textContent='🗑 Löschen';}
-  updateEditBtn();render();
+  updateEditBtn();renderUI();
 }
 function updateEditBtn(){
   const btn=document.getElementById('ern-btn-edit');
