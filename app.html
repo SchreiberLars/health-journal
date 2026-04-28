@@ -8955,11 +8955,11 @@ function renderMeals(){
           const bw = live?.bewertung || e.bewertung || 'gut';
           // Is this a Gericht? Render header + indented zutaten
           if(live?.type==='gericht' && live.zutaten?.length){
-            const zutatItems = live.zutaten.map(zid=>itemById(zid)).filter(Boolean);
+            const zutatItems = live.zutaten.map(z => itemById(typeof z==='string'?z:z.id)).filter(Boolean);
             const zutatRows = zutatItems.map(z=>`<button class="chip" style="font-size:10px;opacity:0.8;background:${BW_COLOR[z.bewertung||'gut']};border-color:${BW_BORDER[z.bewertung||'gut']}">${escHtml(z.name)}</button>`).join('');
             return `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:2px">
               <button class="chip" style="background:${BW_COLOR[bw]};border-color:${BW_BORDER[bw]};border-left:3px solid var(--c-ern)"
-                data-meal="${m.id}" data-entry="${e.id}">
+                data-meal="${m.id}" data-entry="${e.id}" data-name="${escHtml(e.name)}">
                 🍽 ${escHtml(e.name)}${e.menge?` <span style="font-size:10px;opacity:0.7">${escHtml(e.menge)}</span>`:''}
                 <button class="me-del" onclick="event.stopPropagation();window.ern_deleteEntry('${m.id}','${e.id}')">✕</button>
               </button>
@@ -8967,7 +8967,7 @@ function renderMeals(){
             </div>`;
           }
           return `<button class="chip" style="background:${BW_COLOR[bw]};border-color:${BW_BORDER[bw]}"
-            data-meal="${m.id}" data-entry="${e.id}">
+            data-meal="${m.id}" data-entry="${e.id}" data-name="${escHtml(e.name)}">
             ${escHtml(e.name)}${e.menge?` <span style="font-size:10px;opacity:0.7">${escHtml(e.menge)}</span>`:''}
             <button class="me-del" onclick="event.stopPropagation();window.ern_deleteEntry('${m.id}','${e.id}')">✕</button>
           </button>`;
