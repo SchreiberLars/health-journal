@@ -330,6 +330,7 @@ body.sort-mode .sort-controls{display:inline-flex}
 .hyp-card.bestaetigt{border-left:4px solid var(--accent2)}
 .hyp-card.widerlegt{border-left:4px solid var(--delete)}
 .hyp-card.angepasst{border-left:4px solid var(--gold)}
+.hyp-card.pausiert{border-left:4px solid var(--muted);opacity:0.65}
 .hyp-collapsed-header{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;user-select:none}
 .hyp-chevron{font-size:11px;color:var(--muted);flex-shrink:0;transition:transform .2s}
 .hyp-chevron.open{transform:rotate(180deg)}
@@ -3537,10 +3538,11 @@ function injectModules() {
 
     <label class="ml">Status</label>
     <select class="ms" id="hyp-m-new-status">
-      <option value="aktiv">🔵 Aktiv — wird gerade getestet</option>
+      <option value="aktiv">🔵 In Prüfung — wird gerade getestet</option>
       <option value="bestaetigt">✅ Bestätigt — durch Daten gestützt</option>
       <option value="widerlegt">❌ Widerlegt — Daten sprechen dagegen</option>
       <option value="angepasst">🔄 Angepasst — Hypothese weiterentwickelt</option>
+      <option value="pausiert">⏸ Pausiert — vorerst nicht weiterverfolgt</option>
     </select>
 
     <div class="mbr">
@@ -3558,10 +3560,11 @@ function injectModules() {
 
     <label class="ml">Neuer Status</label>
     <select class="ms" id="hyp-m-update-status">
-      <option value="aktiv">🔵 Aktiv</option>
+      <option value="aktiv">🔵 In Prüfung</option>
       <option value="bestaetigt">✅ Bestätigt</option>
       <option value="widerlegt">❌ Widerlegt</option>
       <option value="angepasst">🔄 Angepasst</option>
+      <option value="pausiert">⏸ Pausiert</option>
     </select>
 
     <label class="ml">Erkenntnis / Begründung</label>
@@ -13011,10 +13014,11 @@ window.fam_lpAction=function(entry){if(typeof openEditKontakt==='function')openE
 
 (function() {
 const STATUS_LABEL = {
-  aktiv:       '🔵 Aktiv',
+  aktiv:       '🔵 In Prüfung',
   bestaetigt:  '✅ Bestätigt',
   widerlegt:   '❌ Widerlegt',
   angepasst:   '🔄 Angepasst',
+  pausiert:    '⏸ Pausiert',
 };
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
