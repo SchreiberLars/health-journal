@@ -81,6 +81,15 @@ body.sort-mode .sort-controls{display:inline-flex}
 .sort-btn:disabled{opacity:.3;cursor:not-allowed}
 #btn-sort-mode.active{background:var(--accent);color:#f5f0e8;border-color:var(--accent)}
 
+/* ── ENTZ FOTO ─────────────────────────── */
+.entz-foto-btn{background:var(--surface2);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;line-height:1;padding:0;transition:all .15s}
+.entz-foto-btn.has-foto{background:color-mix(in srgb,var(--accent2) 25%,var(--surface2));border-color:var(--accent2)}
+.entz-foto-btn:active{background:var(--accent);color:#f5f0e8}
+.entz-foto-preview{width:100%;max-width:400px;margin:8px 0;border-radius:8px;display:block;background:var(--surface2)}
+.entz-foto-spontan{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.entz-foto-spontan img{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
+.entz-foto-loading{font-size:11px;color:var(--muted);font-style:italic;padding:6px 0}
+
 /* ── KATEGORIE-TRENNER ─────────────────── */
 .kategorie-divider{display:flex;align-items:center;gap:10px;padding:18px 16px 8px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
 .kategorie-divider .kd-line{flex:1;height:1px;background:var(--border)}
@@ -1138,6 +1147,25 @@ window.sbUser = null;
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ── ENTZ: Foto-Modal ── -->
+<div class="modal-overlay" id="entz-m-foto">
+  <div class="modal-sheet">
+    <div class="mt" id="entz-m-foto-title">Foto</div>
+    <div class="mt-sub">Optional zur visuellen Doku</div>
+    <div id="entz-m-foto-body" style="min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px">
+      <div class="entz-foto-loading" id="entz-m-foto-status" style="display:none">⏳ Lade...</div>
+      <img id="entz-m-foto-preview" class="entz-foto-preview" style="display:none">
+      <div id="entz-m-foto-empty" style="font-size:12px;color:var(--muted);font-style:italic;padding:20px 0">Noch kein Foto</div>
+    </div>
+    <input type="file" accept="image/*" capture="environment" id="entz-m-foto-input" style="display:none" onchange="window.entz_handleFotoFile(this)">
+    <div class="mbr" style="flex-wrap:wrap;gap:8px">
+      <button class="bs" onclick="closeModal('entz-m-foto');window.entz_clearFotoCtx()">Schließen</button>
+      <button class="bs" id="entz-m-foto-del" onclick="window.entz_doRemoveFoto()" style="display:none">🗑 Entfernen</button>
+      <button class="bp" onclick="document.getElementById('entz-m-foto-input').click()">📷 Foto wählen</button>
+    </div>
+  </div>
+</div>
 
 
 <!-- ── STRESS & NERVENSYSTEM: Akut-Signal Modal ── -->
@@ -2501,6 +2529,7 @@ function injectModules() {
     <input class="mi" id="entz-m-spontan-time" type="time">
     <label class="ml">Notiz <span style="color:var(--muted);font-size:9px">(optional)</span></label>
     <input class="mi" id="entz-m-spontan-note" placeholder="z.B. nach dem Sport, nach Mahlzeit..." style="margin-top:4px">
+    <div id="entz-m-spontan-foto-row" style="margin-top:12px"></div>
     <div class="mbr">
       <button class="bs" onclick="closeModal('entz-m-spontan')">Abbrechen</button>
       <button class="bp" onclick="window.entz_saveSpontan()">Speichern</button>
@@ -6950,11 +6979,81 @@ let ankerCommentOpen = { morgen:false, abend:false };
 let spontanList = [];
 let editRegionCtx = null;
 
+// Foto-Pfade: { morgen: { regionId: 'pfad' }, abend: {...} }
+let ankerFotos = { morgen:{}, abend:{} };
+
 // spontan temp values
 let spontanVals = {};
+let spontanFotoPfad = null; // temp fuer Spontan-Modal
 
 function uid(){return Math.random().toString(36).slice(2,9)}
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// ── FOTO-HELPER ────────────────────────────
+// Bild komprimieren via Canvas (max 1000px breit, ~300KB)
+async function compressImage(file, maxWidth=1000, quality=0.82){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > maxWidth){
+          height = Math.round(height * (maxWidth / width));
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => {
+          if(!blob) reject(new Error('Komprimierung fehlgeschlagen'));
+          else resolve(blob);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Upload zu Supabase Storage. Pfad: <user_id>/<scope>/<datum>_<anker>_<regionId|spontanId>.jpg
+async function uploadFoto(file, scope, identifier){
+  if(!window.sbUser || !window.sb) throw new Error('Nicht eingeloggt');
+  const blob = await compressImage(file);
+  const ts = Date.now();
+  const pfad = `${window.sbUser.id}/${scope}/${ts}_${identifier}.jpg`;
+  const { error } = await window.sb.storage
+    .from('entz-fotos')
+    .upload(pfad, blob, { contentType: 'image/jpeg', upsert: true });
+  if(error) throw error;
+  return pfad;
+}
+
+// Signed URL fuer Anzeige (1 Stunde gueltig)
+const fotoUrlCache = {}; // pfad -> {url, expires}
+async function getFotoUrl(pfad){
+  if(!pfad || !window.sb) return null;
+  const cached = fotoUrlCache[pfad];
+  if(cached && cached.expires > Date.now()) return cached.url;
+  const { data, error } = await window.sb.storage
+    .from('entz-fotos')
+    .createSignedUrl(pfad, 3600);
+  if(error){ console.error('SignedUrl-Fehler:', error); return null; }
+  fotoUrlCache[pfad] = { url: data.signedUrl, expires: Date.now() + 3500*1000 };
+  return data.signedUrl;
+}
+
+async function deleteFoto(pfad){
+  if(!pfad || !window.sb) return;
+  try {
+    await window.sb.storage.from('entz-fotos').remove([pfad]);
+    delete fotoUrlCache[pfad];
+  } catch(err) { console.error('Foto-Delete-Fehler:', err); }
+}
 
 // ── DB HELPERS ────────────────────────────
 function getActiveISO(){
@@ -7007,16 +7106,18 @@ async function loadFromDb(){
   const iso = getActiveISO();
   ankerData = { morgen:{}, abend:{} };
   ankerComments = { morgen:'', abend:'' };
+  ankerFotos = { morgen:{}, abend:{} };
   spontanList = [];
   try {
     const { data: vRows, error: e1 } = await window.sb
       .from('entz_anker_werte')
-      .select('region_id, anker, wert')
+      .select('region_id, anker, wert, foto_pfad')
       .eq('user_id', window.sbUser.id)
       .eq('tagesdatum', iso);
     if(e1) throw e1;
     (vRows||[]).forEach(r => {
       if(r.wert != null) ankerData[r.anker][r.region_id] = parseFloat(r.wert);
+      if(r.foto_pfad) ankerFotos[r.anker][r.region_id] = r.foto_pfad;
     });
     const { data: kRows, error: e2 } = await window.sb
       .from('entz_anker_kommentare')
@@ -7031,7 +7132,7 @@ async function loadFromDb(){
     const dayEnd   = iso + 'T23:59:59';
     const { data: epRows, error: e3 } = await window.sb
       .from('entz_episoden')
-      .select('id, start_zeit, notiz, entz_episoden_regionen(region_id, wert)')
+      .select('id, start_zeit, notiz, foto_pfad, entz_episoden_regionen(region_id, wert)')
       .eq('user_id', window.sbUser.id)
       .gte('start_zeit', dayStart)
       .lte('start_zeit', dayEnd)
@@ -7041,6 +7142,7 @@ async function loadFromDb(){
       id: e.id,
       time: timeFromTimestamp(e.start_zeit),
       note: e.notiz || '',
+      fotoPfad: e.foto_pfad || null,
       values: Object.fromEntries((e.entz_episoden_regionen||[]).map(r=>[r.region_id, parseFloat(r.wert)]))
     }));
   } catch(err) {
@@ -7144,14 +7246,18 @@ function renderRegions(anker){
         onclick="window.entz_setRegion('${anker}','${r.id}',${s.v})">
         <span class="sv-n">${s.label}</span>
       </button>`).join('');
-    const selDesc = val!=null && SCALE[val] ? SCALE[val].desc : '';
-
     const valClass=val==null?'':val===0?'v0':val<=2?'v1':'v3';
+    const hasFoto = !!ankerFotos[anker][r.id];
+    const fotoBtn = `<button class="entz-foto-btn${hasFoto?' has-foto':''}" 
+      onclick="window.entz_openFotoMenu('${anker}','${r.id}')" title="${hasFoto?'Foto anzeigen/aendern':'Foto hinzufuegen'}">${hasFoto?'🖼':'📷'}</button>`;
     return `
       <div class="region-row">
         <div class="region-header">
           <span class="region-name">${r.name}</span>
-          ${val!=null?`<span class="region-val ${valClass}">${val}</span>`:''}
+          <span style="display:flex;align-items:center;gap:6px">
+            ${val!=null?`<span class="region-val ${valClass}">${val}</span>`:''}
+            ${fotoBtn}
+          </span>
         </div>
         <div class="scale-row">${chips}</div>
       </div>`;
@@ -7182,8 +7288,8 @@ function renderSpontan(){
   const el=document.getElementById('entz-spontan-list');
   if(!spontanList.length){el.innerHTML='';return}
   el.innerHTML=spontanList.map(e=>`
-    <div class="spontan-entry">
-      <div class="spontan-time">${e.time}${e.note?' · '+e.note:''}</div>
+    <div class="spontan-entry" id="spontan-entry-${e.id}">
+      <div class="spontan-time">${e.time}${e.note?' · '+escHtml(e.note):''}</div>
       <div style="display:flex;flex-wrap:wrap">
         ${Object.entries(e.values).map(([rid,val])=>{
           const r=regions.find(x=>x.id===rid);
@@ -7191,10 +7297,20 @@ function renderSpontan(){
           return `<span class="region-pill ${cls}">${r?.name||rid}: ${val}</span>`;
         }).join('')}
       </div>
+      ${e.fotoPfad?`<div style="margin-top:6px"><img id="spontan-foto-${e.id}" style="max-width:200px;border-radius:6px;display:none" alt="Foto"></div>`:''}
       <div style="display:flex;justify-content:flex-end;gap:5px;margin-top:6px">
         <button class="entry-action del" onclick="window.entz_delSpontan('${e.id}')" title="Löschen">✕</button>
       </div>
     </div>`).join('');
+  // Foto-URLs async laden
+  spontanList.forEach(e => {
+    if(e.fotoPfad){
+      getFotoUrl(e.fotoPfad).then(url => {
+        const img = document.getElementById('spontan-foto-'+e.id);
+        if(img && url){ img.src = url; img.style.display = 'block'; }
+      });
+    }
+  });
 }
 
 // ── INTERACTIONS ──────────────────────────
@@ -7407,11 +7523,13 @@ async function deleteRegion(rid){
 // ── SPONTAN ───────────────────────────────
 function openSpontan(){
   spontanVals={};
+  spontanFotoPfad=null;
   const now=new Date();
   document.getElementById('entz-m-spontan-time').value=
     `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   document.getElementById('entz-m-spontan-note').value='';
   renderSpontanRegions();
+  renderSpontanFotoRow();
   openModal('entz-m-spontan');
 }
 
@@ -7452,9 +7570,11 @@ async function saveSpontan(){
   const note=document.getElementById('entz-m-spontan-note').value.trim();
   if(!Object.keys(spontanVals).length){showToast('Mindestens eine Region wählen');return}
   const valuesCopy = {...spontanVals};
+  const fotoPfad = spontanFotoPfad;
   if(!window.sbUser){
-    spontanList.push({id:uid(),time,note,values:valuesCopy});
+    spontanList.push({id:uid(),time,note,values:valuesCopy,fotoPfad});
     spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+    spontanFotoPfad=null;
     closeModal('entz-m-spontan');
     renderUI();
     showToast(`Befund ${time} gespeichert ✓`);
@@ -7468,7 +7588,8 @@ async function saveSpontan(){
       .insert({
         user_id: window.sbUser.id,
         start_zeit: startTs,
-        notiz: note || null
+        notiz: note || null,
+        foto_pfad: fotoPfad
       })
       .select().single();
     if(e1) throw e1;
@@ -7482,8 +7603,9 @@ async function saveSpontan(){
         .from('entz_episoden_regionen').insert(rows);
       if(e2) throw e2;
     }
-    spontanList.push({id:ep.id, time, note, values:valuesCopy});
+    spontanList.push({id:ep.id, time, note, values:valuesCopy, fotoPfad});
     spontanList.sort((a,b)=>a.time.localeCompare(b.time));
+    spontanFotoPfad=null;
     closeModal('entz-m-spontan');
     renderUI();
     showToast(`Befund ${time} gespeichert ✓`);
@@ -7493,8 +7615,10 @@ async function saveSpontan(){
 }
 
 async function delSpontan(id){
+  const e = spontanList.find(x=>x.id===id);
   if(!window.sbUser){
-    spontanList=spontanList.filter(e=>e.id!==id);
+    if(e?.fotoPfad) deleteFoto(e.fotoPfad);
+    spontanList=spontanList.filter(x=>x.id!==id);
     renderUI();
     return;
   }
@@ -7506,7 +7630,8 @@ async function delSpontan(id){
       .eq('id', id)
       .eq('user_id', window.sbUser.id);
     if(error) throw error;
-    spontanList=spontanList.filter(e=>e.id!==id);
+    if(e?.fotoPfad) deleteFoto(e.fotoPfad);
+    spontanList=spontanList.filter(x=>x.id!==id);
     renderUI();
   } catch(err) {
     showToast('Fehler: ' + err.message);
@@ -7532,7 +7657,161 @@ function showToast(msg){
   window.entz_openEditRegion = openEditRegion;
   window.entz_saveComment = saveComment;
   window.entz_setRegion = setRegion;
-  window.entz_setSpontanRegion = setSpontanRegion;
+// ── FOTO-LOGIK ─────────────────────────────
+let fotoCtx = null; // {scope:'anker'|'spontan', anker, regionId} oder {scope:'spontan-new'}
+
+async function openFotoMenu(anker, regionId){
+  const r = regions.find(x => x.id === regionId);
+  const pfad = ankerFotos[anker]?.[regionId] || null;
+  fotoCtx = { scope:'anker', anker, regionId };
+  document.getElementById('entz-m-foto-title').textContent = `📷 ${r?.name || 'Region'} — ${anker==='morgen'?'Morgen':'Abend'}`;
+  await showFotoInModal(pfad);
+  openModal('entz-m-foto');
+}
+
+async function showFotoInModal(pfad){
+  const img = document.getElementById('entz-m-foto-preview');
+  const empty = document.getElementById('entz-m-foto-empty');
+  const status = document.getElementById('entz-m-foto-status');
+  const delBtn = document.getElementById('entz-m-foto-del');
+  img.style.display = 'none';
+  empty.style.display = 'none';
+  delBtn.style.display = 'none';
+  status.style.display = pfad ? 'block' : 'none';
+  if(pfad){
+    const url = await getFotoUrl(pfad);
+    if(url){
+      img.src = url;
+      img.style.display = 'block';
+      delBtn.style.display = 'inline-flex';
+      status.style.display = 'none';
+    } else {
+      empty.textContent = 'Foto nicht ladbar';
+      empty.style.display = 'block';
+      status.style.display = 'none';
+    }
+  } else {
+    empty.textContent = 'Noch kein Foto';
+    empty.style.display = 'block';
+  }
+}
+
+async function handleFotoFile(input){
+  const file = input.files && input.files[0];
+  if(!file || !fotoCtx) return;
+  input.value = ''; // Reset damit gleiche Datei nochmal waehlbar ist
+  const status = document.getElementById('entz-m-foto-status');
+  const empty = document.getElementById('entz-m-foto-empty');
+  const img = document.getElementById('entz-m-foto-preview');
+  status.textContent = '⏳ Komprimiere & lade hoch...';
+  status.style.display = 'block';
+  empty.style.display = 'none';
+  img.style.display = 'none';
+  try {
+    if(fotoCtx.scope === 'anker'){
+      const { anker, regionId } = fotoCtx;
+      // Alte Datei loeschen falls vorhanden
+      const oldPfad = ankerFotos[anker]?.[regionId] || null;
+      const newPfad = await uploadFoto(file, 'anker', `${getActiveISO()}_${anker}_${regionId}`);
+      // DB aktualisieren - Wert UPSERTEN (auch wenn noch kein Wert da ist)
+      const iso = getActiveISO();
+      const wert = ankerData[anker]?.[regionId];
+      const { error } = await window.sb
+        .from('entz_anker_werte')
+        .upsert({
+          user_id: window.sbUser.id,
+          tagesdatum: iso,
+          anker,
+          region_id: regionId,
+          wert: wert != null ? wert : null,
+          foto_pfad: newPfad
+        }, { onConflict: 'user_id,tagesdatum,anker,region_id' });
+      if(error) throw error;
+      ankerFotos[anker][regionId] = newPfad;
+      if(oldPfad && oldPfad !== newPfad) deleteFoto(oldPfad);
+      await showFotoInModal(newPfad);
+      renderRegions(anker);
+      showToast('Foto gespeichert ✓');
+    } else if(fotoCtx.scope === 'spontan-new'){
+      // Temp-Pfad fuer noch nicht gespeicherten Spontan-Befund
+      const newPfad = await uploadFoto(file, 'spontan', `temp_${Date.now()}`);
+      // alten temp-Pfad loeschen
+      if(spontanFotoPfad) deleteFoto(spontanFotoPfad);
+      spontanFotoPfad = newPfad;
+      await showFotoInModal(newPfad);
+      renderSpontanFotoRow();
+      showToast('Foto gespeichert ✓');
+    }
+  } catch(err){
+    console.error('Foto-Upload-Fehler:', err);
+    showToast('Foto-Fehler: ' + err.message);
+    status.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = 'Upload fehlgeschlagen';
+  }
+}
+
+async function doRemoveFoto(){
+  if(!fotoCtx) return;
+  if(!confirm('Foto wirklich entfernen?')) return;
+  try {
+    if(fotoCtx.scope === 'anker'){
+      const { anker, regionId } = fotoCtx;
+      const pfad = ankerFotos[anker]?.[regionId];
+      if(pfad){
+        deleteFoto(pfad);
+        delete ankerFotos[anker][regionId];
+      }
+      const iso = getActiveISO();
+      const wert = ankerData[anker]?.[regionId];
+      if(wert != null){
+        // Wert behalten, nur foto_pfad raus
+        await window.sb.from('entz_anker_werte')
+          .update({ foto_pfad: null })
+          .eq('user_id', window.sbUser.id)
+          .eq('tagesdatum', iso).eq('anker', anker).eq('region_id', regionId);
+      } else {
+        // Kein Wert mehr - Zeile loeschen
+        await window.sb.from('entz_anker_werte').delete()
+          .eq('user_id', window.sbUser.id)
+          .eq('tagesdatum', iso).eq('anker', anker).eq('region_id', regionId);
+      }
+      renderRegions(anker);
+    } else if(fotoCtx.scope === 'spontan-new'){
+      if(spontanFotoPfad) deleteFoto(spontanFotoPfad);
+      spontanFotoPfad = null;
+      renderSpontanFotoRow();
+    }
+    closeModal('entz-m-foto');
+    showToast('Foto entfernt');
+    fotoCtx = null;
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+function clearFotoCtx(){ fotoCtx = null; }
+
+// Foto-Zeile im Spontan-Modal
+function renderSpontanFotoRow(){
+  const el = document.getElementById('entz-m-spontan-foto-row');
+  if(!el) return;
+  if(spontanFotoPfad){
+    el.innerHTML = `<button class="bp" onclick="window.entz_openSpontanFotoPreview()">🖼 Foto angehängt — anzeigen/ändern</button>`;
+  } else {
+    el.innerHTML = `<button class="btn-ghost" onclick="window.entz_openSpontanFotoPicker()">📷 Foto hinzufügen</button>`;
+  }
+}
+
+function openSpontanFotoPicker(){
+  fotoCtx = { scope: 'spontan-new' };
+  document.getElementById('entz-m-foto-title').textContent = '📷 Befund-Foto';
+  showFotoInModal(spontanFotoPfad);
+  openModal('entz-m-foto');
+}
+function openSpontanFotoPreview(){
+  openSpontanFotoPicker();
+}
   window.entz_openNewRegion = openNewRegion;
   window.entz_openRegionMgr = openRegionMgr;
   window.entz_openSpontan = openSpontan;
@@ -7544,6 +7823,12 @@ function showToast(msg){
   window.entz_toggleComment = toggleComment;
   window.entz_render = render;
   window.entz_copyFromPrevDay = copyFromPrevDay;
+  window.entz_openFotoMenu = openFotoMenu;
+  window.entz_handleFotoFile = handleFotoFile;
+  window.entz_doRemoveFoto = doRemoveFoto;
+  window.entz_clearFotoCtx = clearFotoCtx;
+  window.entz_openSpontanFotoPicker = openSpontanFotoPicker;
+  window.entz_openSpontanFotoPreview = openSpontanFotoPreview;
 })();
 
 (function() {
