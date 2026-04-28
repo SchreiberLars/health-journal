@@ -22,7 +22,6 @@ from pathlib import Path
 
 try:
     from garminconnect import Garmin
-    from garth.exc import GarthHTTPError
 except ImportError:
     print("FEHLER: garminconnect nicht installiert.")
     print("Installier mit: pip install garminconnect")
@@ -63,28 +62,41 @@ def garmin_login():
             client.login(str(GARMIN_TOKEN_DIR))
             print(f"✓ Garmin-Login via gespeicherte Tokens (Cache: {GARMIN_TOKEN_DIR})")
             return client
-        except (GarthHTTPError, Exception) as e:
+        except Exception as e:
             print(f"⚠ Token-Cache veraltet, frischer Login noetig: {e}")
     
     # Frischer Login
     email = input("Garmin Email: ").strip()
     password = getpass.getpass("Garmin Passwort: ")
     
-    client = Garmin(email, password)
+    client = Garmin(email=email, password=password, is_cn=False, return_on_mfa=True)
     try:
-        client.login()
-    except Exception as e:
-        if "MFA" in str(e) or "two-factor" in str(e).lower():
+        result1, result2 = client.login()
+        # Falls MFA verlangt wird, ist result1 == 'needs_mfa'
+        if result1 == "needs_mfa":
             mfa = input("MFA-Code: ").strip()
-            client = Garmin(email, password, return_on_mfa=True)
-            result1, result2 = client.login()
             client.resume_login(result2, mfa)
-        else:
-            raise
+    except Exception as e:
+        # Falls Library MFA selbst handhabt oder anderer Fehler
+        msg = str(e).lower()
+        if "rate" in msg or "429" in msg:
+            print(f"\n✗ Garmin hat dich gerade rate-limited (429).")
+            print("  Loesung: 30-60 Min warten, dann erneut versuchen.")
+            print("  Garmin's Login-Limit ist sehr restriktiv bei mehrfachen Versuchen.")
+            sys.exit(1)
+        raise
     
-    # Token cachen
+    # Token cachen (neue API: client.garth ist nicht mehr direkt erreichbar)
     GARMIN_TOKEN_DIR.mkdir(parents=True, exist_ok=True)
-    client.garth.dump(str(GARMIN_TOKEN_DIR))
+    try:
+        client.garth.dump(str(GARMIN_TOKEN_DIR))
+    except AttributeError:
+        # Neue API
+        try:
+            import garth
+            garth.client.dump(str(GARMIN_TOKEN_DIR))
+        except Exception as e:
+            print(f"⚠ Token-Cache nicht gespeichert: {e} (kein Problem, aber MFA wird beim naechsten Mal nochmal verlangt)")
     print(f"✓ Garmin-Login erfolgreich, Tokens gespeichert in {GARMIN_TOKEN_DIR}")
     return client
 
