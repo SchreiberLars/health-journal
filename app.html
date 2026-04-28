@@ -7689,7 +7689,7 @@ function renderMgrChips(){
     <div class="chip" style="flex-direction:row;align-items:center;gap:6px">
       <span>${r.name}</span>
       <span style="font-size:9px;color:var(--muted)">${r.groups.join('/')}</span>
-      <button class="chip-edit-btn" onclick="window.entz_openEditRegion('${r.id}')">✎</button>
+      <button class="chip-edit-btn" onclick="closeModal('entz-m-mgr');window.entz_openEditRegion('${r.id}')">✎</button>
       <button class="chip-del-btn" onclick="window.entz_deleteRegion('${r.id}')">✕</button>
     </div>`).join('');
 }
@@ -10308,7 +10308,7 @@ function renderMgrChips(){
       font-family:'JetBrains Mono',monospace;font-size:11px">
       ${r.name}
       <span style="font-size:9px;color:var(--muted)">${r.groups.join('/')}</span>
-      <button onclick="window.schmerz_openEditRegion('${r.id}')"
+      <button onclick="closeModal('schmerz-m-mgr');window.schmerz_openEditRegion('${r.id}')"
         style="background:none;border:1px solid var(--accent3);border-radius:10px;
           padding:1px 7px;font-size:9px;color:var(--accent3);cursor:pointer">✎</button>
       <button onclick="window.schmerz_deleteRegion('${r.id}')"
