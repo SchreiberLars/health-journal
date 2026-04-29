@@ -12246,7 +12246,11 @@ function renderTemp(){
     }
   }
   const tEl=document.getElementById('messw-temp-time');
-  if(tEl && !tEl.value) tEl.value=nowTime();
+  if(tEl && document.activeElement !== tEl){
+    // Bei "heute" automatisch auf jetzt setzen, sonst nur wenn leer
+    if(getActiveISO() === today()) tEl.value = nowTime();
+    else if(!tEl.value) tEl.value = nowTime();
+  }
 }
 
 async function addTemp(temp){
@@ -12350,7 +12354,10 @@ function renderBp(){
     }
   }
   const tEl=document.getElementById('messw-bp-time');
-  if(tEl && !tEl.value) tEl.value=nowTime();
+  if(tEl && document.activeElement !== tEl){
+    if(getActiveISO() === today()) tEl.value = nowTime();
+    else if(!tEl.value) tEl.value = nowTime();
+  }
 }
 
 async function addBp(){
@@ -12439,7 +12446,10 @@ function renderWeight(){
     }
   }
   const tEl=document.getElementById('messw-weight-time');
-  if(tEl && !tEl.value) tEl.value=nowTime();
+  if(tEl && document.activeElement !== tEl){
+    if(getActiveISO() === today()) tEl.value = nowTime();
+    else if(!tEl.value) tEl.value = nowTime();
+  }
 }
 
 async function addWeightFromInput(){
