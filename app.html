@@ -1807,6 +1807,33 @@ async function collectTimelineItems(iso){
              r.notiz].filter(Boolean).join(' · ')
   }));
 
+  // 5b. Ernaehrung (Mahlzeiten + Spontan-Eintraege)
+  const ernMahls = await safeQuery(()=> window.sb
+    .from('ern_mahlzeiten')
+    .select('id, typ, kommentar, erfasst_am, ern_mahlzeit_items(id, lebensmittel_id, menge_wert, menge_einheit)')
+    .eq('user_id', window.sbUser.id)
+    .eq('tagesdatum', iso));
+  // Lebensmittel-Namen-Lookup fuer Detail
+  const lebensIds = new Set();
+  (ernMahls?.data||[]).forEach(m => (m.ern_mahlzeit_items||[]).forEach(i => i.lebensmittel_id && lebensIds.add(i.lebensmittel_id)));
+  const lebensLookup = {};
+  if(lebensIds.size){
+    const lebens = await safeQuery(()=> window.sb.from('ern_lebensmittel').select('id,name').in('id', Array.from(lebensIds)));
+    (lebens?.data||[]).forEach(x => { lebensLookup[x.id] = x.name; });
+  }
+  const MEAL_LABELS = {fruehstueck:'🌅 Frühstück', mittagessen:'☀️ Mittagessen', abendessen:'🌆 Abendessen', snack:'🍎 Snack', spontan:'🍴 Spontan'};
+  (ernMahls?.data||[]).forEach(m => {
+    const itemNames = (m.ern_mahlzeit_items||[])
+      .map(i => lebensLookup[i.lebensmittel_id])
+      .filter(Boolean);
+    const itemsStr = itemNames.length ? itemNames.slice(0,3).join(', ') + (itemNames.length>3 ? ` +${itemNames.length-3}` : '') : '';
+    items.push({
+      ts: m.erfasst_am, mod:'ern',
+      title: MEAL_LABELS[m.typ] || (m.kommentar || 'Mahlzeit'),
+      detail: [itemsStr, m.kommentar].filter(Boolean).join(' · ')
+    });
+  });
+
   // 6. Regeneration (mit art_id Lookup)
   const regenArten = await safeQuery(()=> window.sb.from('regen_arten').select('id,name,emoji').eq('user_id', window.sbUser.id));
   const regenLookup = Object.fromEntries(((regenArten?.data)||[]).map(x=>[x.id,(x.emoji||'')+' '+x.name]));
@@ -2945,6 +2972,19 @@ function injectModules() {
     <div class="mbr">
       <button class="bs" onclick="closeModal('ern-m-spontan')">Abbrechen</button>
       <button class="bp" onclick="window.ern_saveSpontan()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mahlzeit-Zeit bearbeiten -->
+<div class="modal-overlay" id="ern-m-mealtime">
+  <div class="modal-sheet">
+    <div class="mt" id="ern-m-mealtime-title">Mahlzeit-Zeit</div>
+    <div class="mt-sub">Wann hast du gegessen?</div>
+    <input class="mi" id="ern-m-mealtime-input" type="time" style="margin-top:8px">
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('ern-m-mealtime')">Abbrechen</button>
+      <button class="bp" onclick="window.ern_saveTime()">Speichern</button>
     </div>
   </div>
 </div>
@@ -8788,6 +8828,8 @@ let mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[], snack:[] };
 let mealOpen    = { fruehstueck:false, mittagessen:true, abendessen:false, snack:false };
 let mealComments = { fruehstueck:'', mittagessen:'', abendessen:'', snack:'' };
 let mealCommentOpen = { fruehstueck:false, mittagessen:false, abendessen:false, snack:false };
+// mealTimes: Mahlzeit-Zeitstempel pro Slot (ISO Timestamp, fuer Zeitachse + Editierbarkeit)
+let mealTimes = { fruehstueck:null, mittagessen:null, abendessen:null, snack:null };
 
 let delMode = false, editMode = false;
 let moveCtx = null;
@@ -8874,11 +8916,12 @@ async function loadFromDb(){
   mahlzeitIds = {};
   mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[], snack:[] };
   mealComments = { fruehstueck:'', mittagessen:'', abendessen:'', snack:'' };
+  mealTimes = { fruehstueck:null, mittagessen:null, abendessen:null, snack:null };
   spontanEntries = [];
   try {
     const { data: mahls, error: e1 } = await window.sb
       .from('ern_mahlzeiten')
-      .select('id, typ, kommentar, ern_mahlzeit_items(id, lebensmittel_id, menge, menge_wert, menge_einheit, bewertung_snapshot, erfasst_am, sortierung)')
+      .select('id, typ, kommentar, erfasst_am, ern_mahlzeit_items(id, lebensmittel_id, menge, menge_wert, menge_einheit, bewertung_snapshot, erfasst_am, sortierung)')
       .eq('user_id', window.sbUser.id)
       .eq('tagesdatum', iso);
     if(e1) throw e1;
@@ -8909,6 +8952,7 @@ async function loadFromDb(){
       } else {
         mahlzeitIds[m.typ] = m.id;
         if(m.kommentar) mealComments[m.typ] = m.kommentar;
+        if(m.erfasst_am) mealTimes[m.typ] = m.erfasst_am;
         const items = (m.ern_mahlzeit_items||[]).slice().sort((a,b)=>{
           const ta = a.erfasst_am || '';
           const tb = b.erfasst_am || '';
@@ -8957,17 +9001,19 @@ async function ensureMahlzeit(typ){
       .maybeSingle();
     if(e0) throw e0;
     if(existing){ mahlzeitIds[typ] = existing.id; return existing.id; }
+    const ts = new Date().toISOString();
     const { data, error } = await window.sb
       .from('ern_mahlzeiten')
       .insert({
         user_id: window.sbUser.id,
         tagesdatum: iso,
         typ,
-        erfasst_am: new Date().toISOString()
+        erfasst_am: ts
       })
       .select().single();
     if(error) throw error;
     mahlzeitIds[typ] = data.id;
+    mealTimes[typ] = ts;
     return data.id;
   } catch(err) {
     showToast('Mahlzeit-Fehler: ' + err.message);
@@ -9312,6 +9358,7 @@ function renderMeals(){
       <div class="meal-header" onclick="window.ern_toggleMeal('${m.id}')">
         <span class="meal-label">${m.label}</span>
         <span style="display:flex;align-items:center;gap:6px">
+          ${mealTimes[m.id] ? `<button class="entry-time" onclick="event.stopPropagation();window.ern_openTimeEdit('${m.id}')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:1px 6px;cursor:pointer;font-family:'JetBrains Mono',monospace;color:var(--accent3)">${timeFromTimestamp(mealTimes[m.id])}</button>` : ''}
           ${badge}
           <button class="comment-btn${hasComment?' has-comment':''}"
             onclick="event.stopPropagation();window.ern_toggleComment('${m.id}')">💬</button>
@@ -9797,6 +9844,45 @@ function showToast(msg){
 }
 // Exports
 window.ern_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==undefined)window._lpFired=false;},50);if(typeof openAddModal==='function')openAddModal(btn.dataset.iid);};
+// ── MAHLZEIT-ZEIT EDITIEREN ──────────────
+let timeEditCtx = null;  // {typ}
+function openTimeEdit(typ){
+  if(!mealTimes[typ]) return;
+  timeEditCtx = {typ};
+  const labels = {fruehstueck:'🌅 Frühstück', mittagessen:'☀️ Mittagessen', abendessen:'🌆 Abendessen', snack:'🍎 Snack'};
+  document.getElementById('ern-m-mealtime-title').textContent = labels[typ] + ' — Zeit';
+  document.getElementById('ern-m-mealtime-input').value = timeFromTimestamp(mealTimes[typ]);
+  openModal('ern-m-mealtime');
+}
+async function saveTime(){
+  if(!timeEditCtx) return;
+  const newTime = document.getElementById('ern-m-mealtime-input').value;
+  if(!newTime) return;
+  const typ = timeEditCtx.typ;
+  const iso = getActiveISO();
+  const newTs = timestampFromTime(newTime, iso);
+  if(!window.sbUser){
+    mealTimes[typ] = newTs;
+    closeModal('ern-m-mealtime');
+    renderUI();
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('ern_mahlzeiten')
+      .update({ erfasst_am: newTs })
+      .eq('id', mahlzeitIds[typ])
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    mealTimes[typ] = newTs;
+    closeModal('ern-m-mealtime');
+    renderUI();
+    showToast('Zeit aktualisiert ✓');
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
 window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openMoveModal(el.dataset.meal,el.dataset.entry,el.dataset.name);};
   window.ern_confirmMove = confirmMove;
   window.ern_deleteEntry = deleteEntry;
@@ -9814,6 +9900,8 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_cycleBewertung = cycleBewertung;
   window.ern_openNewItem = openNewItem;
   window.ern_openSpontanModal = openSpontanModal;
+  window.ern_openTimeEdit = openTimeEdit;
+  window.ern_saveTime = saveTime;
   window.ern_render = render;
   window.ern_toggleZutat = toggleZutat;
   window.ern_setZutatWert = setZutatWert;
