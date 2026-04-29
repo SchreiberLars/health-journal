@@ -12547,11 +12547,12 @@ function openEditTemp(id){
   timeEl.value = e.time;
   valEl.dataset.eid = id;
   modal.classList.add('open');
-  // Zusatz-Check: ist Modal jetzt sichtbar?
   setTimeout(()=>{
-    const isOpen = modal.classList.contains('open');
-    const computed = window.getComputedStyle(modal);
-    showToast(`DEBUG: open=${isOpen} display=${computed.display} z=${computed.zIndex}`);
+    // Liste alle offenen modals
+    const openModals = document.querySelectorAll('.modal-overlay.open');
+    const ids = Array.from(openModals).map(m => m.id).join(', ');
+    const myRect = modal.getBoundingClientRect();
+    showToast(`DEBUG: ${openModals.length} offen [${ids}] | rect: ${Math.round(myRect.top)},${Math.round(myRect.left)} ${Math.round(myRect.width)}x${Math.round(myRect.height)}`);
   }, 100);
 }
 async function saveEditTemp(){
