@@ -743,10 +743,10 @@ window.sbUser = null;
       <span class="section-badge" id="badge-med">—</span>
     </div>
     <div class="section-right">
-      <span class="section-chevron open" id="chev-med">▼</span>
+      <span class="section-chevron" id="chev-med">▼</span>
     </div>
   </div>
-  <div class="section-body" id="body-med">
+  <div class="section-body" id="body-med" style="display:none">
     <div id="med-content"><!-- medikamente JS --></div>
   </div>
 </div>
@@ -764,10 +764,10 @@ window.sbUser = null;
         <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
         <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
       </span>
-      <span class="section-chevron open" id="chev-supp">▼</span>
+      <span class="section-chevron" id="chev-supp">▼</span>
     </div>
   </div>
-  <div class="section-body" id="body-supp">
+  <div class="section-body" id="body-supp" style="display:none">
     <div id="supp-content"><!-- supplements JS --></div>
   </div>
 </div>
@@ -1617,7 +1617,7 @@ function applyCategoryGrouping(){
 // ═══════════════════════════════════════════
 // SECTIONS
 // ═══════════════════════════════════════════
-const sectionOpen={med:true,supp:true,haut:false,bef:false,entz:false,get:false,ern:false,schmerz:false,stuhl:false,akt:false,regen:false,messw:false,fam:false};
+const sectionOpen={med:false,supp:false,haut:false,bef:false,entz:false,get:false,ern:false,schmerz:false,stuhl:false,akt:false,regen:false,messw:false,fam:false};
 
 function toggleSection(id){
   sectionOpen[id]=!sectionOpen[id];
@@ -12239,7 +12239,7 @@ function renderTemp(){
             <span style="font-size:13px">🌡</span>
             <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.temp)} °C</span>
             <span class="entry-time">${e.time}</span>
-            <button class="entry-action edit" onclick="window.messw_openEditTemp('${e.id}')" title="Bearbeiten">✎</button>
+            <button class="entry-action edit" onclick="console.log('temp edit click', '${e.id}'); window.messw_openEditTemp('${e.id}')" title="Bearbeiten" style="font-size:13px;padding:3px 9px">✎</button>
             <button class="entry-action del" onclick="window.messw_deleteTempEntry('${e.id}')" title="Löschen">✕</button>
           </div>
         </div>`).join('');
