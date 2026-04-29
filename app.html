@@ -12537,11 +12537,22 @@ function renderUI(){
 // ── EDIT-FUNKTIONEN ──────────────────────
 function openEditTemp(id){
   const e = tempEntries.find(x=>x.id===id);
-  if(!e) return;
-  document.getElementById('messw-m-edit-temp-val').value = String(e.temp).replace('.',',');
-  document.getElementById('messw-m-edit-temp-time').value = e.time;
-  document.getElementById('messw-m-edit-temp-val').dataset.eid = id;
-  openModal('messw-m-edit-temp');
+  if(!e) { showToast('DEBUG: Eintrag nicht gefunden!'); return; }
+  const valEl = document.getElementById('messw-m-edit-temp-val');
+  const timeEl = document.getElementById('messw-m-edit-temp-time');
+  const modal = document.getElementById('messw-m-edit-temp');
+  if(!modal) { showToast('DEBUG: Modal nicht im DOM!'); return; }
+  if(!valEl || !timeEl) { showToast('DEBUG: Modal-Inputs fehlen!'); return; }
+  valEl.value = String(e.temp).replace('.',',');
+  timeEl.value = e.time;
+  valEl.dataset.eid = id;
+  modal.classList.add('open');
+  // Zusatz-Check: ist Modal jetzt sichtbar?
+  setTimeout(()=>{
+    const isOpen = modal.classList.contains('open');
+    const computed = window.getComputedStyle(modal);
+    showToast(`DEBUG: open=${isOpen} display=${computed.display} z=${computed.zIndex}`);
+  }, 100);
 }
 async function saveEditTemp(){
   const valEl = document.getElementById('messw-m-edit-temp-val');
