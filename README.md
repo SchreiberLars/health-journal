@@ -16,6 +16,8 @@ Langfristige Vision: konfigurierbares, template-basiertes **Personal Health Inte
 
 **Phase 4 — Foto-Scanner für Zutatenlisten**: Claude Vision Integration für automatische Nährwert-Extraktion.
 
+**Phase 5 — KI-gestützte Trend-Analyse über Hautfotos & Daten**: Auswertungs-Modul in der App, das eingelagerte Hautfotos zusammen mit Modul-Daten (Score-Kategorien, Anker/Region/Tag), Garmin-Werten (Stress/Schlaf/HRV) und Notizen über Zeiträume hinweg an die Claude API schickt. Ziel: Trend-Erkennung statt Einzelbild-Bewertung — "Achsel vor 3 Wochen vs. heute, in Kombination mit Ernährung, Schlaf und Stress". Voraussetzung: konsistente Foto-Bedingungen (gleiches Licht, gleiche Stelle) — Lars dokumentiert das in seinem Routine-Setup. API-Key bleibt bei Lars (kein Anthropic-Backend), damit Privacy-Vision erhalten bleibt.
+
 ## Module (14)
 
 | Key | Modul | Besonderheit |
