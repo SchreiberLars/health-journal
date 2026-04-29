@@ -12239,7 +12239,7 @@ function renderTemp(){
             <span style="font-size:13px">🌡</span>
             <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.temp)} °C</span>
             <span class="entry-time">${e.time}</span>
-            <button class="entry-action edit" onclick="console.log('temp edit click', '${e.id}'); window.messw_openEditTemp('${e.id}')" title="Bearbeiten" style="font-size:13px;padding:3px 9px">✎</button>
+            <button class="entry-action edit" onclick="showToast('Edit klick: ${e.id.slice(0,8)}'); window.messw_openEditTemp('${e.id}')" title="Bearbeiten" style="font-size:13px;padding:3px 9px">✎</button>
             <button class="entry-action del" onclick="window.messw_deleteTempEntry('${e.id}')" title="Löschen">✕</button>
           </div>
         </div>`).join('');
@@ -14187,11 +14187,11 @@ async function initAllModules(){
   // Tageskommentar initial laden
   if(typeof renderTageskommentar === 'function') renderTageskommentar();
   renderDateHeader();
-  setTimeout(function(){
-    // Set to collapsed first, then toggle expands all (matches button label flow)
-    allCollapsed = true;
-    toggleAllSections();
-  }, 50);
+  // Alle Sections starten zugeklappt (wie in HTML/sectionOpen-Default definiert)
+  // Button-Label korrekt setzen
+  allCollapsed = true;
+  const btn = document.getElementById('btn-collapse-all');
+  if(btn) btn.textContent = '▶ Alle aufklappen';
 }
 
 // ═══════════════════════════════════════════
