@@ -687,6 +687,37 @@ window.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 window.sbUser = null;
+
+// Globaler Fetch-Wrapper: zeigt Toast bei jedem 4xx/5xx-Response von Supabase REST
+(function(){
+  const origFetch = window.fetch.bind(window);
+  window.fetch = async function(input, init){
+    const res = await origFetch(input, init);
+    try {
+      const url = (typeof input === 'string') ? input : (input && input.url) || '';
+      // Nur Supabase-REST-Anfragen ueberwachen, Auth-Endpoints ausnehmen
+      if(url.includes(SUPABASE_URL) && url.includes('/rest/v1/') && !res.ok){
+        // Body lesen ohne den Stream zu zerstoeren
+        const clone = res.clone();
+        let detail = '';
+        try {
+          const j = await clone.json();
+          detail = j.message || j.error || j.hint || JSON.stringify(j).slice(0,150);
+        } catch(_){}
+        // Kurz Tabellenname extrahieren
+        const m = url.match(/\/rest\/v1\/([\w_]+)/);
+        const tbl = m ? m[1] : '?';
+        const method = (init && init.method) || 'GET';
+        const msg = `⚠ DB-Fehler [${method} ${tbl}]: ${detail || res.status}`;
+        console.error(msg, url);
+        if(typeof window.showToast === 'function') window.showToast(msg, 5000);
+        else if(typeof showToast === 'function') showToast(msg, 5000);
+      }
+    } catch(_){}
+    return res;
+  };
+})();
+
 </script>
 </head>
 <body>
@@ -1243,11 +1274,11 @@ function todayDate(){const d=new Date();d.setHours(0,0,0,0);return d}
 function today(){return isoDate(todayDate())}
 
 let toastTimer;
-function showToast(msg){
+function showToast(msg, duration){
   const el=document.getElementById('toast');
   if(!el)return;
   el.textContent=msg;el.classList.add('show');
-  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2200);
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'), duration || 2200);
 }
 function openModal(id){const el=document.getElementById(id);if(el)el.classList.add('open')}
 function closeModal(id){const el=document.getElementById(id);if(el)el.classList.remove('open')}
