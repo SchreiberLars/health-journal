@@ -9521,7 +9521,12 @@ async function addItemToMeal(mealId, itemId, menge, menge_wert, menge_einheit){
   showToast(`${BW_ICON[item.bewertung]} ${item.name} → ${MEALS.find(m=>m.id===mealId)?.label}`);
   if(!window.sbUser) return;
   const mahlzeitId = await ensureMahlzeit(mealId);
-  if(!mahlzeitId) return;
+  if(!mahlzeitId){
+    // Mahlzeit konnte nicht angelegt werden -> auch lokales Item entfernen
+    mealEntries[mealId] = mealEntries[mealId].filter(e => e.id !== localId);
+    renderUI();
+    return;
+  }
   try {
     const { data, error } = await window.sb
       .from('ern_mahlzeit_items')
