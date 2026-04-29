@@ -688,35 +688,169 @@ window.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 window.sbUser = null;
 
-// Globaler Fetch-Wrapper: zeigt Toast bei jedem 4xx/5xx-Response von Supabase REST
+// Globaler Fetch-Wrapper: Pending-Queue + Retry + Toast bei Supabase-Fehlern
 (function(){
   const origFetch = window.fetch.bind(window);
+  const QUEUE_KEY = 'pending_writes_v1';
+
+  function loadQueue(){
+    try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); }
+    catch(_) { return []; }
+  }
+  function saveQueue(q){
+    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }
+    catch(_) {}
+    updatePendingBanner();
+  }
+  function addToQueue(entry){
+    const q = loadQueue();
+    q.push(entry);
+    saveQueue(q);
+  }
+  function removeFromQueue(id){
+    const q = loadQueue().filter(e => e.id !== id);
+    saveQueue(q);
+  }
+  window.sbPendingCount = function(){ return loadQueue().length; };
+  window.sbPendingList = function(){ return loadQueue(); };
+
+  function updatePendingBanner(){
+    const n = loadQueue().length;
+    let banner = document.getElementById('pending-banner');
+    if(n === 0){
+      if(banner) banner.remove();
+      return;
+    }
+    if(!banner){
+      banner = document.createElement('div');
+      banner.id = 'pending-banner';
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:var(--gold,#c89b3c);color:#fff;padding:8px 12px;font-size:12px;z-index:99998;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2)';
+      document.body.appendChild(banner);
+    }
+    banner.innerHTML = `
+      <span>⏳ ${n} ${n===1?'Eintrag':'Einträge'} nicht synchronisiert</span>
+      <span style="display:flex;gap:6px">
+        <button onclick="window.sbRetryAll()" style="background:rgba(255,255,255,0.25);border:none;color:#fff;padding:3px 10px;border-radius:6px;cursor:pointer;font-size:11px">Jetzt versuchen</button>
+        <button onclick="window.sbShowPending()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:3px 10px;border-radius:6px;cursor:pointer;font-size:11px">Anzeigen</button>
+      </span>`;
+  }
+
+  // Retry: alle pending writes nochmal versuchen
+  window.sbRetryAll = async function(){
+    const q = loadQueue();
+    if(!q.length) return;
+    if(typeof showToast === 'function') showToast(`Versuche ${q.length} Eintrag/Einträge…`);
+    let success = 0, failed = 0;
+    for(const entry of q){
+      try {
+        const res = await origFetch(entry.url, {
+          method: entry.method,
+          headers: entry.headers,
+          body: entry.body
+        });
+        if(res.ok){
+          removeFromQueue(entry.id);
+          success++;
+        } else {
+          failed++;
+        }
+      } catch(_){
+        failed++;
+      }
+    }
+    if(typeof showToast === 'function'){
+      if(failed === 0) showToast(`✓ Alle ${success} Eintrag/Einträge synchronisiert`, 3000);
+      else showToast(`${success} ok · ${failed} Fehler`, 3000);
+    }
+  };
+
+  // Manuelle Anzeige der pending Einträge
+  window.sbShowPending = function(){
+    const q = loadQueue();
+    if(!q.length){ if(typeof showToast === 'function') showToast('Keine pending Einträge'); return; }
+    const summary = q.slice(0,10).map((e,i) => {
+      const tblM = e.url.match(/\/rest\/v1\/([\w_]+)/);
+      const tbl = tblM ? tblM[1] : '?';
+      let bodyPreview = '';
+      try {
+        const b = JSON.parse(e.body);
+        const obj = Array.isArray(b) ? b[0] : b;
+        const keys = Object.keys(obj).filter(k => k !== 'user_id').slice(0,3);
+        bodyPreview = keys.map(k => `${k}=${JSON.stringify(obj[k]).slice(0,30)}`).join(', ');
+      } catch(_){}
+      return `${i+1}. [${e.method} ${tbl}] ${bodyPreview}`;
+    }).join('\n');
+    const more = q.length > 10 ? `\n…und ${q.length-10} weitere` : '';
+    const msg = `Pending Einträge (${q.length}):\n\n${summary}${more}\n\nLöschen alle pending? (OK = ja, Abbrechen = nein)`;
+    if(confirm(msg)){
+      saveQueue([]);
+      if(typeof showToast === 'function') showToast('Queue geleert');
+    }
+  };
+
+  // Auto-Retry: alle 30s wenn pending vorhanden + beim App-Start
+  setInterval(()=>{
+    if(loadQueue().length > 0 && navigator.onLine !== false){
+      window.sbRetryAll();
+    }
+  }, 30000);
+
+  // Banner beim Laden setzen
+  window.addEventListener('DOMContentLoaded', ()=>{
+    setTimeout(updatePendingBanner, 500);
+    if(loadQueue().length > 0) setTimeout(window.sbRetryAll, 2000);
+  });
+
+  // Fetch-Wrapper
   window.fetch = async function(input, init){
-    const res = await origFetch(input, init);
+    const url = (typeof input === 'string') ? input : (input && input.url) || '';
+    const isSbWrite = url.includes(SUPABASE_URL) && url.includes('/rest/v1/')
+      && init && init.method && ['POST','PATCH','PUT','DELETE'].includes(init.method);
+
+    let res;
+    let networkError = null;
     try {
-      const url = (typeof input === 'string') ? input : (input && input.url) || '';
-      // Nur Supabase-REST-Anfragen ueberwachen, Auth-Endpoints ausnehmen
-      if(url.includes(SUPABASE_URL) && url.includes('/rest/v1/') && !res.ok){
-        // Body lesen ohne den Stream zu zerstoeren
+      res = await origFetch(input, init);
+    } catch(e){
+      networkError = e;
+    }
+
+    // Bei Netzwerk-Fehler oder Server-Fehler (5xx): in Pending-Queue
+    if(isSbWrite && (networkError || (res && res.status >= 500))){
+      // Nur Insert (POST), Upsert (PUT), Patch (PATCH) queuen - DELETE nicht
+      if(['POST','PATCH','PUT'].includes(init.method)){
+        const entry = {
+          id: 'pw_' + Date.now() + '_' + Math.random().toString(36).slice(2,9),
+          url, method: init.method,
+          headers: Object.fromEntries(Object.entries(init.headers || {})),
+          body: init.body,
+          ts: new Date().toISOString()
+        };
+        addToQueue(entry);
+        if(typeof showToast === 'function') showToast(`📥 In Warteschlange (${loadQueue().length} pending)`, 3000);
+      }
+      if(networkError) throw networkError;
+      return res;
+    }
+
+    // Bei 4xx-Fehler: Toast (Constraint, RLS etc) - kein Retry, das wuerde wieder fehlschlagen
+    if(isSbWrite && res && !res.ok && res.status >= 400 && res.status < 500){
+      try {
         const clone = res.clone();
-        let detail = '';
-        try {
-          const j = await clone.json();
-          detail = j.message || j.error || j.hint || JSON.stringify(j).slice(0,150);
-        } catch(_){}
-        // Kurz Tabellenname extrahieren
+        const j = await clone.json();
+        const detail = j.message || j.error || j.hint || JSON.stringify(j).slice(0,150);
         const m = url.match(/\/rest\/v1\/([\w_]+)/);
         const tbl = m ? m[1] : '?';
-        const method = (init && init.method) || 'GET';
-        const msg = `⚠ DB-Fehler [${method} ${tbl}]: ${detail || res.status}`;
+        const msg = `⚠ DB-Fehler [${init.method} ${tbl}]: ${detail}`;
         console.error(msg, url);
-        if(typeof window.showToast === 'function') window.showToast(msg, 5000);
-        else if(typeof showToast === 'function') showToast(msg, 5000);
-      }
-    } catch(_){}
+        if(typeof showToast === 'function') showToast(msg, 5000);
+      } catch(_){}
+    }
+
     return res;
   };
 })();
+
 
 </script>
 </head>
