@@ -768,25 +768,120 @@ window.sbUser = null;
   window.sbShowPending = function(){
     const q = loadQueue();
     if(!q.length){ if(typeof showToast === 'function') showToast('Keine pending Einträge'); return; }
-    const summary = q.slice(0,10).map((e,i) => {
+
+    // Modal bauen falls nicht vorhanden
+    let modal = document.getElementById('pending-modal');
+    if(!modal){
+      modal = document.createElement('div');
+      modal.id = 'pending-modal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:flex-end;justify-content:center;padding:0';
+      modal.onclick = function(e){ if(e.target === modal) modal.style.display='none'; };
+      document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+
+    function rowHtml(e, i){
       const tblM = e.url.match(/\/rest\/v1\/([\w_]+)/);
       const tbl = tblM ? tblM[1] : '?';
-      let bodyPreview = '';
+      let preview = '';
       try {
         const b = JSON.parse(e.body);
         const obj = Array.isArray(b) ? b[0] : b;
-        const keys = Object.keys(obj).filter(k => k !== 'user_id').slice(0,3);
-        bodyPreview = keys.map(k => `${k}=${JSON.stringify(obj[k]).slice(0,30)}`).join(', ');
-      } catch(_){}
-      return `${i+1}. [${e.method} ${tbl}] ${bodyPreview}`;
-    }).join('\n');
-    const more = q.length > 10 ? `\n…und ${q.length-10} weitere` : '';
-    const msg = `Pending Einträge (${q.length}):\n\n${summary}${more}\n\nLöschen alle pending? (OK = ja, Abbrechen = nein)`;
-    if(confirm(msg)){
-      saveQueue([]);
-      if(typeof showToast === 'function') showToast('Queue geleert');
+        const keys = Object.keys(obj).filter(k => k !== 'user_id').slice(0,4);
+        preview = keys.map(k => {
+          const v = obj[k];
+          const sv = typeof v === 'string' ? v.slice(0,40) : JSON.stringify(v).slice(0,40);
+          return `<span style="color:var(--muted);font-size:10px">${k}</span> ${sv}`;
+        }).join(' · ');
+      } catch(_){ preview = '(unparseable)'; }
+      const ts = e.ts ? new Date(e.ts).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '';
+      return `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-weight:600;font-size:13px">${i+1}. ${e.method} ${tbl}</span>
+            <span style="color:var(--muted);font-size:10px;margin-left:auto">${ts}</span>
+          </div>
+          <div style="font-size:11px;line-height:1.5;color:var(--text);margin-bottom:8px;word-break:break-word">${preview}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button onclick="window.sbRetryOne('${e.id}')" style="background:var(--accent3);color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer">↻ Erneut versuchen</button>
+            <button onclick="window.sbDiscardOne('${e.id}')" style="background:none;border:1px solid var(--delete);color:var(--delete);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer">✕ Verwerfen</button>
+          </div>
+        </div>`;
+    }
+
+    modal.innerHTML = `
+      <div style="background:var(--bg);border-radius:18px 18px 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom, 0px))">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="font-family:'Lora',serif;font-size:18px">Nicht synchronisierte Einträge (${q.length})</div>
+          <button onclick="document.getElementById('pending-modal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:0 4px">×</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.4">
+          Diese Einträge konnten nicht in die Datenbank geschrieben werden. Pro Eintrag kannst du erneut versuchen oder verwerfen.
+        </div>
+        <div>${q.map(rowHtml).join('')}</div>
+        <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <button onclick="window.sbRetryAll();setTimeout(window.sbShowPending, 1500)" style="background:var(--accent3);color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;flex:1">↻ Alle erneut versuchen</button>
+          <button onclick="if(confirm('Wirklich alle ${q.length} Einträge verwerfen?')){window.sbDiscardAll();}" style="background:none;border:1px solid var(--delete);color:var(--delete);padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer">Alle verwerfen</button>
+        </div>
+      </div>`;
+  };
+
+  // Einzelnen Eintrag erneut versuchen
+  window.sbRetryOne = async function(id){
+    const q = loadQueue();
+    const entry = q.find(e => e.id === id);
+    if(!entry) return;
+    if(typeof showToast === 'function') showToast('Versuche erneut…');
+    try {
+      const res = await origFetch(entry.url, {
+        method: entry.method,
+        headers: entry.headers,
+        body: entry.body
+      });
+      if(res.ok){
+        removeFromQueue(id);
+        if(typeof showToast === 'function') showToast('✓ Synchronisiert', 2500);
+        // Modal aktualisieren
+        const remaining = loadQueue();
+        if(remaining.length === 0){
+          const modal = document.getElementById('pending-modal');
+          if(modal) modal.style.display='none';
+        } else {
+          window.sbShowPending();
+        }
+        // App-Render triggern damit Daten neu geladen werden
+        if(typeof window.refreshAll === 'function') window.refreshAll();
+      } else {
+        let detail = res.status;
+        try { const j = await res.json(); detail = j.message || j.error || res.status; } catch(_){}
+        if(typeof showToast === 'function') showToast(`Fehler: ${detail}`, 4000);
+      }
+    } catch(err){
+      if(typeof showToast === 'function') showToast('Netzwerkfehler — später erneut versuchen', 3000);
     }
   };
+
+  // Einzelnen Eintrag verwerfen
+  window.sbDiscardOne = function(id){
+    removeFromQueue(id);
+    if(typeof showToast === 'function') showToast('Verworfen', 2000);
+    const remaining = loadQueue();
+    if(remaining.length === 0){
+      const modal = document.getElementById('pending-modal');
+      if(modal) modal.style.display='none';
+    } else {
+      window.sbShowPending();
+    }
+  };
+
+  // Alle verwerfen
+  window.sbDiscardAll = function(){
+    saveQueue([]);
+    if(typeof showToast === 'function') showToast('Queue geleert');
+    const modal = document.getElementById('pending-modal');
+    if(modal) modal.style.display='none';
+  };
+
 
   // Auto-Retry: alle 30s wenn pending vorhanden + beim App-Start
   setInterval(()=>{
