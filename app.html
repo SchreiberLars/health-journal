@@ -724,14 +724,14 @@ window.sbUser = null;
     if(!banner){
       banner = document.createElement('div');
       banner.id = 'pending-banner';
-      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:var(--gold,#c89b3c);color:#fff;padding:8px 12px;font-size:12px;z-index:99998;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2)';
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:var(--gold,#c89b3c);color:#fff;padding:calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;font-size:13px;font-weight:500;z-index:99998;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
       document.body.appendChild(banner);
     }
     banner.innerHTML = `
-      <span>⏳ ${n} ${n===1?'Eintrag':'Einträge'} nicht synchronisiert</span>
-      <span style="display:flex;gap:6px">
-        <button onclick="window.sbRetryAll()" style="background:rgba(255,255,255,0.25);border:none;color:#fff;padding:3px 10px;border-radius:6px;cursor:pointer;font-size:11px">Jetzt versuchen</button>
-        <button onclick="window.sbShowPending()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:3px 10px;border-radius:6px;cursor:pointer;font-size:11px">Anzeigen</button>
+      <span style="line-height:1.4">⏳ ${n} ${n===1?'Eintrag':'Einträge'} nicht synchronisiert</span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap">
+        <button onclick="window.sbRetryAll()" style="background:rgba(255,255,255,0.3);border:none;color:#fff;padding:5px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500">Jetzt versuchen</button>
+        <button onclick="window.sbShowPending()" style="background:rgba(255,255,255,0.18);border:none;color:#fff;padding:5px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500">Anzeigen</button>
       </span>`;
   }
 
