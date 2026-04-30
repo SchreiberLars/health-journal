@@ -6004,14 +6004,51 @@ function openRegionPicker(pid, grp){
 function renderRegionChips(){
   const container = document.getElementById('haut-m-region-chips');
   if(!container || !regionCtx) return;
-  if(!hautRegionen.length){
-    container.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px">Keine Regionen verfügbar. Lege im Entzündungs-Modul Regionen an.</div>';
-    return;
-  }
-  container.innerHTML = hautRegionen.map(r => {
+  const chips = hautRegionen.map(r => {
     const sel = regionCtx.selectedIds.has(r.id);
     return `<button class="grp-btn ${sel?'sel':''}" onclick="window.haut_toggleRegion('${r.id}')" style="padding:6px 12px;border-radius:14px;font-size:12px;border:1px solid ${sel?'var(--accent3)':'var(--border)'};background:${sel?'var(--accent3)':'var(--surface)'};color:${sel?'#fff':'var(--text)'};cursor:pointer">${r.name}</button>`;
   }).join('');
+  const addBtn = `<button onclick="window.haut_addNewRegion()" style="padding:6px 12px;border-radius:14px;font-size:12px;border:1px dashed var(--accent3);background:none;color:var(--accent3);cursor:pointer">+ Neue Region</button>`;
+  container.innerHTML = chips + addBtn;
+}
+
+async function addNewRegion(){
+  const name = (window.prompt('Name der neuen Region (z.B. "Knie rechts"):') || '').trim();
+  if(!name) return;
+  if(!window.sbUser){ showToast('Nicht eingeloggt'); return; }
+  // Pruefen ob es die schon gibt
+  const existing = hautRegionen.find(r => r.name.toLowerCase() === name.toLowerCase());
+  if(existing){
+    if(regionCtx) regionCtx.selectedIds.add(existing.id);
+    renderRegionChips();
+    showToast('Region existierte bereits — ausgewählt');
+    return;
+  }
+  // Naechste Sortierung berechnen
+  const maxSort = hautRegionen.reduce((m, r) => {
+    // Optional - wir kennen sortierung nicht direkt im Cache, also nehmen wir +10 vom letzten Index
+    return m;
+  }, 0);
+  const newSort = (hautRegionen.length + 1) * 10;
+  try {
+    const { data, error } = await window.sb
+      .from('entz_regionen')
+      .insert({
+        user_id: window.sbUser.id,
+        name: name,
+        sortierung: newSort
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    // In lokalem Cache ergaenzen
+    hautRegionen.push({ id: data.id, name: data.name });
+    if(regionCtx) regionCtx.selectedIds.add(data.id);
+    renderRegionChips();
+    showToast(`Region "${name}" angelegt ✓`);
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
 }
 
 function toggleRegion(rid){
@@ -6642,6 +6679,7 @@ window.haut_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==un
   window.haut_toggleRegion = toggleRegion;
   window.haut_cancelRegion = cancelRegion;
   window.haut_confirmRegion = confirmRegion;
+  window.haut_addNewRegion = addNewRegion;
 })();
 
 (function() {
