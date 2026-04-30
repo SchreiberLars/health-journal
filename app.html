@@ -2669,6 +2669,20 @@ function injectModules() {
   </div>
 </div>
 
+<!-- Region-Picker fuer Produkte mit benoetigt_region (z.B. Cortison) -->
+<div class="modal-overlay" id="haut-m-region">
+  <div class="modal-sheet">
+    <div class="mt" id="haut-m-region-title">Wo angewendet?</div>
+    <div class="mt-sub" id="haut-m-region-sub">Mehrfachauswahl möglich. Optional — du kannst auch ohne Region speichern.</div>
+    <div id="haut-m-region-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;margin-bottom:12px"></div>
+    <label class="ml">Notiz (optional)</label>
+    <input class="mi" id="haut-m-region-notiz" type="text" placeholder="z.B. Entzündung kommt zurück" style="margin-top:4px">
+    <div class="mbr">
+      <button class="bs" onclick="window.haut_cancelRegion()">Abbrechen</button>
+      <button class="bp" onclick="window.haut_confirmRegion()">Speichern</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="haut-m-new">
   <div class="modal-sheet">
@@ -5546,6 +5560,7 @@ const PRESETS = {
 // groupsList: [{id, label, sortierung}] aus haut_routinen
 let products = [];
 let GROUPS = [];
+let hautRegionen = [];  // [{id, name}] aus entz_regionen - fuer Region-Picker bei Cortison etc.
 
 // doneMap: { 'prodId__groupId': { done:bool, overrideDose:number|null, anwId:uuid|null } }
 let doneMap = {};
@@ -5607,7 +5622,7 @@ async function loadStammdaten(){
     // 2. Produkte
     const { data: pData, error: pErr } = await window.sb
       .from('haut_produkte')
-      .select('id, name, dosis_einheit_label, standard_dosis, sortierung')
+      .select('id, name, dosis_einheit_label, standard_dosis, sortierung, kategorie, benoetigt_region')
       .eq('user_id', window.sbUser.id)
       .eq('aktiv', true)
       .order('sortierung', { ascending: true });
@@ -5639,8 +5654,18 @@ async function loadStammdaten(){
       dose: p.standard_dosis ? parseFloat(p.standard_dosis) : null,
       groups: groupsByProd[p.id] || [],
       intervalDays: null,  // pro Routine, nicht pro Produkt - wird in renderGroup aufgeloest
-      lastUsed: null
+      lastUsed: null,
+      kategorie: p.kategorie || null,
+      benoetigtRegion: !!p.benoetigt_region
     }));
+
+    // 4. Regionen aus entz_regionen (fuer Region-Picker bei Cortison etc.)
+    const { data: regData, error: regErr } = await window.sb
+      .from('entz_regionen')
+      .select('id, name, sortierung')
+      .eq('user_id', window.sbUser.id)
+      .order('sortierung', { ascending: true, nullsFirst: false });
+    if(!regErr) hautRegionen = (regData||[]).map(r => ({id:r.id, name:r.name}));
     // routineSpecific in window-Scope fuer Lookup in renderGroup
     window.__hautRP = routineSpecificData;
     products.sort((a,b)=>a.name.localeCompare(b.name,'de'));
@@ -5914,6 +5939,11 @@ async function tapChip(pid,grp){
       } catch(err) { showToast('Fehler: ' + err.message); }
     }
   } else {
+    // Bei Produkten die Region-Tracking erfordern (z.B. Cortison): Picker oeffnen
+    if(p && p.benoetigtRegion && window.sbUser){
+      openRegionPicker(pid, grp);
+      return;
+    }
     setDone(pid,grp,true,null);
     showToast(`${p?.name} ✓`);
     renderUI();
@@ -5950,6 +5980,116 @@ async function tapChip(pid,grp){
       } catch(err) { showToast('Fehler: ' + err.message); }
     }
   }
+}
+
+// ── REGION-PICKER (fuer Cortison etc.) ────
+let regionCtx = null;  // {pid, grp, selectedIds: Set}
+
+function openRegionPicker(pid, grp){
+  const p = products.find(x => x.id === pid);
+  if(!p) return;
+  regionCtx = { pid, grp, selectedIds: new Set() };
+
+  document.getElementById('haut-m-region-title').textContent = p.name;
+  const sub = document.getElementById('haut-m-region-sub');
+  if(sub) sub.textContent = 'Wo angewendet? Mehrfachauswahl möglich, oder leer lassen.';
+
+  const notizEl = document.getElementById('haut-m-region-notiz');
+  if(notizEl) notizEl.value = '';
+
+  renderRegionChips();
+  openModal('haut-m-region');
+}
+
+function renderRegionChips(){
+  const container = document.getElementById('haut-m-region-chips');
+  if(!container || !regionCtx) return;
+  if(!hautRegionen.length){
+    container.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px">Keine Regionen verfügbar. Lege im Entzündungs-Modul Regionen an.</div>';
+    return;
+  }
+  container.innerHTML = hautRegionen.map(r => {
+    const sel = regionCtx.selectedIds.has(r.id);
+    return `<button class="grp-btn ${sel?'sel':''}" onclick="window.haut_toggleRegion('${r.id}')" style="padding:6px 12px;border-radius:14px;font-size:12px;border:1px solid ${sel?'var(--accent3)':'var(--border)'};background:${sel?'var(--accent3)':'var(--surface)'};color:${sel?'#fff':'var(--text)'};cursor:pointer">${r.name}</button>`;
+  }).join('');
+}
+
+function toggleRegion(rid){
+  if(!regionCtx) return;
+  if(regionCtx.selectedIds.has(rid)) regionCtx.selectedIds.delete(rid);
+  else regionCtx.selectedIds.add(rid);
+  renderRegionChips();
+}
+
+function cancelRegion(){
+  regionCtx = null;
+  closeModal('haut-m-region');
+}
+
+async function confirmRegion(){
+  if(!regionCtx || !window.sbUser){ closeModal('haut-m-region'); return; }
+  const { pid, grp, selectedIds } = regionCtx;
+  const p = products.find(x => x.id === pid);
+  const notizEl = document.getElementById('haut-m-region-notiz');
+  const notiz = notizEl ? notizEl.value.trim() : '';
+
+  // UI sofort aktualisieren
+  setDone(pid, grp, true, null);
+  showToast(`${p?.name} ✓${selectedIds.size ? ` (${selectedIds.size} Region${selectedIds.size>1?'en':''})` : ''}`);
+  renderUI();
+  closeModal('haut-m-region');
+
+  const iso = getActiveISO();
+  const dose = doseFor(p, grp);
+  try {
+    // 1. Anwendung anlegen
+    const { data, error } = await window.sb
+      .from('haut_anwendungen')
+      .upsert({
+        user_id: window.sbUser.id,
+        produkt_id: pid,
+        routine_id: grp,
+        tagesdatum: iso,
+        erfasst_am: new Date().toISOString(),
+        dosis: dose,
+        einheit_label: p?.unit || null,
+        notiz: notiz || null
+      }, { onConflict: 'user_id,produkt_id,tagesdatum,routine_id' })
+      .select()
+      .single();
+    if(error) throw error;
+    setDone(pid, grp, true, null, data.id);
+
+    // 2. Region-Zuordnungen anlegen (wenn welche gewaehlt)
+    if(selectedIds.size > 0){
+      const rows = Array.from(selectedIds).map(rid => ({
+        anwendung_id: data.id,
+        region_id: rid
+      }));
+      // Erst alte Zuordnungen loeschen (falls upsert bestehende Anwendung getroffen hat)
+      await window.sb.from('haut_anwendung_regionen')
+        .delete().eq('anwendung_id', data.id);
+      const { error: rErr } = await window.sb
+        .from('haut_anwendung_regionen')
+        .insert(rows);
+      if(rErr) throw rErr;
+    }
+
+    // Intervall-Update wie sonst auch
+    const rp = (window.__hautRP||{})[pid+'__'+grp];
+    if(rp && rp.intervall){
+      await window.sb
+        .from('haut_routine_produkte')
+        .update({ letzte_anwendung_datum: iso })
+        .eq('routine_id', grp)
+        .eq('produkt_id', pid);
+      rp.lastUsed = iso;
+      renderUI();
+    }
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+  regionCtx = null;
 }
 
 document.addEventListener('click',e=>{
@@ -6499,6 +6639,9 @@ window.haut_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==un
   window.haut_updateEditQuick = updateEditQuick;
   window.haut_updateNewQuick = updateNewQuick;
   window.haut_render = render;
+  window.haut_toggleRegion = toggleRegion;
+  window.haut_cancelRegion = cancelRegion;
+  window.haut_confirmRegion = confirmRegion;
 })();
 
 (function() {
