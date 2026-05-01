@@ -3166,11 +3166,19 @@ function injectModules() {
 
   
   <div id="ern-spontan-section" style="margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sublabel" style="margin-bottom:0">Snacks</div>
-      <button class="btn-ghost" onclick="window.ern_openSpontanModal()">+ Snack hinzufügen</button>
+    <div class="meal-card">
+      <div class="meal-header" onclick="window.ern_toggleSnacksOpen()">
+        <span class="meal-label">🍎 Snacks</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="meal-badge" id="ern-snacks-badge">—</span>
+          <button class="btn-ghost" onclick="event.stopPropagation();window.ern_openSpontanModal()" style="font-size:10px;padding:3px 8px">+ Snack</button>
+          <span style="color:var(--muted);font-size:12px" id="ern-snacks-chev">▼</span>
+        </span>
+      </div>
+      <div class="meal-body" id="ern-snacks-body" style="display:none">
+        <div id="ern-spontan-list"></div>
+      </div>
     </div>
-    <div id="ern-spontan-list"></div>
   </div>
 
   
@@ -9374,6 +9382,7 @@ let moveCtx = null;
 let entryLpTimer = null, entryLpFired = false;
 let spontanEntries = [];
 let spontanSelected = new Set();
+let snacksOpen = false;  // Snacks-Sektion zugeklappt by default
 let addCtx = null, editCtx = null;
 let currentBewertung = 'gut';
 let bewertungUserSet = false;
@@ -9752,6 +9761,24 @@ function renderUI(){
 
 function renderSpontan(){
   const el = document.getElementById('ern-spontan-list');
+  const badge = document.getElementById('ern-snacks-badge');
+  const body = document.getElementById('ern-snacks-body');
+  const chev = document.getElementById('ern-snacks-chev');
+  if(!el) return;
+  // Badge updaten
+  if(badge){
+    if(spontanEntries.length){
+      badge.textContent = `✓ ${spontanEntries.length}`;
+      badge.classList.add('has-entries');
+    } else {
+      badge.textContent = '—';
+      badge.classList.remove('has-entries');
+    }
+  }
+  // Body open/closed
+  if(body) body.style.display = snacksOpen ? 'block' : 'none';
+  if(chev) chev.textContent = snacksOpen ? '▲' : '▼';
+  // Liste rendern
   if(!spontanEntries.length){ el.innerHTML=''; return; }
   el.innerHTML = spontanEntries.sort((a,b)=>a.time.localeCompare(b.time)).map(e=>`
     <div class="meal-entry" style="margin-bottom:5px">
@@ -9764,6 +9791,11 @@ function renderSpontan(){
       </div>
       <button class="entry-action del" onclick="window.ern_deleteSpontan('${e.id}')" title="Löschen">✕</button>
     </div>`).join('');
+}
+
+function toggleSnacksOpen(){
+  snacksOpen = !snacksOpen;
+  renderSpontan();
 }
 
 function openSpontanModal(){
@@ -10465,6 +10497,7 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_deleteEntry = deleteEntry;
   window.ern_deleteItem = deleteItem;
   window.ern_deleteSpontan = deleteSpontan;
+  window.ern_toggleSnacksOpen = toggleSnacksOpen;
   window.ern_openEditItem = openEditItem;
   window.ern_onEinheitChange = onEinheitChange;
   window.ern_quickAdd = quickAdd;
