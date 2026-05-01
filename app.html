@@ -2081,7 +2081,7 @@ async function collectTimelineItems(iso){
     const lebens = await safeQuery(()=> window.sb.from('ern_lebensmittel').select('id,name').in('id', Array.from(lebensIds)));
     (lebens?.data||[]).forEach(x => { lebensLookup[x.id] = x.name; });
   }
-  const MEAL_LABELS = {fruehstueck:'🌅 Frühstück', mittagessen:'☀️ Mittagessen', abendessen:'🌆 Abendessen', snack:'🍎 Snack', spontan:'🍴 Spontan'};
+  const MEAL_LABELS = {fruehstueck:'🌅 Frühstück', mittagessen:'☀️ Mittagessen', abendessen:'🌆 Abendessen', snack:'🍎 Snack', spontan:'🍎 Snack'};
   (ernMahls?.data||[]).forEach(m => {
     const itemNames = (m.ern_mahlzeit_items||[])
       .map(i => lebensLookup[i.lebensmittel_id])
@@ -3167,8 +3167,8 @@ function injectModules() {
   
   <div id="ern-spontan-section" style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div class="sublabel" style="margin-bottom:0">Snacks & Spontan</div>
-      <button class="btn-ghost" onclick="window.ern_openSpontanModal()">+ Jetzt essen</button>
+      <div class="sublabel" style="margin-bottom:0">Snacks</div>
+      <button class="btn-ghost" onclick="window.ern_openSpontanModal()">+ Snack hinzufügen</button>
     </div>
     <div id="ern-spontan-list"></div>
   </div>
@@ -3243,8 +3243,8 @@ function injectModules() {
 
 <div class="modal-overlay" id="ern-m-spontan">
   <div class="modal-sheet">
-    <div class="mt">Jetzt essen</div>
-    <div class="mt-sub">Snack oder spontane Mahlzeit erfassen</div>
+    <div class="mt">Snack hinzufügen</div>
+    <div class="mt-sub">Zwischenmahlzeit zu beliebiger Uhrzeit</div>
 
     <label class="ml">Uhrzeit</label>
     <input class="mi" id="ern-sp-time" type="time">
@@ -9342,21 +9342,10 @@ const FIXED_MEALS = [
   {id:'abendessen',  label:'🌆 Abendessen'},
 ];
 
-// Hole alle Mahlzeit-Cards (fix + dynamische Snacks) sortiert nach Reihenfolge
+// Hole alle Mahlzeit-Cards. Nur die 3 Fixed-Slots (Frueh/Mittag/Abend).
+// Alles andere (Zwischenmahlzeiten/Snacks) laeuft ueber die "Spontan"-Sektion (Spontan-typ).
 function getMeals(){
-  const result = FIXED_MEALS.map(m => ({...m}));
-  // Snack-Keys aus mahlzeitIds extrahieren
-  const snackKeys = Object.keys(mahlzeitIds).filter(k => k.startsWith('snack:'));
-  // Nach Erfass-Zeit sortieren (frueh -> spaet)
-  snackKeys.sort((a,b) => {
-    const ta = mealTimes[a] || '';
-    const tb = mealTimes[b] || '';
-    return ta.localeCompare(tb);
-  });
-  snackKeys.forEach((k, i) => {
-    result.push({id: k, label: snackKeys.length > 1 ? `🍎 Snack ${i+1}` : '🍎 Snack'});
-  });
-  return result;
+  return FIXED_MEALS.map(m => ({...m}));
 }
 
 // Helper: aus mealKey den DB-Typ ableiten
@@ -9501,16 +9490,37 @@ async function loadFromDb(){
             };
           })
         });
+      } else if(m.typ === 'snack') {
+        // Legacy: alte snack-typ Eintraege ignorieren (sollten alle zu spontan migriert sein).
+        // Falls aus irgendeinem Grund welche reinkommen, behandeln wir sie wie spontan.
+        const items = (m.ern_mahlzeit_items||[]).slice().sort((a,b)=>(a.sortierung||0)-(b.sortierung||0));
+        const time = items.length && items[0].erfasst_am ? timeFromTimestamp(items[0].erfasst_am) : '';
+        spontanEntries.push({
+          id: m.id,
+          time,
+          label: m.kommentar || '',
+          items: items.map(i => {
+            const lib = bibliothek.find(x => x.id === i.lebensmittel_id);
+            const display = (i.menge_wert != null)
+              ? `${i.menge_wert}${i.menge_einheit ? ' '+i.menge_einheit : ''}`
+              : (i.menge || '');
+            return {
+              itemId: i.lebensmittel_id,
+              name: lib?.name || (i.menge ? '' : '?'),
+              bewertung: i.bewertung_snapshot || lib?.bewertung || 'unklar',
+              menge: display,
+              menge_wert: i.menge_wert,
+              menge_einheit: i.menge_einheit
+            };
+          })
+        });
       } else {
-        // Snacks: jeder bekommt eigenen mealKey 'snack:UUID'
-        // Fixed-Slots: mealKey = typ
-        const mealKey = (m.typ === 'snack') ? ('snack:' + m.id) : m.typ;
+        // Fixed-Slots: Frueh/Mittag/Abend
+        const mealKey = m.typ;
+        if(!['fruehstueck','mittagessen','abendessen'].includes(mealKey)) return;
         mahlzeitIds[mealKey] = m.id;
         if(m.kommentar) mealComments[mealKey] = m.kommentar;
         if(m.erfasst_am) mealTimes[mealKey] = m.erfasst_am;
-        // Sicherstellen dass mealOpen/mealCommentOpen Keys haben
-        if(mealOpen[mealKey] === undefined) mealOpen[mealKey] = false;
-        if(mealCommentOpen[mealKey] === undefined) mealCommentOpen[mealKey] = false;
         const items = (m.ern_mahlzeit_items||[]).slice().sort((a,b)=>{
           const ta = a.erfasst_am || '';
           const tb = b.erfasst_am || '';
@@ -9547,20 +9557,19 @@ async function ensureMahlzeit(mealKey){
   if(!window.sbUser) return null;
   const iso = getActiveISO();
   const typ = typFromMealKey(mealKey);
+  // Nur Fixed-Slots: existing pruefen, sonst neu anlegen.
+  // Snacks/Spontan haben eigenen Workflow (saveSpontan), nicht hier.
+  if(typ !== 'fruehstueck' && typ !== 'mittagessen' && typ !== 'abendessen') return null;
   try {
-    // Bei Fixed-Slots: Schauen ob's heute eine gibt (kann nur eine geben)
-    // Bei Snacks: immer neu anlegen (jeder Snack ist eigene Mahlzeit)
-    if(typ !== 'snack'){
-      const { data: existing, error: e0 } = await window.sb
-        .from('ern_mahlzeiten')
-        .select('id')
-        .eq('user_id', window.sbUser.id)
-        .eq('tagesdatum', iso)
-        .eq('typ', typ)
-        .maybeSingle();
-      if(e0) throw e0;
-      if(existing){ mahlzeitIds[mealKey] = existing.id; return existing.id; }
-    }
+    const { data: existing, error: e0 } = await window.sb
+      .from('ern_mahlzeiten')
+      .select('id')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso)
+      .eq('typ', typ)
+      .maybeSingle();
+    if(e0) throw e0;
+    if(existing){ mahlzeitIds[mealKey] = existing.id; return existing.id; }
     const ts = new Date().toISOString();
     const { data, error } = await window.sb
       .from('ern_mahlzeiten')
@@ -9572,25 +9581,6 @@ async function ensureMahlzeit(mealKey){
       })
       .select().single();
     if(error) throw error;
-    // Bei Snacks wird der mealKey jetzt erst korrekt: 'snack:UUID'
-    if(typ === 'snack' && mealKey === 'snack:NEW'){
-      // Den NEW-Eintrag durch den richtigen ersetzen
-      const newKey = 'snack:' + data.id;
-      mahlzeitIds[newKey] = data.id;
-      mealTimes[newKey] = ts;
-      mealEntries[newKey] = mealEntries['snack:NEW'] || [];
-      mealComments[newKey] = mealComments['snack:NEW'] || '';
-      mealOpen[newKey] = mealOpen['snack:NEW'] || false;
-      mealCommentOpen[newKey] = mealCommentOpen['snack:NEW'] || false;
-      // NEW-Eintrag wegraeumen
-      delete mahlzeitIds['snack:NEW'];
-      delete mealTimes['snack:NEW'];
-      delete mealEntries['snack:NEW'];
-      delete mealComments['snack:NEW'];
-      delete mealOpen['snack:NEW'];
-      delete mealCommentOpen['snack:NEW'];
-      return data.id;
-    }
     mahlzeitIds[mealKey] = data.id;
     mealTimes[mealKey] = ts;
     return data.id;
@@ -9886,69 +9876,6 @@ async function deleteSpontan(id){
   }
 }
 
-// "+ Neuer Snack": legt sofort eine neue Snack-Mahlzeit an
-async function addSnack(){
-  if(!window.sbUser){ showToast('Nicht eingeloggt'); return; }
-  const iso = getActiveISO();
-  const ts = new Date().toISOString();
-  try {
-    const { data, error } = await window.sb
-      .from('ern_mahlzeiten')
-      .insert({
-        user_id: window.sbUser.id,
-        tagesdatum: iso,
-        typ: 'snack',
-        erfasst_am: ts
-      })
-      .select().single();
-    if(error) throw error;
-    const newKey = 'snack:' + data.id;
-    mahlzeitIds[newKey] = data.id;
-    mealTimes[newKey] = ts;
-    mealEntries[newKey] = [];
-    mealComments[newKey] = '';
-    mealOpen[newKey] = true;  // direkt aufgeklappt
-    mealCommentOpen[newKey] = false;
-    renderUI();
-    showToast('🍎 Snack angelegt — Items hinzufügen');
-  } catch(err) {
-    showToast('Fehler: ' + err.message);
-  }
-}
-
-async function deleteSnack(mealKey){
-  if(!confirm('Snack komplett löschen?')) return;
-  const id = mahlzeitIds[mealKey];
-  if(!id){ // nur lokal
-    delete mahlzeitIds[mealKey];
-    delete mealTimes[mealKey];
-    delete mealEntries[mealKey];
-    delete mealComments[mealKey];
-    delete mealOpen[mealKey];
-    delete mealCommentOpen[mealKey];
-    renderUI();
-    return;
-  }
-  try {
-    const { error } = await window.sb
-      .from('ern_mahlzeiten')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', window.sbUser.id);
-    if(error) throw error;
-    delete mahlzeitIds[mealKey];
-    delete mealTimes[mealKey];
-    delete mealEntries[mealKey];
-    delete mealComments[mealKey];
-    delete mealOpen[mealKey];
-    delete mealCommentOpen[mealKey];
-    renderUI();
-    showToast('Snack gelöscht');
-  } catch(err) {
-    showToast('Fehler: ' + err.message);
-  }
-}
-
 function renderMeals(){
   const meals = getMeals();
   const mealsHtml = meals.map(m=>{
@@ -9957,8 +9884,6 @@ function renderMeals(){
     const hasComment = !!mealComments[m.id];
     const commentIsOpen = mealCommentOpen[m.id];
     const badge = entries.length ? `<span class="meal-badge has-entries">✓ ${entries.length}</span>` : `<span class="meal-badge">—</span>`;
-    const isSnack = m.id.startsWith('snack:');
-    const delSnackBtn = isSnack ? `<button onclick="event.stopPropagation();window.ern_deleteSnack('${m.id}')" style="background:none;border:none;color:var(--delete);font-size:13px;cursor:pointer;padding:0 2px" title="Snack löschen">✕</button>` : '';
 
     const entryList = entries.length ? `
       <div class="meal-entries">
@@ -10006,7 +9931,6 @@ function renderMeals(){
           ${badge}
           <button class="comment-btn${hasComment?' has-comment':''}"
             onclick="event.stopPropagation();window.ern_toggleComment('${m.id}')">💬</button>
-          ${delSnackBtn}
           <span style="color:var(--muted);font-size:12px">${isOpen?'▲':'▼'}</span>
         </span>
       </div>
@@ -10016,9 +9940,7 @@ function renderMeals(){
       </div>`:''}
     </div>`;
   }).join('');
-  // "+ Neuer Snack"-Button am Ende
-  const addSnackBtn = `<button onclick="window.ern_addSnack()" style="width:100%;padding:10px;border-radius:10px;border:1px dashed var(--accent3);background:none;color:var(--accent3);cursor:pointer;font-size:13px;margin-top:6px">+ Neuer Snack</button>`;
-  document.getElementById('ern-meals-container').innerHTML = mealsHtml + addSnackBtn;
+  document.getElementById('ern-meals-container').innerHTML = mealsHtml;
 }
 
 function renderBibliothek(){
@@ -10543,8 +10465,6 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_deleteEntry = deleteEntry;
   window.ern_deleteItem = deleteItem;
   window.ern_deleteSpontan = deleteSpontan;
-  window.ern_addSnack = addSnack;
-  window.ern_deleteSnack = deleteSnack;
   window.ern_openEditItem = openEditItem;
   window.ern_onEinheitChange = onEinheitChange;
   window.ern_quickAdd = quickAdd;
