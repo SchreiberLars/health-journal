@@ -13155,12 +13155,20 @@ function openEditTemp(id){
   if(!e) return;
   const modal = document.getElementById('messw-m-edit-temp');
   if(!modal) return;
-  // Modal ans body anhaengen falls es in einem Container gefangen ist (Layout-Bug)
+  // Modal ans body anhaengen falls in Container gefangen
   if(modal.parentNode !== document.body) document.body.appendChild(modal);
   document.getElementById('messw-m-edit-temp-val').value = String(e.temp).replace('.',',');
   document.getElementById('messw-m-edit-temp-time').value = e.time;
   document.getElementById('messw-m-edit-temp-val').dataset.eid = id;
   modal.classList.add('open');
+  // FORCE inline styles - hebelt jeden CSS-Konflikt aus
+  modal.style.cssText = 'display:flex !important;position:fixed !important;top:0 !important;left:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;height:100vh !important;background:rgba(0,0,0,0.55) !important;z-index:99999 !important;align-items:flex-end !important;justify-content:center !important';
+  // Nochmal Diagnose
+  setTimeout(()=>{
+    const r = modal.getBoundingClientRect();
+    const parent = modal.parentNode;
+    showToast(`Modal ${Math.round(r.width)}x${Math.round(r.height)} parent=${parent?parent.tagName:'?'}`, 4000);
+  }, 100);
 }
 async function saveEditTemp(){
   const valEl = document.getElementById('messw-m-edit-temp-val');
