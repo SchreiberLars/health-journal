@@ -9332,26 +9332,53 @@ const BW_COLOR = { gut:'color-mix(in srgb,#27ae60 15%,var(--surface))', unklar:'
 const BW_BORDER = { gut:'#27ae60', unklar:'var(--gold)', schlecht:'var(--delete)' };
 const MENGE_QUICK = ['50g','100g','150g','200g','1 Stk','2 Stk','1 EL','2 EL','1 Portion'];
 
-const MEALS = [
+// Fixed-Slot Mahlzeiten + dynamische Snacks
+// mealKey-Konvention:
+//   'fruehstueck' / 'mittagessen' / 'abendessen' = Fixed-Slots
+//   'snack:UUID' = ein Snack (UUID = mahlzeit_id aus DB)
+const FIXED_MEALS = [
   {id:'fruehstueck', label:'🌅 Frühstück'},
   {id:'mittagessen', label:'☀️ Mittagessen'},
   {id:'abendessen',  label:'🌆 Abendessen'},
-  {id:'snack',       label:'🍎 Snack'},
 ];
+
+// Hole alle Mahlzeit-Cards (fix + dynamische Snacks) sortiert nach Reihenfolge
+function getMeals(){
+  const result = FIXED_MEALS.map(m => ({...m}));
+  // Snack-Keys aus mahlzeitIds extrahieren
+  const snackKeys = Object.keys(mahlzeitIds).filter(k => k.startsWith('snack:'));
+  // Nach Erfass-Zeit sortieren (frueh -> spaet)
+  snackKeys.sort((a,b) => {
+    const ta = mealTimes[a] || '';
+    const tb = mealTimes[b] || '';
+    return ta.localeCompare(tb);
+  });
+  snackKeys.forEach((k, i) => {
+    result.push({id: k, label: snackKeys.length > 1 ? `🍎 Snack ${i+1}` : '🍎 Snack'});
+  });
+  return result;
+}
+
+// Helper: aus mealKey den DB-Typ ableiten
+function typFromMealKey(key){
+  return key.startsWith('snack:') ? 'snack' : key;
+}
 
 // ── BIBLIOTHEK ────────────────────────────
 let bibliothek = []; // wird aus DB geladen, jedes Item: {id, name, type, zutaten:[{id,menge}], bewertung}
 
-// mahlzeitIds: { fruehstueck: 'uuid', mittagessen: 'uuid', ... } pro Tag
+// mahlzeitIds: { mealKey: uuid }
+//   - 'fruehstueck'/'mittagessen'/'abendessen' -> jeweils 1 UUID pro Tag
+//   - 'snack:UUID1', 'snack:UUID2', ... -> mehrere Snacks pro Tag moeglich
 let mahlzeitIds = {};
 
-// mealEntries: { mahlzeitId: [{id, itemId, name, menge, bewertung, time}] }
-let mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[], snack:[] };
-let mealOpen    = { fruehstueck:false, mittagessen:true, abendessen:false, snack:false };
-let mealComments = { fruehstueck:'', mittagessen:'', abendessen:'', snack:'' };
-let mealCommentOpen = { fruehstueck:false, mittagessen:false, abendessen:false, snack:false };
-// mealTimes: Mahlzeit-Zeitstempel pro Slot (ISO Timestamp, fuer Zeitachse + Editierbarkeit)
-let mealTimes = { fruehstueck:null, mittagessen:null, abendessen:null, snack:null };
+// mealEntries: { mealKey: [{id, itemId, name, menge, bewertung, time}] }
+let mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[] };
+let mealOpen    = { fruehstueck:false, mittagessen:true, abendessen:false };
+let mealComments = { fruehstueck:'', mittagessen:'', abendessen:'' };
+let mealCommentOpen = { fruehstueck:false, mittagessen:false, abendessen:false };
+// mealTimes: Mahlzeit-Zeitstempel pro mealKey (ISO Timestamp)
+let mealTimes = { fruehstueck:null, mittagessen:null, abendessen:null };
 
 let delMode = false, editMode = false;
 let moveCtx = null;
@@ -9436,9 +9463,12 @@ async function loadFromDb(){
   await loadBibliothek();
   const iso = getActiveISO();
   mahlzeitIds = {};
-  mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[], snack:[] };
-  mealComments = { fruehstueck:'', mittagessen:'', abendessen:'', snack:'' };
-  mealTimes = { fruehstueck:null, mittagessen:null, abendessen:null, snack:null };
+  mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[] };
+  mealComments = { fruehstueck:'', mittagessen:'', abendessen:'' };
+  mealTimes = { fruehstueck:null, mittagessen:null, abendessen:null };
+  // mealOpen + mealCommentOpen: Fixed-Slots zuruecksetzen, Snack-Keys werden gleich aufgebaut
+  Object.keys(mealOpen).forEach(k => { if(k.startsWith('snack:')) delete mealOpen[k]; });
+  Object.keys(mealCommentOpen).forEach(k => { if(k.startsWith('snack:')) delete mealCommentOpen[k]; });
   spontanEntries = [];
   try {
     const { data: mahls, error: e1 } = await window.sb
@@ -9472,32 +9502,36 @@ async function loadFromDb(){
           })
         });
       } else {
-        mahlzeitIds[m.typ] = m.id;
-        if(m.kommentar) mealComments[m.typ] = m.kommentar;
-        if(m.erfasst_am) mealTimes[m.typ] = m.erfasst_am;
+        // Snacks: jeder bekommt eigenen mealKey 'snack:UUID'
+        // Fixed-Slots: mealKey = typ
+        const mealKey = (m.typ === 'snack') ? ('snack:' + m.id) : m.typ;
+        mahlzeitIds[mealKey] = m.id;
+        if(m.kommentar) mealComments[mealKey] = m.kommentar;
+        if(m.erfasst_am) mealTimes[mealKey] = m.erfasst_am;
+        // Sicherstellen dass mealOpen/mealCommentOpen Keys haben
+        if(mealOpen[mealKey] === undefined) mealOpen[mealKey] = false;
+        if(mealCommentOpen[mealKey] === undefined) mealCommentOpen[mealKey] = false;
         const items = (m.ern_mahlzeit_items||[]).slice().sort((a,b)=>{
           const ta = a.erfasst_am || '';
           const tb = b.erfasst_am || '';
           return ta.localeCompare(tb);
         });
-        if(mealEntries[m.typ]){
-          mealEntries[m.typ] = items.map(i => {
-            const lib = bibliothek.find(x => x.id === i.lebensmittel_id);
-            const display = (i.menge_wert != null)
-              ? `${i.menge_wert}${i.menge_einheit ? ' '+i.menge_einheit : ''}`
-              : (i.menge || '');
-            return {
-              id: i.id,
-              itemId: i.lebensmittel_id,
-              name: lib?.name || '?',
-              menge: display,
-              menge_wert: i.menge_wert,
-              menge_einheit: i.menge_einheit,
-              bewertung: i.bewertung_snapshot || lib?.bewertung || 'unklar',
-              time: timeFromTimestamp(i.erfasst_am)
-            };
-          });
-        }
+        mealEntries[mealKey] = items.map(i => {
+          const lib = bibliothek.find(x => x.id === i.lebensmittel_id);
+          const display = (i.menge_wert != null)
+            ? `${i.menge_wert}${i.menge_einheit ? ' '+i.menge_einheit : ''}`
+            : (i.menge || '');
+          return {
+            id: i.id,
+            itemId: i.lebensmittel_id,
+            name: lib?.name || '?',
+            menge: display,
+            menge_wert: i.menge_wert,
+            menge_einheit: i.menge_einheit,
+            bewertung: i.bewertung_snapshot || lib?.bewertung || 'unklar',
+            time: timeFromTimestamp(i.erfasst_am)
+          };
+        });
       }
     });
   } catch(err) {
@@ -9508,21 +9542,25 @@ async function loadFromDb(){
 }
 
 // Mahlzeit fuer einen Typ holen oder anlegen (Lazy-Init)
-async function ensureMahlzeit(typ){
-  if(mahlzeitIds[typ]) return mahlzeitIds[typ];
+async function ensureMahlzeit(mealKey){
+  if(mahlzeitIds[mealKey]) return mahlzeitIds[mealKey];
   if(!window.sbUser) return null;
   const iso = getActiveISO();
+  const typ = typFromMealKey(mealKey);
   try {
-    // Erst schauen ob's eine gibt (UPSERT mit RETURNING wäre sauberer)
-    const { data: existing, error: e0 } = await window.sb
-      .from('ern_mahlzeiten')
-      .select('id')
-      .eq('user_id', window.sbUser.id)
-      .eq('tagesdatum', iso)
-      .eq('typ', typ)
-      .maybeSingle();
-    if(e0) throw e0;
-    if(existing){ mahlzeitIds[typ] = existing.id; return existing.id; }
+    // Bei Fixed-Slots: Schauen ob's heute eine gibt (kann nur eine geben)
+    // Bei Snacks: immer neu anlegen (jeder Snack ist eigene Mahlzeit)
+    if(typ !== 'snack'){
+      const { data: existing, error: e0 } = await window.sb
+        .from('ern_mahlzeiten')
+        .select('id')
+        .eq('user_id', window.sbUser.id)
+        .eq('tagesdatum', iso)
+        .eq('typ', typ)
+        .maybeSingle();
+      if(e0) throw e0;
+      if(existing){ mahlzeitIds[mealKey] = existing.id; return existing.id; }
+    }
     const ts = new Date().toISOString();
     const { data, error } = await window.sb
       .from('ern_mahlzeiten')
@@ -9534,8 +9572,27 @@ async function ensureMahlzeit(typ){
       })
       .select().single();
     if(error) throw error;
-    mahlzeitIds[typ] = data.id;
-    mealTimes[typ] = ts;
+    // Bei Snacks wird der mealKey jetzt erst korrekt: 'snack:UUID'
+    if(typ === 'snack' && mealKey === 'snack:NEW'){
+      // Den NEW-Eintrag durch den richtigen ersetzen
+      const newKey = 'snack:' + data.id;
+      mahlzeitIds[newKey] = data.id;
+      mealTimes[newKey] = ts;
+      mealEntries[newKey] = mealEntries['snack:NEW'] || [];
+      mealComments[newKey] = mealComments['snack:NEW'] || '';
+      mealOpen[newKey] = mealOpen['snack:NEW'] || false;
+      mealCommentOpen[newKey] = mealCommentOpen['snack:NEW'] || false;
+      // NEW-Eintrag wegraeumen
+      delete mahlzeitIds['snack:NEW'];
+      delete mealTimes['snack:NEW'];
+      delete mealEntries['snack:NEW'];
+      delete mealComments['snack:NEW'];
+      delete mealOpen['snack:NEW'];
+      delete mealCommentOpen['snack:NEW'];
+      return data.id;
+    }
+    mahlzeitIds[mealKey] = data.id;
+    mealTimes[mealKey] = ts;
     return data.id;
   } catch(err) {
     showToast('Mahlzeit-Fehler: ' + err.message);
@@ -9816,7 +9873,6 @@ async function deleteSpontan(id){
     return;
   }
   try {
-    // Cascade-Delete via FK
     const { error } = await window.sb
       .from('ern_mahlzeiten')
       .delete()
@@ -9830,13 +9886,79 @@ async function deleteSpontan(id){
   }
 }
 
+// "+ Neuer Snack": legt sofort eine neue Snack-Mahlzeit an
+async function addSnack(){
+  if(!window.sbUser){ showToast('Nicht eingeloggt'); return; }
+  const iso = getActiveISO();
+  const ts = new Date().toISOString();
+  try {
+    const { data, error } = await window.sb
+      .from('ern_mahlzeiten')
+      .insert({
+        user_id: window.sbUser.id,
+        tagesdatum: iso,
+        typ: 'snack',
+        erfasst_am: ts
+      })
+      .select().single();
+    if(error) throw error;
+    const newKey = 'snack:' + data.id;
+    mahlzeitIds[newKey] = data.id;
+    mealTimes[newKey] = ts;
+    mealEntries[newKey] = [];
+    mealComments[newKey] = '';
+    mealOpen[newKey] = true;  // direkt aufgeklappt
+    mealCommentOpen[newKey] = false;
+    renderUI();
+    showToast('🍎 Snack angelegt — Items hinzufügen');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+async function deleteSnack(mealKey){
+  if(!confirm('Snack komplett löschen?')) return;
+  const id = mahlzeitIds[mealKey];
+  if(!id){ // nur lokal
+    delete mahlzeitIds[mealKey];
+    delete mealTimes[mealKey];
+    delete mealEntries[mealKey];
+    delete mealComments[mealKey];
+    delete mealOpen[mealKey];
+    delete mealCommentOpen[mealKey];
+    renderUI();
+    return;
+  }
+  try {
+    const { error } = await window.sb
+      .from('ern_mahlzeiten')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    delete mahlzeitIds[mealKey];
+    delete mealTimes[mealKey];
+    delete mealEntries[mealKey];
+    delete mealComments[mealKey];
+    delete mealOpen[mealKey];
+    delete mealCommentOpen[mealKey];
+    renderUI();
+    showToast('Snack gelöscht');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+}
+
 function renderMeals(){
-  document.getElementById('ern-meals-container').innerHTML = MEALS.map(m=>{
-    const entries = mealEntries[m.id];
+  const meals = getMeals();
+  const mealsHtml = meals.map(m=>{
+    const entries = mealEntries[m.id] || [];
     const isOpen  = mealOpen[m.id];
     const hasComment = !!mealComments[m.id];
     const commentIsOpen = mealCommentOpen[m.id];
     const badge = entries.length ? `<span class="meal-badge has-entries">✓ ${entries.length}</span>` : `<span class="meal-badge">—</span>`;
+    const isSnack = m.id.startsWith('snack:');
+    const delSnackBtn = isSnack ? `<button onclick="event.stopPropagation();window.ern_deleteSnack('${m.id}')" style="background:none;border:none;color:var(--delete);font-size:13px;cursor:pointer;padding:0 2px" title="Snack löschen">✕</button>` : '';
 
     const entryList = entries.length ? `
       <div class="meal-entries">
@@ -9884,6 +10006,7 @@ function renderMeals(){
           ${badge}
           <button class="comment-btn${hasComment?' has-comment':''}"
             onclick="event.stopPropagation();window.ern_toggleComment('${m.id}')">💬</button>
+          ${delSnackBtn}
           <span style="color:var(--muted);font-size:12px">${isOpen?'▲':'▼'}</span>
         </span>
       </div>
@@ -9893,11 +10016,14 @@ function renderMeals(){
       </div>`:''}
     </div>`;
   }).join('');
+  // "+ Neuer Snack"-Button am Ende
+  const addSnackBtn = `<button onclick="window.ern_addSnack()" style="width:100%;padding:10px;border-radius:10px;border:1px dashed var(--accent3);background:none;color:var(--accent3);cursor:pointer;font-size:13px;margin-top:6px">+ Neuer Snack</button>`;
+  document.getElementById('ern-meals-container').innerHTML = mealsHtml + addSnackBtn;
 }
 
 function renderBibliothek(){
   // Update target indicator
-  const openMeal = MEALS.find(m=>mealOpen[m.id]);
+  const openMeal = getMeals().find(m=>mealOpen[m.id]);
   const ind = document.getElementById('ern-target-indicator');
   if(ind){
     if(openMeal){ ind.textContent='→ '+openMeal.label; ind.style.display=''; }
@@ -10010,7 +10136,7 @@ async function saveComment(mealId){
 
 // ── QUICK ADD (kurzer Tap) ─────────────────
 async function quickAdd(itemId){
-  const openMeals = MEALS.filter(m=>mealOpen[m.id]);
+  const openMeals = getMeals().filter(m=>mealOpen[m.id]);
   // Hybrid: keine offen oder mehrere -> Modal mit Mahlzeit-Wahl
   if(openMeals.length !== 1){
     openAddModal(itemId);
@@ -10025,6 +10151,8 @@ async function quickAdd(itemId){
 async function addItemToMeal(mealId, itemId, menge, menge_wert, menge_einheit){
   const item = itemById(itemId);
   if(!item) return;
+  // Defensive: Slot ggf erstmal initialisieren
+  if(!mealEntries[mealId]) mealEntries[mealId] = [];
   const localId = uid();
   const time = nowTime();
   // Display-String aus wert+einheit ableiten falls nicht direkt gegeben
@@ -10040,7 +10168,7 @@ async function addItemToMeal(mealId, itemId, menge, menge_wert, menge_einheit){
     time
   });
   renderUI();
-  showToast(`${BW_ICON[item.bewertung]} ${item.name} → ${MEALS.find(m=>m.id===mealId)?.label}`);
+  showToast(`${BW_ICON[item.bewertung]} ${item.name} → ${getMeals().find(m=>m.id===mealId)?.label}`);
   if(!window.sbUser) return;
   const mahlzeitId = await ensureMahlzeit(mealId);
   if(!mahlzeitId){
@@ -10090,8 +10218,8 @@ function openAddModal(itemId){
   document.getElementById('ern-m-add-einheit-custom').style.display = 'none';
   document.getElementById('ern-m-add-einheit-custom').value = '';
   // Populate meal select
-  const openMeal = MEALS.find(m=>mealOpen[m.id]);
-  document.getElementById('ern-m-add-meal').innerHTML = MEALS.map(m=>
+  const openMeal = getMeals().find(m=>mealOpen[m.id]);
+  document.getElementById('ern-m-add-meal').innerHTML = getMeals().map(m=>
     `<option value="${m.id}"${m.id===(openMeal?.id||'fruehstueck')?' selected':''}>${m.label}</option>`
   ).join('');
   openModal('ern-m-add');
@@ -10295,7 +10423,7 @@ async function deleteItem(itemId){
 function openMoveModal(fromMealId, entryId, name){
   moveCtx = {fromMealId, entryId};
   document.getElementById('ern-m-move-sub').textContent = `"${name}"`;
-  document.getElementById('ern-m-move-btns').innerHTML = MEALS
+  document.getElementById('ern-m-move-btns').innerHTML = getMeals()
     .filter(m=>m.id !== fromMealId)
     .map(m=>`<button onclick="window.ern_confirmMove('${m.id}')"
       style="width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--border);
@@ -10321,7 +10449,7 @@ async function confirmMove(toMealId){
   moveCtx = null;
   closeModal('ern-m-move');
   renderUI();
-  const destLabel = MEALS.find(m=>m.id===toMealId)?.label;
+  const destLabel = getMeals().find(m=>m.id===toMealId)?.label;
   showToast(`${entry.name} → ${destLabel} ✓`);
   if(!window.sbUser) return;
   // Item in DB der neuen Mahlzeit zuordnen
@@ -10415,6 +10543,8 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_deleteEntry = deleteEntry;
   window.ern_deleteItem = deleteItem;
   window.ern_deleteSpontan = deleteSpontan;
+  window.ern_addSnack = addSnack;
+  window.ern_deleteSnack = deleteSnack;
   window.ern_openEditItem = openEditItem;
   window.ern_onEinheitChange = onEinheitChange;
   window.ern_quickAdd = quickAdd;
