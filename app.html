@@ -12854,7 +12854,7 @@ function renderTemp(){
             <span style="font-size:13px">🌡</span>
             <span style="font-size:12px;font-weight:600;flex:1;margin-left:6px">${fmt1(e.temp)} °C</span>
             <span class="entry-time">${e.time}</span>
-            <button class="entry-action edit" onclick="showToast('Edit klick: ${e.id.slice(0,8)}'); window.messw_openEditTemp('${e.id}')" title="Bearbeiten" style="font-size:13px;padding:3px 9px">✎</button>
+            <button class="entry-action edit" onclick="window.messw_openEditTemp('${e.id}')" title="Bearbeiten" style="font-size:13px;padding:3px 9px">✎</button>
             <button class="entry-action del" onclick="window.messw_deleteTempEntry('${e.id}')" title="Löschen">✕</button>
           </div>
         </div>`).join('');
@@ -13152,23 +13152,15 @@ function renderUI(){
 // ── EDIT-FUNKTIONEN ──────────────────────
 function openEditTemp(id){
   const e = tempEntries.find(x=>x.id===id);
-  if(!e) { showToast('DEBUG: Eintrag nicht gefunden!'); return; }
-  const valEl = document.getElementById('messw-m-edit-temp-val');
-  const timeEl = document.getElementById('messw-m-edit-temp-time');
+  if(!e) return;
   const modal = document.getElementById('messw-m-edit-temp');
-  if(!modal) { showToast('DEBUG: Modal nicht im DOM!'); return; }
-  if(!valEl || !timeEl) { showToast('DEBUG: Modal-Inputs fehlen!'); return; }
-  valEl.value = String(e.temp).replace('.',',');
-  timeEl.value = e.time;
-  valEl.dataset.eid = id;
+  if(!modal) return;
+  // Modal ans body anhaengen falls es in einem Container gefangen ist (Layout-Bug)
+  if(modal.parentNode !== document.body) document.body.appendChild(modal);
+  document.getElementById('messw-m-edit-temp-val').value = String(e.temp).replace('.',',');
+  document.getElementById('messw-m-edit-temp-time').value = e.time;
+  document.getElementById('messw-m-edit-temp-val').dataset.eid = id;
   modal.classList.add('open');
-  setTimeout(()=>{
-    // Liste alle offenen modals
-    const openModals = document.querySelectorAll('.modal-overlay.open');
-    const ids = Array.from(openModals).map(m => m.id).join(', ');
-    const myRect = modal.getBoundingClientRect();
-    showToast(`DEBUG: ${openModals.length} offen [${ids}] | rect: ${Math.round(myRect.top)},${Math.round(myRect.left)} ${Math.round(myRect.width)}x${Math.round(myRect.height)}`);
-  }, 100);
 }
 async function saveEditTemp(){
   const valEl = document.getElementById('messw-m-edit-temp-val');
@@ -13212,12 +13204,15 @@ async function saveEditTemp(){
 function openEditBp(id){
   const e = bpEntries.find(x=>x.id===id);
   if(!e) return;
+  const modal = document.getElementById('messw-m-edit-bp');
+  if(!modal) return;
+  if(modal.parentNode !== document.body) document.body.appendChild(modal);
   document.getElementById('messw-m-edit-bp-syst').value = e.syst;
   document.getElementById('messw-m-edit-bp-diast').value = e.diast;
   document.getElementById('messw-m-edit-bp-puls').value = e.puls||'';
   document.getElementById('messw-m-edit-bp-time').value = e.time;
   document.getElementById('messw-m-edit-bp-syst').dataset.eid = id;
-  openModal('messw-m-edit-bp');
+  modal.classList.add('open');
 }
 async function saveEditBp(){
   const systEl = document.getElementById('messw-m-edit-bp-syst');
@@ -13259,10 +13254,13 @@ async function saveEditBp(){
 function openEditWeight(id){
   const e = weightEntries.find(x=>x.id===id);
   if(!e) return;
+  const modal = document.getElementById('messw-m-edit-weight');
+  if(!modal) return;
+  if(modal.parentNode !== document.body) document.body.appendChild(modal);
   document.getElementById('messw-m-edit-weight-val').value = String(e.weight).replace('.',',');
   document.getElementById('messw-m-edit-weight-time').value = e.time;
   document.getElementById('messw-m-edit-weight-val').dataset.eid = id;
-  openModal('messw-m-edit-weight');
+  modal.classList.add('open');
 }
 async function saveEditWeight(){
   const valEl = document.getElementById('messw-m-edit-weight-val');
