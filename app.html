@@ -9784,7 +9784,9 @@ function renderSpontan(){
     <div class="meal-entry" style="margin-bottom:5px">
       <span class="me-icon">🕐</span>
       <div style="flex:1">
-        <div style="font-size:10px;color:var(--gold)">${e.time}${e.label?' · '+e.label:''}</div>
+        <div style="font-size:10px">
+          <span onclick="window.ern_openSpontanTimeEdit('${e.id}')" style="color:var(--accent3);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;font-family:'JetBrains Mono',monospace">⏱ ${e.time}</span>${e.label?`<span style="color:var(--gold);margin-left:6px">· ${escHtml(e.label)}</span>`:''}
+        </div>
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">
           ${e.items.map(i=>`<span style="font-size:11px">${BW_ICON[i.bewertung||'gut']} ${escHtml(i.name)}${i.menge?' ('+i.menge+')':''}</span>`).join(' · ')}
         </div>
@@ -10454,7 +10456,7 @@ function showToast(msg){
 // Exports
 window.ern_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==undefined)window._lpFired=false;},50);if(typeof openAddModal==='function')openAddModal(btn.dataset.iid);};
 // ── MAHLZEIT-ZEIT EDITIEREN ──────────────
-let timeEditCtx = null;  // {typ}
+let timeEditCtx = null;  // {typ} fuer Fixed-Slot, oder {spontanId, currentTime} fuer Snack
 function openTimeEdit(typ){
   if(!mealTimes[typ]) return;
   timeEditCtx = {typ};
@@ -10463,32 +10465,82 @@ function openTimeEdit(typ){
   document.getElementById('ern-m-mealtime-input').value = timeFromTimestamp(mealTimes[typ]);
   openModal('ern-m-mealtime');
 }
+
+function openSpontanTimeEdit(spontanId){
+  const e = spontanEntries.find(x => x.id === spontanId);
+  if(!e) return;
+  timeEditCtx = {spontanId};
+  document.getElementById('ern-m-mealtime-title').textContent = '🍎 Snack — Zeit';
+  document.getElementById('ern-m-mealtime-input').value = e.time || '';
+  openModal('ern-m-mealtime');
+}
+
 async function saveTime(){
   if(!timeEditCtx) return;
   const newTime = document.getElementById('ern-m-mealtime-input').value;
   if(!newTime) return;
-  const typ = timeEditCtx.typ;
   const iso = getActiveISO();
   const newTs = timestampFromTime(newTime, iso);
-  if(!window.sbUser){
-    mealTimes[typ] = newTs;
-    closeModal('ern-m-mealtime');
-    renderUI();
+
+  // Fixed-Slot
+  if(timeEditCtx.typ){
+    const typ = timeEditCtx.typ;
+    if(!window.sbUser){
+      mealTimes[typ] = newTs;
+      closeModal('ern-m-mealtime');
+      renderUI();
+      return;
+    }
+    try {
+      const { error } = await window.sb
+        .from('ern_mahlzeiten')
+        .update({ erfasst_am: newTs })
+        .eq('id', mahlzeitIds[typ])
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      mealTimes[typ] = newTs;
+      closeModal('ern-m-mealtime');
+      renderUI();
+      showToast('Zeit aktualisiert ✓');
+    } catch(err){
+      showToast('Fehler: ' + err.message);
+    }
     return;
   }
-  try {
-    const { error } = await window.sb
-      .from('ern_mahlzeiten')
-      .update({ erfasst_am: newTs })
-      .eq('id', mahlzeitIds[typ])
-      .eq('user_id', window.sbUser.id);
-    if(error) throw error;
-    mealTimes[typ] = newTs;
-    closeModal('ern-m-mealtime');
-    renderUI();
-    showToast('Zeit aktualisiert ✓');
-  } catch(err){
-    showToast('Fehler: ' + err.message);
+
+  // Spontan/Snack
+  if(timeEditCtx.spontanId){
+    const sid = timeEditCtx.spontanId;
+    if(!window.sbUser){
+      const e = spontanEntries.find(x => x.id === sid);
+      if(e) e.time = newTime;
+      closeModal('ern-m-mealtime');
+      renderUI();
+      return;
+    }
+    try {
+      // Mahlzeit-Zeit aktualisieren
+      const { error: e1 } = await window.sb
+        .from('ern_mahlzeiten')
+        .update({ erfasst_am: newTs })
+        .eq('id', sid)
+        .eq('user_id', window.sbUser.id);
+      if(e1) throw e1;
+      // Auch alle Items dieser Mahlzeit auf die neue Zeit setzen
+      const { error: e2 } = await window.sb
+        .from('ern_mahlzeit_items')
+        .update({ erfasst_am: newTs })
+        .eq('mahlzeit_id', sid);
+      if(e2) throw e2;
+      // Lokal updaten
+      const e = spontanEntries.find(x => x.id === sid);
+      if(e) e.time = newTime;
+      closeModal('ern-m-mealtime');
+      renderUI();
+      showToast('Zeit aktualisiert ✓');
+    } catch(err){
+      showToast('Fehler: ' + err.message);
+    }
   }
 }
 
@@ -10511,6 +10563,7 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_openNewItem = openNewItem;
   window.ern_openSpontanModal = openSpontanModal;
   window.ern_openTimeEdit = openTimeEdit;
+  window.ern_openSpontanTimeEdit = openSpontanTimeEdit;
   window.ern_saveTime = saveTime;
   window.ern_render = render;
   window.ern_toggleZutat = toggleZutat;
