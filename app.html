@@ -4232,16 +4232,16 @@ function renderMedEntryChips() {
     if (deleteMode) {
       return `<div class="chip chip-entry" style="border-color:var(--delete);flex-direction:row;align-items:center;justify-content:space-between;gap:6px">
         <div style="flex:1;display:flex;align-items:center;gap:5px">
-          ${entry.name}
+          ${entry.name}${entry.subOption ? ` <span style="font-size:10px;color:var(--accent3);font-weight:600">${entry.subOption}</span>` : ''}
           ${doseStr ? `<span class="chip-dose-val">${doseStr}</span>` : ''}
-          <span class="chip-time">${entry.time}</span>${entry.subOption ? ` <span style="font-size:9px;color:var(--muted)">${entry.subOption}</span>` : ''}${entry.comment ? ` <span style="font-size:11px" title="${entry.comment}">💬</span>` : ''}
+          <span class="chip-time">${entry.time}</span>${entry.comment ? ` <span style="font-size:11px" title="${entry.comment}">💬</span>` : ''}
         </div>
         <button class="chip-del-btn" onclick="window.med_deleteEntry('${entry.id}')">✕</button>
       </div>`;
     }
     return `<button class="chip chip-entry"
       data-entryid="${entry.id}">
-      ${entry.name}
+      ${entry.name}${entry.subOption ? ` <span style="font-size:10px;color:var(--accent3);font-weight:600">${entry.subOption}</span>` : ''}
       ${doseStr ? `<span class="chip-dose-val">${doseStr}</span>` : ''}
       <span class="chip-time">${entry.time}</span>
       ${entry.comment ? `<span style="font-size:11px" title="${entry.comment}">💬</span>` : ''}
