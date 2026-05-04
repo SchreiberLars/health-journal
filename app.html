@@ -1500,7 +1500,13 @@ window.sbUser = null;
 function uid(){return Math.random().toString(36).slice(2,9)}
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
-function isoDate(d){return d.toISOString().slice(0,10)}
+function isoDate(d){
+  // Lokale Datum-Komponenten verwenden (nicht UTC), sonst Off-by-one in Zeitzonen mit Offset > 0
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function todayDate(){const d=new Date();d.setHours(0,0,0,0);return d}
 function today(){return isoDate(todayDate())}
 
