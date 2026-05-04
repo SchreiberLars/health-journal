@@ -1310,6 +1310,8 @@ window.sbUser = null;
     <div id="get-edit-ml-presets" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
     <label class="ml">Oder eingeben (ml)</label>
     <input class="mi" id="get-edit-ml-val" type="number" min="1" placeholder="z.B. 350">
+    <label class="ml" style="margin-top:8px">Uhrzeit</label>
+    <input class="mi" id="get-edit-ml-time" type="time">
     <label class="ml">Kommentar (optional)</label>
     <input class="mi" id="get-edit-ml-kommentar" placeholder="z.B. Zwicken, Milchprodukt...">
     <div class="modal-btn-row">
@@ -8882,8 +8884,10 @@ function openEditMl(entryId) {
     Math.round(base*0.5), base, Math.round(base*1.5), base*2,
     100, 150, 200, 250, 330, 400, 500
   ])].filter(v=>v>=50&&v<=2000).sort((a,b)=>a-b);
-  document.getElementById('get-edit-ml-title').textContent = e.name + ' — Menge';
+  document.getElementById('get-edit-ml-title').textContent = e.name + ' bearbeiten';
   document.getElementById('get-edit-ml-val').value = e.ml;
+  const timeEl = document.getElementById('get-edit-ml-time');
+  if(timeEl) timeEl.value = e.time || nowTime();
   const komEl = document.getElementById('get-edit-ml-kommentar');
   if(komEl) komEl.value = e.kommentar || '';
   document.getElementById('get-edit-ml-presets').innerHTML = presets.map(v=>
@@ -8909,16 +8913,26 @@ async function saveEditMl() {
   if(!val||val<1) { showToast('Ungültige Menge'); return; }
   var idx = entries.findIndex(x=>x.id===_editEid);
   var kom = document.getElementById('get-edit-ml-kommentar');
+  var timeEl = document.getElementById('get-edit-ml-time');
+  var newTime = timeEl ? timeEl.value : null;
   const editId = _editEid;
-  if(idx!==-1){entries[idx].ml=val;if(kom)entries[idx].kommentar=kom.value.trim();}
+  if(idx!==-1){
+    entries[idx].ml=val;
+    if(kom) entries[idx].kommentar=kom.value.trim();
+    if(newTime) entries[idx].time = newTime;
+  }
   document.getElementById('get-edit-ml-modal').style.display = 'none';
   _editEid = null;
   renderUI();
-  showToast('Menge aktualisiert');
+  showToast('Aktualisiert');
   if(window.sbUser){
     try {
       const update = { menge_ml: val };
       if(kom) update.kommentar = kom.value.trim() || null;
+      if(newTime){
+        const iso = getActiveISO();
+        update.erfasst_am = timestampFromTime(newTime, iso);
+      }
       const { error } = await window.sb
         .from('get_eintraege')
         .update(update)
