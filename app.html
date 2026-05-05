@@ -2643,6 +2643,9 @@ function injectModules() {
       <button class="stk-btn" data-s="schlaf" onclick="this.classList.toggle('sel')">🌙 Schlaf</button>
     </div>
 
+    <label class="ml">Intervall (optional, in Tagen)</label>
+    <input class="mi" id="supp-m-edit-intervall" type="number" min="0" step="1" placeholder="z.B. 5 = alle 5 Tage. Leer = täglich">
+
     <div class="mbr">
       <button class="bs" onclick="closeModal('supp-m-edit')">Abbrechen</button>
       <button class="bp" onclick="window.supp_saveEdit()">Speichern</button>
@@ -4918,7 +4921,7 @@ async function loadSuppList(){
   try {
     const { data, error } = await window.sb
       .from('supplements')
-      .select('id, name, dosis_einheit_label, standard_dosis, stacks, sortierung')
+      .select('id, name, dosis_einheit_label, standard_dosis, stacks, sortierung, intervall_tage, letzte_einnahme_datum')
       .eq('user_id', window.sbUser.id)
       .eq('aktiv', true)
       .order('sortierung', { ascending: true })
@@ -4930,7 +4933,9 @@ async function loadSuppList(){
       unit: s.dosis_einheit_label || 'Kps.',
       dose: s.standard_dosis ? parseFloat(s.standard_dosis) : null,
       stacks: Array.isArray(s.stacks) ? s.stacks : [],
-      sortierung: s.sortierung
+      sortierung: s.sortierung,
+      intervallTage: s.intervall_tage || null,
+      letzteEinnahme: s.letzte_einnahme_datum || null
     }));
     suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));
     suppListLoaded = true;
@@ -5017,17 +5022,39 @@ function renderStack(stk){
     const d=od!==null?od:s.dose;
     const ds=d?`${d}${s.unit}`:s.unit;
     const changed=od!==null&&od!==s.dose;
+    // Intervall-Logik: ist das Supplement heute faellig?
+    let intervallInfo = '';
+    let isDueToday = true;
+    if(s.intervallTage && s.intervallTage > 0){
+      if(s.letzteEinnahme){
+        const today = new Date(getActiveISO());
+        const last = new Date(s.letzteEinnahme);
+        const diffDays = Math.floor((today - last) / 86400000);
+        const tageBis = s.intervallTage - diffDays;
+        if(tageBis > 0){
+          isDueToday = false;
+          intervallInfo = `<span style="color:var(--muted);font-size:9px;margin-left:4px">in ${tageBis}T</span>`;
+        } else {
+          intervallInfo = `<span style="color:var(--accent3);font-size:9px;margin-left:4px;font-weight:600">heute fällig</span>`;
+        }
+      } else {
+        intervallInfo = `<span style="color:var(--accent3);font-size:9px;margin-left:4px">alle ${s.intervallTage}T</span>`;
+      }
+    }
     if(delMode) return `<div class="chip del" style="flex-direction:row;align-items:center;justify-content:space-between;gap:6px">
-      <div style="flex:1;display:flex;align-items:center;gap:5px">${s.name} <span class="chip-dose">${ds}</span></div>
+      <div style="flex:1;display:flex;align-items:center;gap:5px">${s.name} <span class="chip-dose">${ds}</span>${intervallInfo}</div>
       <div style="display:flex;gap:4px;flex-shrink:0">
         <button class="chip-edit-btn" onclick="window.supp_openEdit('${s.id}')">✎</button>
         <button class="chip-del-btn" onclick="window.supp_delSupp('${s.id}','${stk.id}')">✕</button>
       </div>
     </div>`;
+    // Wenn Intervall + nicht faellig + nicht genommen: dezent ausgrauen
+    const dimStyle = (!taken && !isDueToday) ? 'opacity:0.5;' : '';
     return `<button class="chip${taken?' taken':''}${changed?' dose-changed':''}"
       data-sid="${s.id}" data-stk="${stk.id}"
+      style="${dimStyle}"
       onclick="window.supp_tapChip('${s.id}','${stk.id}')">
-      ${taken?'<span class="ck">✓</span>':''} ${s.name} <span class="chip-dose">${ds}</span>${taken?'<span class="chip-hint">⋯</span>':''}${changed?'<span style="color:var(--accent);font-size:9px"> ✎</span>':''}
+      ${taken?'<span class="ck">✓</span>':''} ${s.name} <span class="chip-dose">${ds}</span>${intervallInfo}${taken?'<span class="chip-hint">⋯</span>':''}${changed?'<span style="color:var(--accent);font-size:9px"> ✎</span>':''}
     </button>`;
   }).join('');
   const addBtn=delMode?'':`<button class="chip chip-add" onclick="window.supp_openNew('${stk.id}')">+</button>`;
@@ -5172,6 +5199,15 @@ async function tapChip(sid,stk){
           .single();
         if(error) throw error;
         setTaken(sid,stk,true,null,data.id);
+        // Bei Intervall-Supplements: letzte_einnahme_datum updaten
+        if(s && s.intervallTage){
+          await window.sb
+            .from('supplements')
+            .update({ letzte_einnahme_datum: iso })
+            .eq('id', sid);
+          s.letzteEinnahme = iso;
+          renderUI();
+        }
       } catch(err) { showToast('Fehler: ' + err.message); }
     }
   }
@@ -5477,6 +5513,7 @@ function openEdit(sid){
   document.getElementById('supp-m-edit-name').value=s.name;
   document.getElementById('supp-m-edit-unit').value=s.unit||'Kps.';
   document.getElementById('supp-m-edit-dose').value=s.dose||'';
+  document.getElementById('supp-m-edit-intervall').value=s.intervallTage||'';
   document.querySelectorAll('#supp-m-edit-stacks .stk-btn').forEach(b=>
     b.classList.toggle('sel',s.stacks.includes(b.dataset.s)));
   updateEditQuick();
@@ -5502,11 +5539,13 @@ async function saveEdit(){
   const name=document.getElementById('supp-m-edit-name').value.trim();
   const unit=document.getElementById('supp-m-edit-unit').value;
   const dose=parseFloat(document.getElementById('supp-m-edit-dose').value)||null;
+  const intervallRaw=document.getElementById('supp-m-edit-intervall').value;
+  const intervall = intervallRaw ? parseInt(intervallRaw) : null;
   const stacks=[...document.querySelectorAll('#supp-m-edit-stacks .stk-btn.sel')].map(b=>b.dataset.s);
   if(!name){showToast('Name fehlt');return}
   if(!stacks.length){showToast('Stack wählen');return}
   const sid = editCtx.sid;
-  s.name=name;s.unit=unit;s.dose=dose;s.stacks=stacks;
+  s.name=name;s.unit=unit;s.dose=dose;s.stacks=stacks;s.intervallTage=intervall;
   suppList.sort((a,b)=>a.name.localeCompare(b.name,'de'));
   editCtx=null;
   closeModal('supp-m-edit');
@@ -5520,7 +5559,8 @@ async function saveEdit(){
         name,
         dosis_einheit_label: unit,
         standard_dosis: dose,
-        stacks: stacks
+        stacks: stacks,
+        intervall_tage: intervall
       })
       .eq('id', sid)
       .eq('user_id', window.sbUser.id);
