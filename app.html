@@ -10664,6 +10664,9 @@ let ankerCommentOpen = { morgen:false, abend:false };
 let spontanList = [];
 let editRegionCtx = null;
 let spontanVals = {};
+// Pro Region+Anker: 'zusammen' (nur L+R) oder 'getrennt' (L+R aufgesplittet auf L und R)
+// Wenn nicht gesetzt: derived from data (hat L oder R Werte -> getrennt, sonst zusammen)
+let seitMode = {}; // {anker: {regionId: 'zusammen'|'getrennt'}}
 
 function uid(){return Math.random().toString(36).slice(2,9)}
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
@@ -10928,16 +10931,19 @@ function renderRegions(anker){
         <span class="sv-n">${s.label}</span>
       </button>`).join('');
     const valClass = val==null?'':val===0?'v0':val<=2?'v1':'v3';
-    const seiteLabel = seite==='L'?' L':seite==='R'?' R':seite==='B'?' L+R':'';
-    const seiteBadge = seite ? `<span style="font-size:9px;font-weight:700;color:var(--accent3);background:color-mix(in srgb,var(--accent3) 12%,var(--surface));padding:2px 6px;border-radius:6px;margin-left:6px">${seiteLabel.trim()}</span>` : '';
+    const seiteLabel = seite==='L'?'L':seite==='R'?'R':seite==='B'?'L+R':'';
     const aufstehBtn = anker==='morgen' ? `
       <button class="aufsteh-toggle${nurAufstehen?' on':''}"
         onclick="window.schmerz_toggleAufstehen('${anker}','${r.id}',${seite?`'${seite}'`:'null'})">
         🦶 Nur beim Aufstehen
       </button>` : '';
+    // Im Seitigkeit-Modus zeigt der Header nur das Seiten-Label, sonst Region-Name
+    const headerLabel = seite ? 
+      `<span style="font-size:11px;font-weight:700;color:var(--accent3);background:color-mix(in srgb,var(--accent3) 12%,var(--surface));padding:2px 8px;border-radius:6px;letter-spacing:0.5px">${seiteLabel}</span>` :
+      `<span class="region-name">${r.name}</span>`;
     return `
-      <div class="region-header" style="${seite?'margin-top:4px':''}">
-        <span class="region-name" style="${seite?'font-size:12px;color:var(--muted)':''}">${seite?seiteLabel.trim():r.name}${!seite?seiteBadge:''}</span>
+      <div class="region-header" style="${seite?'margin-top:6px':''}">
+        ${headerLabel}
         <div style="display:flex;align-items:center;gap:6px">
           ${aufstehBtn}
           ${val!=null?`<span class="region-val ${valClass}">${val}</span>`:''}
@@ -10955,18 +10961,60 @@ function renderRegions(anker){
 
   container.innerHTML = regs.map(r=>{
     if(r.hatSeitigkeit){
-      // 3 Sub-Zeilen: L, R, L+R
-      return `<div class="region-row">
-        <div style="font-weight:600;font-size:13px;margin-bottom:6px">${r.name}</div>
-        <div style="padding-left:8px;border-left:2px solid var(--border)">
-          ${renderRow(r,'L')}
-          ${renderRow(r,'R')}
-          ${renderRow(r,'B')}
-        </div>
-      </div>`;
+      // Pro Region+Anker den Modus bestimmen:
+      // 1. Wenn explizit gesetzt: nutze das
+      // 2. Sonst: wenn L oder R Werte da sind -> 'getrennt', sonst 'zusammen'
+      if(!seitMode[anker]) seitMode[anker] = {};
+      let mode = seitMode[anker][r.id];
+      if(!mode){
+        const hasL = ankerData[anker][`${r.id}|L`] && ankerData[anker][`${r.id}|L`].val != null;
+        const hasR = ankerData[anker][`${r.id}|R`] && ankerData[anker][`${r.id}|R`].val != null;
+        const alloL = allodynie[anker][`${r.id}|L`];
+        const alloR = allodynie[anker][`${r.id}|R`];
+        mode = (hasL || hasR || alloL || alloR) ? 'getrennt' : 'zusammen';
+      }
+      const toggleBtn = `<button onclick="window.schmerz_toggleSeitMode('${anker}','${r.id}')" 
+        style="font-size:9px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:'JetBrains Mono',monospace">
+        ${mode==='zusammen' ? 'L | R differenzieren' : 'L+R zusammen'}
+      </button>`;
+      const headerRow = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-weight:600;font-size:13px">${r.name}</span>
+          ${toggleBtn}
+        </div>`;
+      if(mode === 'zusammen'){
+        return `<div class="region-row">
+          ${headerRow}
+          <div style="padding-left:8px;border-left:2px solid var(--border)">
+            ${renderRow(r,'B')}
+          </div>
+        </div>`;
+      } else {
+        return `<div class="region-row">
+          ${headerRow}
+          <div style="padding-left:8px;border-left:2px solid var(--border)">
+            ${renderRow(r,'L')}
+            ${renderRow(r,'R')}
+          </div>
+        </div>`;
+      }
     }
     return `<div class="region-row">${renderRow(r,null)}</div>`;
   }).join('');
+}
+
+function toggleSeitMode(anker, regionId){
+  if(!seitMode[anker]) seitMode[anker] = {};
+  const cur = seitMode[anker][regionId];
+  // Aktuellen Modus ableiten falls nicht explizit
+  let actual = cur;
+  if(!actual){
+    const hasL = ankerData[anker][`${regionId}|L`] && ankerData[anker][`${regionId}|L`].val != null;
+    const hasR = ankerData[anker][`${regionId}|R`] && ankerData[anker][`${regionId}|R`].val != null;
+    actual = (hasL || hasR) ? 'getrennt' : 'zusammen';
+  }
+  seitMode[anker][regionId] = (actual === 'zusammen') ? 'getrennt' : 'zusammen';
+  renderRegions(anker);
 }
 
 function renderCommentArea(anker){
@@ -11618,6 +11666,7 @@ setInterval(()=>{
   window.schmerz_saveComment = saveComment;
   window.schmerz_setRegion = setRegion;
   window.schmerz_setSpontanRegion = setSpontanRegion;
+  window.schmerz_toggleSeitMode = toggleSeitMode;
   window.schmerz_toggleAufstehen = toggleAufstehen;
   window.schmerz_openNewRegion = openNewRegion;
   window.schmerz_openRegionMgr = openRegionMgr;
