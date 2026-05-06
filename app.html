@@ -11239,6 +11239,10 @@ let editingSpontanId = null;
 function openSpontan(){
   editingSpontanId = null;
   spontanVals={};
+  const modal = document.getElementById('schmerz-m-spontan');
+  if(!modal) return;
+  // Modal ans body anhaengen falls in Container gefangen (rect 0x0 bug)
+  if(modal.parentNode !== document.body) document.body.appendChild(modal);
   document.getElementById('schmerz-m-spontan-title').textContent='Schmerz erfassen';
   document.getElementById('schmerz-m-spontan-time').value=nowTime();
   document.getElementById('schmerz-m-spontan-endtime').value='';
@@ -11246,12 +11250,17 @@ function openSpontan(){
   renderSpontanRegions();
   renderTimeChips('schmerz-m-spontan-start-chips','schmerz-m-spontan-time',true);
   renderTimeChips('schmerz-m-spontan-end-chips','schmerz-m-spontan-endtime',false);
-  openModal('schmerz-m-spontan');
+  modal.classList.add('open');
+  // Force inline styles - hebelt jeden CSS-Konflikt aus
+  modal.style.cssText = 'display:flex !important;position:fixed !important;top:0 !important;left:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;height:100vh !important;background:rgba(0,0,0,0.55) !important;z-index:99999 !important;align-items:flex-end !important;justify-content:center !important';
 }
 
 function openEditSpontan(id){
   const e = spontanList.find(x=>x.id===id);
   if(!e) return;
+  const modal = document.getElementById('schmerz-m-spontan');
+  if(!modal) return;
+  if(modal.parentNode !== document.body) document.body.appendChild(modal);
   editingSpontanId = id;
   spontanVals = {...e.values};
   document.getElementById('schmerz-m-spontan-title').textContent='Episode bearbeiten';
@@ -11261,7 +11270,8 @@ function openEditSpontan(id){
   renderSpontanRegions();
   renderTimeChips('schmerz-m-spontan-start-chips','schmerz-m-spontan-time',true);
   renderTimeChips('schmerz-m-spontan-end-chips','schmerz-m-spontan-endtime',false);
-  openModal('schmerz-m-spontan');
+  modal.classList.add('open');
+  modal.style.cssText = 'display:flex !important;position:fixed !important;top:0 !important;left:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;height:100vh !important;background:rgba(0,0,0,0.55) !important;z-index:99999 !important;align-items:flex-end !important;justify-content:center !important';
 }
 
 // Time helpers ────────────────────────────
