@@ -10698,7 +10698,7 @@ async function loadRegions(){
   try {
     const { data, error } = await window.sb
       .from('schmerz_regionen')
-      .select('id, name, sortierung, groups')
+      .select('id, name, sortierung, groups, hat_seitigkeit')
       .eq('user_id', window.sbUser.id)
       .eq('aktiv', true)
       .order('sortierung', { ascending: true });
@@ -10707,9 +10707,10 @@ async function loadRegions(){
       id: r.id,
       name: r.name,
       sortierung: r.sortierung,
-      groups: Array.isArray(r.groups) ? r.groups : ['morgen','abend']
+      groups: Array.isArray(r.groups) ? r.groups : ['morgen','abend'],
+      hatSeitigkeit: !!r.hat_seitigkeit
     }));
-    regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+    regions.sort((a,b)=>(a.sortierung||999)-(b.sortierung||999) || a.name.localeCompare(b.name,'de'));
     regionsLoaded = true;
   } catch(err) {
     console.error('Schmerz-Regionen-Lade-Fehler:', err);
@@ -10729,16 +10730,18 @@ async function loadFromDb(){
     // Anker-Werte
     const { data: vRows, error: e1 } = await window.sb
       .from('schmerz_anker_werte')
-      .select('region_id, anker, wert, nur_aufstehen, allodynie')
+      .select('region_id, anker, wert, nur_aufstehen, allodynie, seite')
       .eq('user_id', window.sbUser.id)
       .eq('tagesdatum', iso);
     if(e1) throw e1;
     (vRows||[]).forEach(r => {
       if(!ankerData[r.anker]) ankerData[r.anker] = {};
+      // State-Key: 'regionId' oder 'regionId|L'/'regionId|R'/'regionId|B'
+      const key = r.seite ? `${r.region_id}|${r.seite}` : r.region_id;
       if(r.wert != null){
-        ankerData[r.anker][r.region_id] = { val: r.wert, nurAufstehen: !!r.nur_aufstehen };
+        ankerData[r.anker][key] = { val: r.wert, nurAufstehen: !!r.nur_aufstehen };
       }
-      if(r.allodynie) allodynie[r.anker][r.region_id] = true;
+      if(r.allodynie) allodynie[r.anker][key] = true;
     });
     // Anker-Kommentare
     const { data: kRows, error: e2 } = await window.sb
@@ -10846,7 +10849,7 @@ async function copyFromPrevDay(anker) {
   try {
     const { data, error } = await window.sb
       .from('schmerz_anker_werte')
-      .select('region_id, wert, nur_aufstehen, allodynie')
+      .select('region_id, wert, nur_aufstehen, allodynie, seite')
       .eq('user_id', window.sbUser.id)
       .eq('tagesdatum', prevISO)
       .eq('anker', anker);
@@ -10859,32 +10862,45 @@ async function copyFromPrevDay(anker) {
     const newVals = {};
     const newAllo = {};
     data.forEach(r => {
+      const k = r.seite ? `${r.region_id}|${r.seite}` : r.region_id;
       if(r.wert != null){
-        newVals[r.region_id] = { val: parseFloat(r.wert), nurAufstehen: !!r.nur_aufstehen };
+        newVals[k] = { val: parseFloat(r.wert), nurAufstehen: !!r.nur_aufstehen };
       }
-      if(r.allodynie) newAllo[r.region_id] = true;
+      if(r.allodynie) newAllo[k] = true;
     });
     ankerData[anker] = newVals;
     allodynie[anker] = newAllo;
     renderUI();
-    // In DB fuer aktiven Tag uebernehmen
+    // In DB fuer aktiven Tag uebernehmen - eine pro Eintrag (wegen seite-Differenzierung)
     const todayISO = getActiveISO();
-    const rows = data.map(r => ({
-      user_id: window.sbUser.id,
-      tagesdatum: todayISO,
-      anker,
-      region_id: r.region_id,
-      wert: r.wert,
-      nur_aufstehen: r.nur_aufstehen,
-      allodynie: r.allodynie
-    }));
-    if(rows.length){
-      const { error: upErr } = await window.sb
-        .from('schmerz_anker_werte')
-        .upsert(rows, { onConflict: 'user_id,tagesdatum,anker,region_id' });
-      if(upErr) throw upErr;
+    let inserted = 0;
+    for(const r of data){
+      try {
+        // Erst bestehende Zeile loeschen, dann neu einfuegen (vermeidet onConflict-Komplikationen mit COALESCE)
+        let dq = window.sb.from('schmerz_anker_werte').delete()
+          .eq('user_id', window.sbUser.id)
+          .eq('tagesdatum', todayISO)
+          .eq('anker', anker)
+          .eq('region_id', r.region_id);
+        if(r.seite) dq = dq.eq('seite', r.seite);
+        else dq = dq.is('seite', null);
+        await dq;
+        const { error: iErr } = await window.sb
+          .from('schmerz_anker_werte')
+          .insert({
+            user_id: window.sbUser.id,
+            tagesdatum: todayISO,
+            anker,
+            region_id: r.region_id,
+            wert: r.wert,
+            nur_aufstehen: r.nur_aufstehen,
+            allodynie: r.allodynie,
+            seite: r.seite || null
+          });
+        if(!iErr) inserted++;
+      } catch(_){}
     }
-    showToast(`${rows.length} Vortageswerte übernommen ✓`);
+    showToast(`${inserted} Vortageswerte übernommen ✓`);
   } catch(err){
     console.error('copyFromPrevDay-Fehler:', err);
     showToast('Fehler: ' + err.message);
@@ -10897,45 +10913,59 @@ function renderRegions(anker){
     container.innerHTML=`<div style="font-size:11px;color:var(--muted);padding:4px 0">Keine Regionen konfiguriert</div>`;
     return;
   }
-  container.innerHTML=regs.map(r=>{
-    const entry=ankerData[anker][r.id]||{};
-    const val=entry.val;
-    const nurAufstehen=!!entry.nurAufstehen;
+
+  // Helper: Render eine Region+Seite Zeile
+  function renderRow(r, seite){
+    const key = seite ? `${r.id}|${seite}` : r.id;
+    const entry = ankerData[anker][key] || {};
+    const val = entry.val;
+    const nurAufstehen = !!entry.nurAufstehen;
     const selDesc = val!=null && SCALE[val] ? SCALE[val].desc : '';
-    const hasAllodynie = allodynie[anker][r.id] || false;
-    const chips=SCALE.map(s=>`
+    const hasAllodynie = allodynie[anker][key] || false;
+    const chips = SCALE.map(s=>`
       <button class="sv${val===s.v?' sel-'+s.v:''}"
-        onclick="window.schmerz_setRegion('${anker}','${r.id}',${s.v})">
+        onclick="window.schmerz_setRegion('${anker}','${r.id}',${s.v},${seite?`'${seite}'`:'null'})">
         <span class="sv-n">${s.label}</span>
       </button>`).join('');
-
-    const valClass=val==null?'':val===0?'v0':val<=2?'v1':'v3';
-
-    // "Nur beim Aufstehen" toggle — always visible in morgen, not just when val>0
+    const valClass = val==null?'':val===0?'v0':val<=2?'v1':'v3';
+    const seiteLabel = seite==='L'?' L':seite==='R'?' R':seite==='B'?' L+R':'';
+    const seiteBadge = seite ? `<span style="font-size:9px;font-weight:700;color:var(--accent3);background:color-mix(in srgb,var(--accent3) 12%,var(--surface));padding:2px 6px;border-radius:6px;margin-left:6px">${seiteLabel.trim()}</span>` : '';
     const aufstehBtn = anker==='morgen' ? `
       <button class="aufsteh-toggle${nurAufstehen?' on':''}"
-        onclick="window.schmerz_toggleAufstehen('${anker}','${r.id}')">
+        onclick="window.schmerz_toggleAufstehen('${anker}','${r.id}',${seite?`'${seite}'`:'null'})">
         🦶 Nur beim Aufstehen
       </button>` : '';
-
     return `
-      <div class="region-row">
-        <div class="region-header">
-          <span class="region-name">${r.name}</span>
-          <div style="display:flex;align-items:center;gap:6px">
-            ${aufstehBtn}
-            ${val!=null?`<span class="region-val ${valClass}">${val}</span>`:''}
-          </div>
+      <div class="region-header" style="${seite?'margin-top:4px':''}">
+        <span class="region-name" style="${seite?'font-size:12px;color:var(--muted)':''}">${seite?seiteLabel.trim():r.name}${!seite?seiteBadge:''}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${aufstehBtn}
+          ${val!=null?`<span class="region-val ${valClass}">${val}</span>`:''}
         </div>
-        <div class='scale-row'>${chips}</div>
-        ${selDesc?`<div style='font-size:10px;color:var(--muted);margin-top:3px;padding:0 2px'>${selDesc}</div>`:''}
-        <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
-          <button onclick="window.schmerz_toggleAllodynie('${anker}','${r.id}')"
-            style="width:100%;text-align:left;font-size:11px;padding:5px 8px;border-radius:7px;border:1px solid ${hasAllodynie?'var(--delete)':'var(--border)'};background:${hasAllodynie?'color-mix(in srgb,var(--delete) 10%,var(--surface))':'var(--surface)'};color:${hasAllodynie?'var(--delete)':'var(--muted)'};cursor:pointer;font-family:'JetBrains Mono',monospace">
-            ${hasAllodynie?'🔴':'⚪'} Allodynie ${hasAllodynie?'(aktiv — Schmerz bei Berührung/Wasser/Druck)':'— tippen zum aktivieren'}
-          </button>
+      </div>
+      <div class='scale-row'>${chips}</div>
+      ${selDesc?`<div style='font-size:10px;color:var(--muted);margin-top:3px;padding:0 2px'>${selDesc}</div>`:''}
+      <div style="margin-top:6px;padding-top:4px;border-top:1px solid var(--border)">
+        <button onclick="window.schmerz_toggleAllodynie('${anker}','${r.id}',${seite?`'${seite}'`:'null'})"
+          style="width:100%;text-align:left;font-size:11px;padding:5px 8px;border-radius:7px;border:1px solid ${hasAllodynie?'var(--delete)':'var(--border)'};background:${hasAllodynie?'color-mix(in srgb,var(--delete) 10%,var(--surface))':'var(--surface)'};color:${hasAllodynie?'var(--delete)':'var(--muted)'};cursor:pointer;font-family:'JetBrains Mono',monospace">
+          ${hasAllodynie?'🔴':'⚪'} Allodynie ${hasAllodynie?'(aktiv)':''}
+        </button>
+      </div>`;
+  }
+
+  container.innerHTML = regs.map(r=>{
+    if(r.hatSeitigkeit){
+      // 3 Sub-Zeilen: L, R, L+R
+      return `<div class="region-row">
+        <div style="font-weight:600;font-size:13px;margin-bottom:6px">${r.name}</div>
+        <div style="padding-left:8px;border-left:2px solid var(--border)">
+          ${renderRow(r,'L')}
+          ${renderRow(r,'R')}
+          ${renderRow(r,'B')}
         </div>
       </div>`;
+    }
+    return `<div class="region-row">${renderRow(r,null)}</div>`;
   }).join('');
 }
 
@@ -10994,21 +11024,22 @@ function renderSpontan(){
 // ── INTERACTIONS ──────────────────────────
 function toggleAnker(id){ankerOpen[id]=!ankerOpen[id];renderUI()}
 
-function setRegion(anker,regionId,val){
-  if(!ankerData[anker][regionId]) ankerData[anker][regionId]={};
+// State-Key: 'regionId' oder 'regionId|L'/'regionId|R'/'regionId|B'
+function _key(regionId, seite){ return seite ? `${regionId}|${seite}` : regionId; }
+
+function setRegion(anker,regionId,val,seite){
+  const k = _key(regionId, seite);
+  if(!ankerData[anker][k]) ankerData[anker][k]={};
   let willDelete = false;
-  if(ankerData[anker][regionId].val===val){
-    ankerData[anker][regionId]={};
+  if(ankerData[anker][k].val===val){
+    ankerData[anker][k]={};
     willDelete = true;
   } else {
-    ankerData[anker][regionId].val=val;
+    ankerData[anker][k].val=val;
   }
   renderRegions(anker);
   renderBadge(anker);
-  // Anker-Indikator updaten
   if(typeof setAnkerStatus === 'function'){
-    const hasVals = Object.values(ankerData[anker]||{}).some(v => v && v.val != null);
-    const hasComment = !!(ankerComments[anker] && ankerComments[anker].trim());
     const status = {};
     ANKER.forEach(a => {
       const hv = Object.values(ankerData[a]||{}).some(v => v && v.val != null);
@@ -11017,55 +11048,82 @@ function setRegion(anker,regionId,val){
     });
     setAnkerStatus('schmerz', status);
   }
-  persistAnkerWert(anker, regionId, willDelete);
+  persistAnkerWert(anker, regionId, willDelete, seite);
 }
 
-function toggleAufstehen(anker,regionId){
-  if(!ankerData[anker][regionId]) ankerData[anker][regionId]={};
-  ankerData[anker][regionId].nurAufstehen=!ankerData[anker][regionId].nurAufstehen;
+function toggleAufstehen(anker,regionId,seite){
+  const k = _key(regionId, seite);
+  if(!ankerData[anker][k]) ankerData[anker][k]={};
+  ankerData[anker][k].nurAufstehen = !ankerData[anker][k].nurAufstehen;
   renderRegions(anker);
-  // Wenn kein val gesetzt aber nurAufstehen toggled: nichts persistieren ohne val (sinnfrei)
-  if(ankerData[anker][regionId].val != null) persistAnkerWert(anker, regionId, false);
+  if(ankerData[anker][k].val != null) persistAnkerWert(anker, regionId, false, seite);
 }
 
-function toggleAllodynie(anker, regionId) {
-  allodynie[anker][regionId] = !allodynie[anker][regionId];
+function toggleAllodynie(anker, regionId, seite) {
+  const k = _key(regionId, seite);
+  allodynie[anker][k] = !allodynie[anker][k];
   renderUI();
-  persistAnkerWert(anker, regionId, false);
+  persistAnkerWert(anker, regionId, false, seite);
 }
 
-async function persistAnkerWert(anker, regionId, deleteRow){
+async function persistAnkerWert(anker, regionId, deleteRow, seite){
   if(!window.sbUser) return;
   const iso = getActiveISO();
-  const entry = ankerData[anker][regionId] || {};
-  const allo = !!allodynie[anker][regionId];
+  const k = _key(regionId, seite);
+  const entry = ankerData[anker][k] || {};
+  const allo = !!allodynie[anker][k];
   // Wenn weder val noch allodynie -> Zeile loeschen
   if((entry.val == null) && !allo){
     try {
-      const { error } = await window.sb
+      let q = window.sb
         .from('schmerz_anker_werte')
         .delete()
         .eq('user_id', window.sbUser.id)
         .eq('tagesdatum', iso)
         .eq('anker', anker)
         .eq('region_id', regionId);
+      if(seite) q = q.eq('seite', seite);
+      else q = q.is('seite', null);
+      const { error } = await q;
       if(error) throw error;
     } catch(err) { showToast('DB-Fehler: ' + err.message); }
     return;
   }
   try {
-    const { error } = await window.sb
+    const row = {
+      user_id: window.sbUser.id,
+      tagesdatum: iso,
+      anker,
+      region_id: regionId,
+      wert: entry.val != null ? entry.val : null,
+      nur_aufstehen: !!entry.nurAufstehen,
+      allodynie: allo,
+      seite: seite || null
+    };
+    // Manueller upsert: erst check ob existiert, dann insert oder update
+    let q = window.sb
       .from('schmerz_anker_werte')
-      .upsert({
-        user_id: window.sbUser.id,
-        tagesdatum: iso,
-        anker,
-        region_id: regionId,
-        wert: entry.val != null ? entry.val : null,
-        nur_aufstehen: !!entry.nurAufstehen,
-        allodynie: allo
-      }, { onConflict: 'user_id,tagesdatum,anker,region_id' });
-    if(error) throw error;
+      .select('id')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso)
+      .eq('anker', anker)
+      .eq('region_id', regionId);
+    if(seite) q = q.eq('seite', seite);
+    else q = q.is('seite', null);
+    const { data: existing, error: e0 } = await q.maybeSingle();
+    if(e0) throw e0;
+    if(existing){
+      const { error } = await window.sb
+        .from('schmerz_anker_werte')
+        .update(row)
+        .eq('id', existing.id);
+      if(error) throw error;
+    } else {
+      const { error } = await window.sb
+        .from('schmerz_anker_werte')
+        .insert(row);
+      if(error) throw error;
+    }
   } catch(err) {
     showToast('DB-Fehler: ' + err.message);
   }
