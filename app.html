@@ -293,6 +293,19 @@ body.sort-mode .sort-controls{display:inline-flex}
 .mbr{display:flex;gap:8px;margin-top:16px}
 .bp{flex:1;background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;
   padding:11px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer}
+.cs-pill{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;
+  padding:6px 4px;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;
+  white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.cs-pill:active{background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
+.cs-row{display:flex;align-items:center;gap:8px;padding:7px 4px;font-size:11px;
+  border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent);
+  font-family:'JetBrains Mono',monospace}
+.cs-row:last-child{border-bottom:none}
+.cs-row .cs-time{color:var(--muted);font-size:10px;min-width:38px}
+.cs-row .cs-pill-info{flex:1;color:var(--text)}
+.cs-row .cs-note{color:var(--muted);font-size:10px;font-style:italic}
+.cs-row .cs-act{padding:3px 6px;font-size:11px;background:none;border:none;color:var(--muted);cursor:pointer}
+.cs-row .cs-act.del:active{color:var(--delete)}
 .bs{background:none;border:1px solid var(--border);border-radius:10px;padding:11px 16px;
   font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);cursor:pointer}
 .dq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
@@ -3115,15 +3128,15 @@ function injectModules() {
     <div id="entz-spontan-list"></div>
   </div>
 
-  <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+  <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)">Akute Symptome</div>
-      <button class="btn-ghost cs-trigger" onclick="event.stopPropagation();window.entz_openCsRegionMgr()" style="font-size:10px;padding:3px 7px">⚙</button>
+      <button class="btn-ghost cs-trigger" onclick="event.stopPropagation();window.entz_openCsRegionMgr()" style="font-size:10px;padding:2px 6px">⚙</button>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <button type="button" class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('schwellung')">💢 Schwellung</button>
-      <button type="button" class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('waerme')">🔥 Wärme</button>
-      <button type="button" class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('roetung')">🔴 Rötung</button>
+    <div style="display:flex;gap:5px;margin-bottom:4px">
+      <button type="button" class="cs-pill" style="flex:1" onclick="window.entz_openCs('schwellung')">💢 Schwellung</button>
+      <button type="button" class="cs-pill" style="flex:1" onclick="window.entz_openCs('waerme')">🔥 Wärme</button>
+      <button type="button" class="cs-pill" style="flex:1" onclick="window.entz_openCs('roetung')">🔴 Rötung</button>
     </div>
     <div id="entz-cs-list"></div>
   </div>
@@ -8871,21 +8884,18 @@ function renderCs(){
   const el = document.getElementById('entz-cs-list');
   if(!el) return;
   if(!csList.length){ el.innerHTML = ''; return; }
-  el.innerHTML = csList.map(e => {
+  el.innerHTML = '<div style="margin-top:6px">' + csList.map(e => {
     const meta = CS_META[e.typ] || { icon:'•', label:e.typ };
     const seiteTxt = e.seite ? ' ' + e.seite : '';
+    const noteTxt = e.notiz ? ' · ' + escHtml(e.notiz) : '';
     return `
-      <div class="spontan-entry">
-        <div class="spontan-time">${e.time}${e.notiz ? ' · ' + escHtml(e.notiz) : ''}</div>
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:3px">
-          <span class="region-pill ${e.wert<=1?'rp-12':'rp-345'}">${meta.icon} ${escHtml(e.region)}${seiteTxt}: ${e.wert}</span>
-        </div>
-        <div style="display:flex;justify-content:flex-end;gap:5px;margin-top:6px">
-          <button class="entry-action" onclick="window.entz_csOpenEdit('${e.id}')" title="Bearbeiten">✎</button>
-          <button class="entry-action del" onclick="window.entz_csDel('${e.id}')" title="Löschen">✕</button>
-        </div>
+      <div class="cs-row">
+        <span class="cs-time">${e.time}</span>
+        <span class="cs-pill-info">${meta.icon} ${escHtml(e.region)}${seiteTxt}: <b>${e.wert}</b><span class="cs-note">${noteTxt}</span></span>
+        <button type="button" class="cs-act" onclick="window.entz_csOpenEdit('${e.id}')" title="Bearbeiten">✎</button>
+        <button type="button" class="cs-act del" onclick="window.entz_csDel('${e.id}')" title="Löschen">✕</button>
       </div>`;
-  }).join('');
+  }).join('') + '</div>';
 }
 
 function csNowHHMM(){
