@@ -3045,13 +3045,13 @@ function injectModules() {
     <div style="display:flex;gap:8px;margin-bottom:10px">
       <button type="button" class="bp cs-trigger" style="flex:1;font-size:12px;padding:10px 6px"
         onpointerdown="event.stopPropagation()"
-        onclick="event.stopPropagation();window.entz_openCs('schwellung')">💢 Schwellung</button>
+        onclick="event.stopPropagation();var d=document.getElementById('cs-dbg')||(function(){var x=document.createElement('div');x.id='cs-dbg';x.style.cssText='position:fixed;top:5px;left:5px;right:5px;background:#000;color:#0f0;padding:8px;font-size:11px;z-index:99999;font-family:monospace;border:2px solid #0f0';document.body.appendChild(x);return x})();d.innerHTML='CLICK schwellung<br>fn-exists: '+(typeof window.entz_openCs==='function')+'<br>modal-exists: '+(!!document.getElementById('entz-cs-modal'))+'<br><button onclick=\'this.parentElement.remove()\' style=background:red;color:white;border:none;padding:3px>X</button>';if(typeof window.entz_openCs==='function')window.entz_openCs('schwellung')">💢 Schwellung</button>
       <button type="button" class="bp cs-trigger" style="flex:1;font-size:12px;padding:10px 6px"
         onpointerdown="event.stopPropagation()"
-        onclick="event.stopPropagation();window.entz_openCs('waerme')">🔥 Wärme</button>
+        onclick="event.stopPropagation();window.entz_openCs &amp;&amp; window.entz_openCs('waerme')">🔥 Wärme</button>
       <button type="button" class="bp cs-trigger" style="flex:1;font-size:12px;padding:10px 6px"
         onpointerdown="event.stopPropagation()"
-        onclick="event.stopPropagation();window.entz_openCs('roetung')">🔴 Rötung</button>
+        onclick="event.stopPropagation();window.entz_openCs &amp;&amp; window.entz_openCs('roetung')">🔴 Rötung</button>
     </div>
     <div id="entz-cs-list"></div>
   </div>
