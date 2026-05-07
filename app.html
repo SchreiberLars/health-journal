@@ -8895,6 +8895,8 @@ function csNowHHMM(){
 }
 
 function openCs(typ, presetRegionName){
+  console.log('[CS] openCs called:', typ);
+  if(typeof showToast === 'function') showToast('CS: ' + typ);
   csCtx = { typ, regionName: null, regionHasSeite: false, seite: null, wert: null, editingId: null };
   const meta = CS_META[typ];
   document.getElementById('entz-m-cs-title').textContent = meta.icon + ' ' + meta.label + ' erfassen';
