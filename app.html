@@ -2046,6 +2046,7 @@ const TIMELINE_MODULES = [
   {key:'stuhl',   icon:'💩', label:'Stuhlgang',        color:'var(--c-stuhl)'},
   {key:'stress',  icon:'⚡', label:'Akut-Signal',      color:'var(--c-bef)'},
   {key:'schmerz', icon:'💪', label:'Schmerz-Episode',  color:'var(--c-schmerz)'},
+  {key:'entz',    icon:'🔥', label:'Akut-Symptom',     color:'var(--c-entz)'},
   {key:'notes',   icon:'📝', label:'Notiz',            color:'var(--muted)'},
   {key:'garmin',  icon:'⌚', label:'Garmin',           color:'var(--c-regen)'},
   {key:'tagkomm', icon:'📌', label:'Tageskommentar',   color:'var(--c-bef)'}
@@ -2263,6 +2264,27 @@ async function collectTimelineItems(iso){
       ts: r.start_zeit, mod:'schmerz',
       title: 'Schmerz-Episode'+dauer,
       detail: [regions, r.notiz].filter(Boolean).join(' · ')
+    });
+  });
+
+  // 10b. Cardinal Signs (Akute Symptome: Schwellung/Waerme/Roetung)
+  const csTypMeta = {
+    schwellung: '💢 Schwellung',
+    waerme:     '🔥 Wärme',
+    roetung:    '🔴 Rötung'
+  };
+  const cs = await safeQuery(()=> window.sb
+    .from('entz_spontan_eintraege')
+    .select('id, typ, region, seite, wert, notiz, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (cs?.data||[]).forEach(r => {
+    const typLabel = csTypMeta[r.typ] || r.typ;
+    const seiteTxt = r.seite ? ' ' + r.seite : '';
+    items.push({
+      ts: r.erfasst_am, mod:'entz',
+      title: `${typLabel} ${r.region}${seiteTxt}`,
+      detail: [`Stärke ${r.wert}`, r.notiz].filter(Boolean).join(' · ')
     });
   });
 
