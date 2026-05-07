@@ -8955,34 +8955,15 @@ function csSetVal(v){
 }
 
 async function csSave(){
-  // DEBUG: zeige aktuellen csCtx-Status
-  let dbg = document.getElementById('cs-save-dbg');
-  if(!dbg){
-    dbg = document.createElement('div');
-    dbg.id = 'cs-save-dbg';
-    dbg.style.cssText = 'position:fixed;top:5px;left:5px;right:5px;background:#000;color:#0f0;padding:10px;font-size:12px;z-index:99999;font-family:monospace;border:2px solid #0f0;border-radius:4px';
-    document.body.appendChild(dbg);
-  }
-  dbg.innerHTML = 'csSave aufgerufen<br>' +
-    'typ: ' + csCtx.typ + '<br>' +
-    'regionName: ' + csCtx.regionName + '<br>' +
-    'regionHasSeite: ' + csCtx.regionHasSeite + '<br>' +
-    'seite: ' + csCtx.seite + '<br>' +
-    'wert: ' + csCtx.wert + '<br>' +
-    'editingId: ' + csCtx.editingId + '<br>' +
-    'sbUser: ' + (window.sbUser ? 'JA' : 'NEIN') + '<br>' +
-    '<button onclick="this.parentElement.remove()" style="background:red;color:white;border:0;padding:4px 10px;margin-top:6px">X</button>';
-
-  if(!csCtx.regionName){ dbg.innerHTML += '<br><b style="color:yellow">STOP: keine Region</b>'; return; }
-  if(csCtx.regionHasSeite && !csCtx.seite){ dbg.innerHTML += '<br><b style="color:yellow">STOP: keine Seite</b>'; return; }
-  if(csCtx.wert === null){ dbg.innerHTML += '<br><b style="color:yellow">STOP: kein Wert</b>'; return; }
-  if(!window.sbUser){ dbg.innerHTML += '<br><b style="color:yellow">STOP: kein User</b>'; return; }
+  if(!csCtx.regionName){ if(typeof showToast==='function') showToast('Region wählen'); return; }
+  if(csCtx.regionHasSeite && !csCtx.seite){ if(typeof showToast==='function') showToast('Seite wählen'); return; }
+  if(csCtx.wert === null){ if(typeof showToast==='function') showToast('Stärke wählen'); return; }
+  if(!window.sbUser){ closeModal('entz-cs-modal'); return; }
 
   const time = document.getElementById('entz-cs-modal-time').value;
   const note = document.getElementById('entz-cs-modal-note').value.trim();
   const iso = getActiveISO();
-  const ts = timestampFromTime(iso, time);
-  dbg.innerHTML += '<br>time=' + time + ' ts=' + ts;
+  const ts = timestampFromTime(time, iso);
 
   // Im Edit-Modus: Update statt Insert
   if(csCtx.editingId){
@@ -9036,13 +9017,9 @@ async function csSave(){
       .from('entz_spontan_eintraege')
       .insert(rows);
     if(error) throw error;
-    const dbg2 = document.getElementById('cs-save-dbg');
-    if(dbg2) dbg2.innerHTML += '<br><b style="color:lime">INSERT OK ' + rows.length + ' Zeile(n)</b>';
     if(typeof showToast==='function') showToast('Erfasst');
   } catch(err) {
     console.error('CS save error:', err);
-    const dbg3 = document.getElementById('cs-save-dbg');
-    if(dbg3) dbg3.innerHTML += '<br><b style="color:red">INSERT FAIL: ' + (err.message||err) + '</b>';
     if(typeof showToast==='function') showToast('Fehler: ' + err.message);
     return;
   }
