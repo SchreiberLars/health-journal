@@ -3036,6 +3036,19 @@ function injectModules() {
     </div>
     <div id="entz-spontan-list"></div>
   </div>
+
+  <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted)">Akute Symptome</div>
+      <button class="btn-ghost" onclick="window.entz_openCsRegionMgr()" style="font-size:10px">⚙ Regionen</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('schwellung')">💢 Schwellung</button>
+      <button class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('waerme')">🔥 Wärme</button>
+      <button class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('roetung')">🔴 Rötung</button>
+    </div>
+    <div id="entz-cs-list"></div>
+  </div>
 </div>
 
 
@@ -3088,6 +3101,85 @@ function injectModules() {
       <button class="bs" onclick="closeModal('entz-m-spontan')">Abbrechen</button>
       <button class="bp" onclick="window.entz_saveSpontan()">Speichern</button>
     </div>
+</div>
+
+
+<!-- Cardinal Sign Erfassen-Modal -->
+<div class="modal-overlay" id="entz-m-cs">
+  <div class="modal-sheet">
+    <div class="mt" id="entz-m-cs-title">Symptom erfassen</div>
+    <div class="mt-sub" id="entz-m-cs-sub">Region und Stärke wählen</div>
+
+    <label class="ml">Region</label>
+    <div id="entz-m-cs-regions" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+
+    <div id="entz-m-cs-side-row" style="display:none;margin-top:12px">
+      <label class="ml">Seite</label>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="grp-btn" data-s="L" onclick="window.entz_csSetSide('L')" style="flex:1">Links</button>
+        <button class="grp-btn" data-s="R" onclick="window.entz_csSetSide('R')" style="flex:1">Rechts</button>
+        <button class="grp-btn" data-s="LR" onclick="window.entz_csSetSide('LR')" style="flex:1">L + R</button>
+      </div>
+    </div>
+
+    <label class="ml" style="margin-top:12px">Stärke</label>
+    <div id="entz-m-cs-vals" style="display:flex;gap:6px;margin-top:6px">
+      <button class="grp-btn" data-v="0" onclick="window.entz_csSetVal(0)" style="flex:1">0</button>
+      <button class="grp-btn" data-v="1" onclick="window.entz_csSetVal(1)" style="flex:1">1</button>
+      <button class="grp-btn" data-v="2" onclick="window.entz_csSetVal(2)" style="flex:1">2</button>
+      <button class="grp-btn" data-v="3" onclick="window.entz_csSetVal(3)" style="flex:1">3</button>
+    </div>
+
+    <label class="ml" style="margin-top:12px">Uhrzeit</label>
+    <input class="mi" id="entz-m-cs-time" type="time">
+
+    <label class="ml" style="margin-top:12px">Notiz <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <input class="mi" id="entz-m-cs-note" placeholder="z.B. nach Sauna, nach Treppe steigen...">
+
+    <div class="mbr" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('entz-m-cs')">Abbrechen</button>
+      <button class="bp" onclick="window.entz_csSave()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Cardinal Sign: Neue Region anlegen -->
+<div class="modal-overlay" id="entz-m-cs-newregion">
+  <div class="modal-sheet">
+    <div class="mt">Neue Region</div>
+    <div class="mt-sub" id="entz-m-cs-newregion-sub">Eigene Körperstelle hinzufügen</div>
+    <label class="ml">Name</label>
+    <input class="mi" id="entz-m-cs-newregion-name" placeholder="z.B. Handgelenk">
+    <label class="ml" style="margin-top:10px">
+      <input type="checkbox" id="entz-m-cs-newregion-side" checked style="margin-right:6px">
+      Seitigkeit (Links / Rechts)
+    </label>
+    <div class="mbr" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('entz-m-cs-newregion')">Abbrechen</button>
+      <button class="bp" onclick="window.entz_csSaveNewRegion()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Cardinal Sign: Regionen verwalten -->
+<div class="modal-overlay" id="entz-m-cs-mgr">
+  <div class="modal-sheet">
+    <div class="mt">Regionen verwalten</div>
+    <div class="mt-sub">Vorschläge für Akut-Symptome</div>
+    <div style="margin-top:10px">
+      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">💢 Schwellung</div>
+      <div id="entz-m-cs-mgr-schwellung" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
+      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">🔥 Wärme</div>
+      <div id="entz-m-cs-mgr-waerme" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
+      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">🔴 Rötung</div>
+      <div id="entz-m-cs-mgr-roetung" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
+    </div>
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('entz-m-cs-mgr')">Fertig</button>
+    </div>
+  </div>
 </div>`;
   document.getElementById('get-content').innerHTML = `<div class="form-section">
   <div class="section-row">
@@ -8005,6 +8097,7 @@ async function loadFromDb(){
       fotoPfad: e.foto_pfad || null,
       values: Object.fromEntries((e.entz_episoden_regionen||[]).map(r=>[r.region_id, parseFloat(r.wert)]))
     }));
+    await loadCardinalSigns(iso);
   } catch(err) {
     console.error('Entz load error:', err);
     if(typeof showToast === 'function') showToast('Entz-Lade-Fehler: ' + err.message);
@@ -8044,6 +8137,7 @@ function renderUI(){
       renderBadge(a);
     });
     renderSpontan();
+    renderCs();
   } catch(err){
     console.error('Entz renderUI error:', err);
   }
@@ -8703,6 +8797,359 @@ function openSpontanFotoPicker(){
 function openSpontanFotoPreview(){
   openSpontanFotoPicker();
 }
+
+// ════════════════════════════════════════════════════════════
+// ── CARDINAL SIGNS (Akute Symptome) ─────────────────────────
+// ════════════════════════════════════════════════════════════
+
+const CS_META = {
+  schwellung: { icon:'💢', label:'Schwellung' },
+  waerme:     { icon:'🔥', label:'Wärme' },
+  roetung:    { icon:'🔴', label:'Rötung' }
+};
+
+let csList = [];          // heutige Akut-Einträge (alle Typen)
+let csRegions = {         // Region-Vorschläge pro Typ aus DB
+  schwellung: [], waerme: [], roetung: []
+};
+
+let csCtx = {             // aktueller Modal-State
+  typ: null,
+  regionName: null,
+  regionHasSeite: false,
+  seite: null,            // 'L'|'R'|'LR'|null
+  wert: null,
+  editingId: null
+};
+
+async function loadCardinalSigns(iso){
+  if(!window.sbUser || !window.sb) return;
+  csList = [];
+  // Region-Vorschläge laden
+  try {
+    const { data: rRows, error: rErr } = await window.sb
+      .from('entz_spontan_regionen')
+      .select('id, typ, name, hat_seitigkeit, sortierung, aktiv')
+      .eq('user_id', window.sbUser.id)
+      .eq('aktiv', true)
+      .order('sortierung', { ascending: true });
+    if(rErr) throw rErr;
+    csRegions = { schwellung: [], waerme: [], roetung: [] };
+    (rRows||[]).forEach(r => {
+      if(csRegions[r.typ]) csRegions[r.typ].push(r);
+    });
+  } catch(err) {
+    console.error('CS Regionen Load Error:', err);
+  }
+  // Einträge des aktiven Tages laden
+  try {
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const { data, error } = await window.sb
+      .from('entz_spontan_eintraege')
+      .select('id, typ, region, seite, wert, notiz, erfasst_am')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', dayStart)
+      .lte('erfasst_am', dayEnd)
+      .order('erfasst_am', { ascending: true });
+    if(error) throw error;
+    csList = (data||[]).map(e => ({
+      id: e.id,
+      typ: e.typ,
+      region: e.region,
+      seite: e.seite,
+      wert: e.wert,
+      notiz: e.notiz || '',
+      time: timeFromTimestamp(e.erfasst_am),
+      iso: e.erfasst_am
+    }));
+  } catch(err) {
+    console.error('CS Load Error:', err);
+  }
+}
+
+function renderCs(){
+  const el = document.getElementById('entz-cs-list');
+  if(!el) return;
+  if(!csList.length){ el.innerHTML = ''; return; }
+  el.innerHTML = csList.map(e => {
+    const meta = CS_META[e.typ] || { icon:'•', label:e.typ };
+    const seiteTxt = e.seite ? ' ' + e.seite : '';
+    return `
+      <div class="spontan-entry">
+        <div class="spontan-time">${e.time}${e.notiz ? ' · ' + escHtml(e.notiz) : ''}</div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:3px">
+          <span class="region-pill ${e.wert<=1?'rp-12':'rp-345'}">${meta.icon} ${escHtml(e.region)}${seiteTxt}: ${e.wert}</span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:5px;margin-top:6px">
+          <button class="entry-action" onclick="window.entz_csOpenEdit('${e.id}')" title="Bearbeiten">✎</button>
+          <button class="entry-action del" onclick="window.entz_csDel('${e.id}')" title="Löschen">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function csNowHHMM(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+function openCs(typ, presetRegionName){
+  csCtx = { typ, regionName: null, regionHasSeite: false, seite: null, wert: null, editingId: null };
+  const meta = CS_META[typ];
+  document.getElementById('entz-m-cs-title').textContent = meta.icon + ' ' + meta.label + ' erfassen';
+  document.getElementById('entz-m-cs-sub').textContent = 'Region und Stärke wählen';
+  document.getElementById('entz-m-cs-time').value = csNowHHMM();
+  document.getElementById('entz-m-cs-note').value = '';
+  // Region-Chips
+  csRenderRegionChips();
+  // Reset Side / Value
+  document.getElementById('entz-m-cs-side-row').style.display = 'none';
+  document.querySelectorAll('#entz-m-cs-vals .grp-btn').forEach(b => b.classList.remove('sel'));
+  if(presetRegionName){ csPickRegion(presetRegionName); }
+  openModal('entz-m-cs');
+}
+
+function csRenderRegionChips(){
+  const cont = document.getElementById('entz-m-cs-regions');
+  const list = csRegions[csCtx.typ] || [];
+  cont.innerHTML = list.map(r => `
+    <button class="grp-btn cs-region-btn" data-name="${escAttr(r.name)}" data-side="${r.hat_seitigkeit?1:0}"
+      onclick="window.entz_csPickRegion('${escAttr(r.name)}')">${escHtml(r.name)}</button>
+  `).join('') + `
+    <button class="grp-btn" style="border-style:dashed" onclick="window.entz_csOpenNewRegion()">+ Neu</button>
+  `;
+}
+
+function csPickRegion(name){
+  csCtx.regionName = name;
+  // Find region info
+  const reg = (csRegions[csCtx.typ]||[]).find(r => r.name === name);
+  csCtx.regionHasSeite = !!(reg && reg.hat_seitigkeit);
+  // Highlight chip
+  document.querySelectorAll('.cs-region-btn').forEach(b => {
+    b.classList.toggle('sel', b.getAttribute('data-name') === name);
+  });
+  // Show/hide side picker
+  const sideRow = document.getElementById('entz-m-cs-side-row');
+  sideRow.style.display = csCtx.regionHasSeite ? 'block' : 'none';
+  // Reset side selection
+  csCtx.seite = null;
+  document.querySelectorAll('#entz-m-cs-side-row .grp-btn').forEach(b => b.classList.remove('sel'));
+}
+
+function csSetSide(s){
+  csCtx.seite = s;
+  document.querySelectorAll('#entz-m-cs-side-row .grp-btn').forEach(b => {
+    b.classList.toggle('sel', b.getAttribute('data-s') === s);
+  });
+}
+
+function csSetVal(v){
+  csCtx.wert = v;
+  document.querySelectorAll('#entz-m-cs-vals .grp-btn').forEach(b => {
+    b.classList.toggle('sel', parseInt(b.getAttribute('data-v'),10) === v);
+  });
+}
+
+async function csSave(){
+  if(!csCtx.regionName){ if(typeof showToast==='function') showToast('Region wählen'); return; }
+  if(csCtx.regionHasSeite && !csCtx.seite){ if(typeof showToast==='function') showToast('Seite wählen'); return; }
+  if(csCtx.wert === null){ if(typeof showToast==='function') showToast('Stärke wählen'); return; }
+  if(!window.sbUser){ closeModal('entz-m-cs'); return; }
+
+  const time = document.getElementById('entz-m-cs-time').value;
+  const note = document.getElementById('entz-m-cs-note').value.trim();
+  const iso = getActiveISO();
+  const ts = timestampFromTime(iso, time);
+
+  // Im Edit-Modus: Update statt Insert
+  if(csCtx.editingId){
+    try {
+      const { error } = await window.sb
+        .from('entz_spontan_eintraege')
+        .update({
+          typ: csCtx.typ,
+          region: csCtx.regionName,
+          seite: csCtx.regionHasSeite ? csCtx.seite : null,
+          wert: csCtx.wert,
+          notiz: note || null,
+          erfasst_am: ts,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', csCtx.editingId)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      if(typeof showToast==='function') showToast('Aktualisiert');
+    } catch(err) {
+      console.error('CS update error:', err);
+      if(typeof showToast==='function') showToast('Fehler: ' + err.message);
+      return;
+    }
+    closeModal('entz-m-cs');
+    await loadCardinalSigns(iso);
+    renderCs();
+    return;
+  }
+
+  // Insert: bei "L+R" zwei Datensätze
+  const inserts = [];
+  if(csCtx.regionHasSeite && csCtx.seite === 'LR'){
+    inserts.push({ seite: 'L' });
+    inserts.push({ seite: 'R' });
+  } else {
+    inserts.push({ seite: csCtx.regionHasSeite ? csCtx.seite : null });
+  }
+
+  try {
+    const rows = inserts.map(i => ({
+      user_id: window.sbUser.id,
+      typ: csCtx.typ,
+      region: csCtx.regionName,
+      seite: i.seite,
+      wert: csCtx.wert,
+      notiz: note || null,
+      erfasst_am: ts
+    }));
+    const { error } = await window.sb
+      .from('entz_spontan_eintraege')
+      .insert(rows);
+    if(error) throw error;
+    if(typeof showToast==='function') showToast('Erfasst');
+  } catch(err) {
+    console.error('CS save error:', err);
+    if(typeof showToast==='function') showToast('Fehler: ' + err.message);
+    return;
+  }
+  closeModal('entz-m-cs');
+  await loadCardinalSigns(iso);
+  renderCs();
+}
+
+async function csOpenEdit(id){
+  const e = csList.find(x => x.id === id);
+  if(!e) return;
+  csCtx = {
+    typ: e.typ,
+    regionName: e.region,
+    regionHasSeite: false,  // wird gleich gesetzt
+    seite: e.seite,
+    wert: e.wert,
+    editingId: id
+  };
+  const meta = CS_META[e.typ];
+  document.getElementById('entz-m-cs-title').textContent = meta.icon + ' ' + meta.label + ' bearbeiten';
+  document.getElementById('entz-m-cs-time').value = e.time;
+  document.getElementById('entz-m-cs-note').value = e.notiz || '';
+  csRenderRegionChips();
+  // Set region (also fixes regionHasSeite)
+  setTimeout(() => {
+    csPickRegion(e.region);
+    if(e.seite){ csSetSide(e.seite); }
+    csSetVal(e.wert);
+  }, 0);
+  openModal('entz-m-cs');
+}
+
+async function csDel(id){
+  if(!confirm('Eintrag löschen?')) return;
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('entz_spontan_eintraege')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    if(typeof showToast==='function') showToast('Gelöscht');
+  } catch(err) {
+    console.error('CS del error:', err);
+    if(typeof showToast==='function') showToast('Fehler: ' + err.message);
+    return;
+  }
+  csList = csList.filter(x => x.id !== id);
+  renderCs();
+}
+
+function csOpenNewRegion(){
+  document.getElementById('entz-m-cs-newregion-name').value = '';
+  document.getElementById('entz-m-cs-newregion-side').checked = true;
+  const meta = CS_META[csCtx.typ];
+  document.getElementById('entz-m-cs-newregion-sub').textContent = 'Eigene Region für ' + meta.label;
+  openModal('entz-m-cs-newregion');
+}
+
+async function csSaveNewRegion(){
+  const name = document.getElementById('entz-m-cs-newregion-name').value.trim();
+  if(!name){ if(typeof showToast==='function') showToast('Name fehlt'); return; }
+  const hasSide = document.getElementById('entz-m-cs-newregion-side').checked;
+  if(!window.sbUser) return;
+  try {
+    const list = csRegions[csCtx.typ] || [];
+    const maxSort = list.length ? Math.max(...list.map(r => r.sortierung)) : 0;
+    const { data, error } = await window.sb
+      .from('entz_spontan_regionen')
+      .insert({
+        user_id: window.sbUser.id,
+        typ: csCtx.typ,
+        name,
+        hat_seitigkeit: hasSide,
+        sortierung: maxSort + 1
+      })
+      .select()
+      .single();
+    if(error) throw error;
+    csRegions[csCtx.typ].push(data);
+    csRenderRegionChips();
+    csPickRegion(name);
+    closeModal('entz-m-cs-newregion');
+    if(typeof showToast==='function') showToast('Region angelegt');
+  } catch(err) {
+    console.error('CS newRegion error:', err);
+    if(typeof showToast==='function') showToast('Fehler: ' + err.message);
+  }
+}
+
+async function openCsRegionMgr(){
+  if(!window.sbUser){ openModal('entz-m-cs-mgr'); return; }
+  // Reload um aktuellsten Stand zu zeigen
+  const iso = getActiveISO();
+  await loadCardinalSigns(iso);
+  ['schwellung','waerme','roetung'].forEach(t => {
+    const cont = document.getElementById('entz-m-cs-mgr-' + t);
+    if(!cont) return;
+    const list = csRegions[t] || [];
+    cont.innerHTML = list.map(r => `
+      <span class="grp-btn" style="cursor:default;${!r.hat_seitigkeit?'opacity:0.85':''}">
+        ${escHtml(r.name)}${r.hat_seitigkeit?' (L/R)':''}
+        <span style="margin-left:6px;cursor:pointer;color:var(--delete)" onclick="window.entz_csDelRegion('${r.id}','${t}')">✕</span>
+      </span>
+    `).join('') || '<span class="empty-hint">Keine Regionen</span>';
+  });
+  openModal('entz-m-cs-mgr');
+}
+
+async function csDelRegion(id, typ){
+  if(!confirm('Region löschen? (Bestehende Einträge bleiben erhalten)')) return;
+  if(!window.sbUser) return;
+  try {
+    const { error } = await window.sb
+      .from('entz_spontan_regionen')
+      .update({ aktiv: false })
+      .eq('id', id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    csRegions[typ] = csRegions[typ].filter(r => r.id !== id);
+    openCsRegionMgr();  // re-render
+    if(typeof showToast==='function') showToast('Region entfernt');
+  } catch(err) {
+    console.error('CS delRegion error:', err);
+    if(typeof showToast==='function') showToast('Fehler: ' + err.message);
+  }
+}
+
+function escAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,"&#39;"); }
+
   window.entz_openNewRegion = openNewRegion;
   window.entz_openRegionMgr = openRegionMgr;
   window.entz_openSpontan = openSpontan;
@@ -8720,6 +9167,18 @@ function openSpontanFotoPreview(){
   window.entz_clearFotoCtx = clearFotoCtx;
   window.entz_openSpontanFotoPicker = openSpontanFotoPicker;
   window.entz_openSpontanFotoPreview = openSpontanFotoPreview;
+  // Cardinal Signs (Akute Symptome)
+  window.entz_openCs = openCs;
+  window.entz_csPickRegion = csPickRegion;
+  window.entz_csSetSide = csSetSide;
+  window.entz_csSetVal = csSetVal;
+  window.entz_csSave = csSave;
+  window.entz_csOpenEdit = csOpenEdit;
+  window.entz_csDel = csDel;
+  window.entz_csOpenNewRegion = csOpenNewRegion;
+  window.entz_csSaveNewRegion = csSaveNewRegion;
+  window.entz_openCsRegionMgr = openCsRegionMgr;
+  window.entz_csDelRegion = csDelRegion;
 })();
 
 (function() {
