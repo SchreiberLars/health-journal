@@ -1446,6 +1446,84 @@ window.sbUser = null;
 
 
 <!-- ── STRESS & NERVENSYSTEM: Akut-Signal Modal ── -->
+
+<!-- Cardinal Sign Erfassen-Modal -->
+<div class="modal-overlay" id="entz-cs-modal">
+  <div class="modal-sheet">
+    <div class="mt" id="entz-cs-modal-title">Symptom erfassen</div>
+    <div class="mt-sub" id="entz-cs-modal-sub">Region und Stärke wählen</div>
+
+    <label class="ml">Region</label>
+    <div id="entz-cs-modal-regions" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+
+    <div id="entz-cs-modal-side-row" style="display:none;margin-top:12px">
+      <label class="ml">Seite</label>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button type="button" class="grp-btn" data-s="L" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetSide('L')" style="flex:1">Links</button>
+        <button type="button" class="grp-btn" data-s="R" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetSide('R')" style="flex:1">Rechts</button>
+        <button type="button" class="grp-btn" data-s="LR" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetSide('LR')" style="flex:1">L + R</button>
+      </div>
+    </div>
+
+    <label class="ml" style="margin-top:12px">Stärke</label>
+    <div id="entz-cs-modal-vals" style="display:flex;gap:6px;margin-top:6px">
+      <button type="button" class="grp-btn" data-v="0" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetVal(0)" style="flex:1">0</button>
+      <button type="button" class="grp-btn" data-v="1" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetVal(1)" style="flex:1">1</button>
+      <button type="button" class="grp-btn" data-v="2" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetVal(2)" style="flex:1">2</button>
+      <button type="button" class="grp-btn" data-v="3" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetVal(3)" style="flex:1">3</button>
+    </div>
+
+    <label class="ml" style="margin-top:12px">Uhrzeit</label>
+    <input class="mi" id="entz-cs-modal-time" type="time">
+
+    <label class="ml" style="margin-top:12px">Notiz <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <input class="mi" id="entz-cs-modal-note" placeholder="z.B. nach Sauna, nach Treppe steigen...">
+
+    <div class="mbr" style="margin-top:14px">
+      <button type="button" class="bs" onclick="closeModal('entz-cs-modal')">Abbrechen</button>
+      <button type="button" class="bp" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSave()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Cardinal Sign: Neue Region anlegen -->
+<div class="modal-overlay" id="entz-cs-newreg">
+  <div class="modal-sheet">
+    <div class="mt">Neue Region</div>
+    <div class="mt-sub" id="entz-cs-newreg-sub">Eigene Körperstelle hinzufügen</div>
+    <label class="ml">Name</label>
+    <input class="mi" id="entz-cs-newreg-name" placeholder="z.B. Handgelenk">
+    <label class="ml" style="margin-top:10px">
+      <input type="checkbox" id="entz-cs-newreg-side" checked style="margin-right:6px">
+      Seitigkeit (Links / Rechts)
+    </label>
+    <div class="mbr" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('entz-cs-newreg')">Abbrechen</button>
+      <button class="bp" onclick="window.entz_csSaveNewRegion()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Cardinal Sign: Regionen verwalten -->
+<div class="modal-overlay" id="entz-cs-mgr">
+  <div class="modal-sheet">
+    <div class="mt">Regionen verwalten</div>
+    <div class="mt-sub">Vorschläge für Akut-Symptome</div>
+    <div style="margin-top:10px">
+      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">💢 Schwellung</div>
+      <div id="entz-cs-mgr-schwellung" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
+      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">🔥 Wärme</div>
+      <div id="entz-cs-mgr-waerme" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
+      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">🔴 Rötung</div>
+      <div id="entz-cs-mgr-roetung" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
+    </div>
+    <div class="mbr">
+      <button class="bs" onclick="closeModal('entz-cs-mgr')">Fertig</button>
+    </div>
+  </div>
+</div>`
 <div class="modal-overlay" id="stress-m-akut">
   <div class="modal-sheet">
     <div class="mt" id="stress-m-akut-title">Akut-Signal erfassen</div>
@@ -3043,15 +3121,9 @@ function injectModules() {
       <button class="btn-ghost cs-trigger" onclick="event.stopPropagation();window.entz_openCsRegionMgr()" style="font-size:10px;padding:3px 7px">⚙</button>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
-      <button type="button" class="bp cs-trigger" style="flex:1;font-size:12px;padding:10px 6px"
-        onpointerdown="event.stopPropagation()"
-        onclick="event.stopPropagation();var d=document.getElementById('cs-dbg')||(function(){var x=document.createElement('div');x.id='cs-dbg';x.style.cssText='position:fixed;top:5px;left:5px;right:5px;background:#000;color:#0f0;padding:8px;font-size:11px;z-index:99999;font-family:monospace;border:2px solid #0f0';document.body.appendChild(x);return x})();d.innerHTML='CLICK schwellung<br>fn-exists: '+(typeof window.entz_openCs==='function')+'<br>modal-exists: '+(!!document.getElementById('entz-cs-modal'))+'<br><button onclick=\'this.parentElement.remove()\' style=background:red;color:white;border:none;padding:3px>X</button>';if(typeof window.entz_openCs==='function')window.entz_openCs('schwellung')">💢 Schwellung</button>
-      <button type="button" class="bp cs-trigger" style="flex:1;font-size:12px;padding:10px 6px"
-        onpointerdown="event.stopPropagation()"
-        onclick="event.stopPropagation();window.entz_openCs &amp;&amp; window.entz_openCs('waerme')">🔥 Wärme</button>
-      <button type="button" class="bp cs-trigger" style="flex:1;font-size:12px;padding:10px 6px"
-        onpointerdown="event.stopPropagation()"
-        onclick="event.stopPropagation();window.entz_openCs &amp;&amp; window.entz_openCs('roetung')">🔴 Rötung</button>
+      <button type="button" class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('schwellung')">💢 Schwellung</button>
+      <button type="button" class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('waerme')">🔥 Wärme</button>
+      <button type="button" class="bp" style="flex:1;font-size:12px;padding:10px 6px" onclick="window.entz_openCs('roetung')">🔴 Rötung</button>
     </div>
     <div id="entz-cs-list"></div>
   </div>
@@ -3107,85 +3179,6 @@ function injectModules() {
       <button class="bs" onclick="closeModal('entz-m-spontan')">Abbrechen</button>
       <button class="bp" onclick="window.entz_saveSpontan()">Speichern</button>
     </div>
-</div>
-
-
-<!-- Cardinal Sign Erfassen-Modal -->
-<div class="modal-overlay" id="entz-cs-modal">
-  <div class="modal-sheet">
-    <div class="mt" id="entz-cs-modal-title">Symptom erfassen</div>
-    <div class="mt-sub" id="entz-cs-modal-sub">Region und Stärke wählen</div>
-
-    <label class="ml">Region</label>
-    <div id="entz-cs-modal-regions" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
-
-    <div id="entz-cs-modal-side-row" style="display:none;margin-top:12px">
-      <label class="ml">Seite</label>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <button type="button" class="grp-btn" data-s="L" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetSide('L')" style="flex:1">Links</button>
-        <button type="button" class="grp-btn" data-s="R" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetSide('R')" style="flex:1">Rechts</button>
-        <button type="button" class="grp-btn" data-s="LR" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetSide('LR')" style="flex:1">L + R</button>
-      </div>
-    </div>
-
-    <label class="ml" style="margin-top:12px">Stärke</label>
-    <div id="entz-cs-modal-vals" style="display:flex;gap:6px;margin-top:6px">
-      <button type="button" class="grp-btn" data-v="0" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetVal(0)" style="flex:1">0</button>
-      <button type="button" class="grp-btn" data-v="1" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetVal(1)" style="flex:1">1</button>
-      <button type="button" class="grp-btn" data-v="2" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetVal(2)" style="flex:1">2</button>
-      <button type="button" class="grp-btn" data-v="3" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSetVal(3)" style="flex:1">3</button>
-    </div>
-
-    <label class="ml" style="margin-top:12px">Uhrzeit</label>
-    <input class="mi" id="entz-cs-modal-time" type="time">
-
-    <label class="ml" style="margin-top:12px">Notiz <span style="color:var(--muted);font-size:9px">(optional)</span></label>
-    <input class="mi" id="entz-cs-modal-note" placeholder="z.B. nach Sauna, nach Treppe steigen...">
-
-    <div class="mbr" style="margin-top:14px">
-      <button type="button" class="bs" onclick="closeModal('entz-cs-modal')">Abbrechen</button>
-      <button type="button" class="bp" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();window.entz_csSave()">Speichern</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- Cardinal Sign: Neue Region anlegen -->
-<div class="modal-overlay" id="entz-cs-newreg">
-  <div class="modal-sheet">
-    <div class="mt">Neue Region</div>
-    <div class="mt-sub" id="entz-cs-newreg-sub">Eigene Körperstelle hinzufügen</div>
-    <label class="ml">Name</label>
-    <input class="mi" id="entz-cs-newreg-name" placeholder="z.B. Handgelenk">
-    <label class="ml" style="margin-top:10px">
-      <input type="checkbox" id="entz-cs-newreg-side" checked style="margin-right:6px">
-      Seitigkeit (Links / Rechts)
-    </label>
-    <div class="mbr" style="margin-top:14px">
-      <button class="bs" onclick="closeModal('entz-cs-newreg')">Abbrechen</button>
-      <button class="bp" onclick="window.entz_csSaveNewRegion()">Speichern</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- Cardinal Sign: Regionen verwalten -->
-<div class="modal-overlay" id="entz-cs-mgr">
-  <div class="modal-sheet">
-    <div class="mt">Regionen verwalten</div>
-    <div class="mt-sub">Vorschläge für Akut-Symptome</div>
-    <div style="margin-top:10px">
-      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">💢 Schwellung</div>
-      <div id="entz-cs-mgr-schwellung" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
-      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">🔥 Wärme</div>
-      <div id="entz-cs-mgr-waerme" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
-      <div style="font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">🔴 Rötung</div>
-      <div id="entz-cs-mgr-roetung" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px"></div>
-    </div>
-    <div class="mbr">
-      <button class="bs" onclick="closeModal('entz-cs-mgr')">Fertig</button>
-    </div>
-  </div>
 </div>`;
   document.getElementById('get-content').innerHTML = `<div class="form-section">
   <div class="section-row">
