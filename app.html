@@ -14905,26 +14905,32 @@ async function save(){
   const text = document.getElementById('notes-m-text').value.trim();
   const time = document.getElementById('notes-m-time').value || nowTime();
   if(!text){ showToast('Text fehlt'); return; }
+
+  // Snapshot Werte, dann Modal sofort schliessen (kein Doppel-Klick-Risiko)
+  const cat = pickedCat;
+  const wasEditingId = editingId;
+  editingId = null;
+  closeModal('notes-m-capture');
+  const c = CATS[cat];
+  showToast(`${c.icon} ${c.label} ${time} ✓`);
+
   try {
-    if(editingId){
-      const n = notes.find(x=>x.id===editingId);
+    if(wasEditingId){
+      const n = notes.find(x=>x.id===wasEditingId);
       const newTs = timestampFromTime(time, n?.erfasst_am);
       const { error } = await window.sb
         .from('notizen')
-        .update({ text, kategorie: pickedCat, erfasst_am: newTs })
-        .eq('id', editingId)
+        .update({ text, kategorie: cat, erfasst_am: newTs })
+        .eq('id', wasEditingId)
         .eq('user_id', window.sbUser.id);
       if(error) throw error;
-      if(n){ n.text = text; n.time = time; n.cat = pickedCat; n.erfasst_am = newTs; }
-      // Re-sort by erfasst_am desc
+      if(n){ n.text = text; n.time = time; n.cat = cat; n.erfasst_am = newTs; }
       notes.sort((a,b)=>(b.erfasst_am||'').localeCompare(a.erfasst_am||''));
-      editingId = null;
     } else {
-      // Use today's date with chosen time
       const ts = timestampFromTime(time);
       const { data, error } = await window.sb
         .from('notizen')
-        .insert({ user_id: window.sbUser.id, kategorie: pickedCat, text, erfasst_am: ts })
+        .insert({ user_id: window.sbUser.id, kategorie: cat, text, erfasst_am: ts })
         .select()
         .single();
       if(error) throw error;
@@ -14936,12 +14942,9 @@ async function save(){
         erfasst_am: data.erfasst_am
       });
     }
-    closeModal('notes-m-capture');
     renderUI();
-    const c = CATS[pickedCat];
-    showToast(`${c.icon} ${c.label} ${time} ✓`);
   } catch(err) {
-    showToast('Fehler: ' + err.message);
+    showToast('Fehler beim Speichern: ' + err.message);
   }
 }
 
