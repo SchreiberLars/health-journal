@@ -696,6 +696,8 @@ body.sort-mode .sort-controls{display:inline-flex}
 // ─── SUPABASE BOOTSTRAP ───
 const SUPABASE_URL = 'https://qfzzzxlxyvaokmrkbdrp.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_nGpFcOPg5OKxFK140HMjoQ_mXHGw_R9';
+window.SB_URL = SUPABASE_URL;
+window.SB_KEY = SUPABASE_ANON_KEY;
 window.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
@@ -1537,6 +1539,52 @@ window.sbUser = null;
     </div>
   </div>
 </div>`
+
+
+<!-- Foto-Export-Modal: signed URLs fuer Auswertung in Claude-Session -->
+<div class="modal-overlay" id="entz-foto-export">
+  <div class="modal-sheet">
+    <div class="mt">🔍 Fotos für Auswertung</div>
+    <div class="mt-sub">Generiere temporäre Links zu deinen Hautfotos für eine KI-Auswertung</div>
+
+    <label class="ml">Region</label>
+    <div id="entz-fe-regions" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px"></div>
+
+    <label class="ml" style="margin-top:12px">Zeitraum</label>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button type="button" class="grp-btn" data-d="7" onclick="window.entz_feSetDays(7)" style="flex:1">7T</button>
+      <button type="button" class="grp-btn sel" data-d="14" onclick="window.entz_feSetDays(14)" style="flex:1">14T</button>
+      <button type="button" class="grp-btn" data-d="30" onclick="window.entz_feSetDays(30)" style="flex:1">30T</button>
+    </div>
+
+    <label class="ml" style="margin-top:12px">Anker</label>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button type="button" class="grp-btn sel" data-a="morgen" onclick="window.entz_feSetAnker('morgen')" style="flex:1">🌅 Morgen</button>
+      <button type="button" class="grp-btn" data-a="abend" onclick="window.entz_feSetAnker('abend')" style="flex:1">🌆 Abend</button>
+      <button type="button" class="grp-btn" data-a="beide" onclick="window.entz_feSetAnker('beide')" style="flex:1">Beide</button>
+    </div>
+
+    <div id="entz-fe-result" style="margin-top:14px;display:none">
+      <label class="ml">Ergebnis</label>
+      <div id="entz-fe-summary" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+      <textarea id="entz-fe-output" readonly style="width:100%;min-height:140px;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);resize:vertical"></textarea>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button type="button" class="bs" style="flex:1" onclick="window.entz_feCopy()">📋 Alles kopieren</button>
+        <button type="button" class="bs" style="flex:1" onclick="window.entz_feShare()">📤 Teilen</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">
+        Links sind 2 Stunden gültig. Füge diese Liste in den Claude-Chat ein, dort werden die Bilder zur Analyse abgerufen.
+      </div>
+    </div>
+
+    <div class="mbr" style="margin-top:14px">
+      <button type="button" class="bs" onclick="closeModal('entz-foto-export')">Schließen</button>
+      <button type="button" class="bp" id="entz-fe-generate-btn" onclick="window.entz_feGenerate()">Generieren</button>
+    </div>
+  </div>
+</div>
+
+
 <div class="modal-overlay" id="stress-m-akut">
   <div class="modal-sheet">
     <div class="mt" id="stress-m-akut-title">Akut-Signal erfassen</div>
@@ -3099,7 +3147,10 @@ function injectModules() {
   document.getElementById('entz-content').innerHTML = `<div class="form-section">
   <div class="section-row">
     <div class="section-title">Entzündung & Haut</div>
-    <button class="btn-ghost" onclick="window.entz_openRegionMgr()">⚙ Regionen</button>
+    <div style="display:flex;gap:6px">
+      <button class="btn-ghost" onclick="window.entz_openFotoExport()" title="Fotos für Auswertung exportieren">🔍 Fotos</button>
+      <button class="btn-ghost" onclick="window.entz_openRegionMgr()">⚙ Regionen</button>
+    </div>
   </div>
 
   
@@ -9184,6 +9235,221 @@ async function csDelRegion(id, typ){
 
 function escAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,"&#39;"); }
 
+// ════════════════════════════════════════════════════════════
+// ── FOTO-EXPORT (signed URLs fuer Claude-Auswertung) ─────────
+// ════════════════════════════════════════════════════════════
+const FE_FUNCTION_URL = 'https://qfzzzxlxyvaokmrkbdrp.supabase.co/functions/v1/entz-fotos-list';
+let feCtx = {
+  selectedRegions: new Set(),  // Region-Namen (Strings)
+  days: 14,
+  anker: 'morgen',             // 'morgen'|'abend'|'beide'
+  lastResult: null
+};
+
+async function openFotoExport(){
+  // Lade Regionen aus dem aktuellen State (regions ist die State-Variable des Moduls)
+  const regs = (typeof regions !== 'undefined' && Array.isArray(regions)) ? regions : [];
+  const cont = document.getElementById('entz-fe-regions');
+  if(!regs.length){
+    cont.innerHTML = '<span class="empty-hint">Keine Regionen verfügbar</span>';
+  } else {
+    feCtx.selectedRegions = new Set();
+    cont.innerHTML = regs.map(r => `
+      <button type="button" class="grp-btn fe-region-btn" data-name="${escAttr(r.name)}"
+        onclick="window.entz_feToggleRegion('${escAttr(r.name)}')">${escHtml(r.name)}</button>
+    `).join('');
+  }
+  // Reset UI
+  document.getElementById('entz-fe-result').style.display = 'none';
+  document.getElementById('entz-fe-output').value = '';
+  feCtx.lastResult = null;
+  // Tage/Anker auf Defaults setzen
+  feCtx.days = 14;
+  feCtx.anker = 'morgen';
+  document.querySelectorAll('#entz-foto-export [data-d]').forEach(b => b.classList.toggle('sel', b.getAttribute('data-d') === '14'));
+  document.querySelectorAll('#entz-foto-export [data-a]').forEach(b => b.classList.toggle('sel', b.getAttribute('data-a') === 'morgen'));
+  openModal('entz-foto-export');
+}
+
+function feToggleRegion(name){
+  if(feCtx.selectedRegions.has(name)){
+    feCtx.selectedRegions.delete(name);
+  } else {
+    feCtx.selectedRegions.add(name);
+  }
+  document.querySelectorAll('.fe-region-btn').forEach(b => {
+    b.classList.toggle('sel', feCtx.selectedRegions.has(b.getAttribute('data-name')));
+  });
+}
+
+function feSetDays(d){
+  feCtx.days = d;
+  document.querySelectorAll('#entz-foto-export [data-d]').forEach(b => {
+    b.classList.toggle('sel', parseInt(b.getAttribute('data-d'),10) === d);
+  });
+}
+
+function feSetAnker(a){
+  feCtx.anker = a;
+  document.querySelectorAll('#entz-foto-export [data-a]').forEach(b => {
+    b.classList.toggle('sel', b.getAttribute('data-a') === a);
+  });
+}
+
+async function feGenerate(){
+  if(feCtx.selectedRegions.size === 0){
+    if(typeof showToast === 'function') showToast('Mindestens eine Region wählen');
+    return;
+  }
+  if(!window.sbUser){
+    if(typeof showToast === 'function') showToast('Nicht eingeloggt');
+    return;
+  }
+
+  const btn = document.getElementById('entz-fe-generate-btn');
+  const originalBtnText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    // Datumsbereich berechnen (UTC-sicher: lokale Komponenten)
+    const today = new Date();
+    const toDate = isoDate(today);
+    const fromDateObj = new Date(today.getFullYear(), today.getMonth(), today.getDate() - feCtx.days + 1);
+    const fromDate = isoDate(fromDateObj);
+
+    // Edge Function: pro Region einzeln aufrufen, dann mergen
+    const allItems = [];
+    const errors = [];
+    const ankerForCall = feCtx.anker === 'beide' ? null : feCtx.anker;
+
+    // User-Token aus aktiver Session holen
+    const { data: sessionData } = await window.sb.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if(!accessToken){
+      throw new Error('Keine aktive Session — bitte neu einloggen');
+    }
+
+    for (const regionName of feCtx.selectedRegions) {
+      const body = {
+        region: regionName,
+        from_date: fromDate,
+        to_date: toDate,
+        anker: ankerForCall,
+        expires_in: 7200
+      };
+      try {
+        const resp = await fetch(FE_FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': window.SB_KEY || '',
+            'Authorization': 'Bearer ' + accessToken
+          },
+          body: JSON.stringify(body)
+        });
+        if(!resp.ok){
+          const txt = await resp.text();
+          errors.push(`${regionName}: HTTP ${resp.status} ${txt.slice(0,80)}`);
+          continue;
+        }
+        const data = await resp.json();
+        if(data.error){
+          errors.push(`${regionName}: ${data.error}`);
+          continue;
+        }
+        (data.items || []).forEach(it => allItems.push(it));
+      } catch(err) {
+        errors.push(`${regionName}: ${err.message || err}`);
+      }
+    }
+
+    // Sortierung: Datum aufsteigend, dann Region, dann Anker
+    allItems.sort((a, b) => {
+      if(a.tagesdatum !== b.tagesdatum) return a.tagesdatum.localeCompare(b.tagesdatum);
+      if(a.region !== b.region) return a.region.localeCompare(b.region);
+      return (a.anker || '').localeCompare(b.anker || '');
+    });
+
+    // Output formatieren
+    const lines = [];
+    lines.push(`Hautfotos für KI-Auswertung`);
+    lines.push(`Zeitraum: ${fromDate} bis ${toDate} (${feCtx.days} Tage)`);
+    lines.push(`Anker: ${feCtx.anker === 'beide' ? 'Morgen + Abend' : (feCtx.anker === 'morgen' ? '🌅 Morgen' : '🌆 Abend')}`);
+    lines.push(`Regionen: ${[...feCtx.selectedRegions].join(', ')}`);
+    lines.push(``);
+
+    if(allItems.length === 0){
+      lines.push('(Keine Fotos im gewählten Zeitraum gefunden)');
+    } else {
+      allItems.forEach(it => {
+        const ankerSym = it.anker === 'morgen' ? '🌅' : (it.anker === 'abend' ? '🌆' : '');
+        lines.push(`${it.tagesdatum} ${ankerSym} ${it.region} (Wert ${it.wert})`);
+        lines.push(it.signed_url || '(URL fehlgeschlagen)');
+        lines.push('');
+      });
+    }
+
+    if(errors.length){
+      lines.push('--- Fehler ---');
+      errors.forEach(e => lines.push(e));
+    }
+
+    const out = lines.join('\n');
+    document.getElementById('entz-fe-output').value = out;
+    document.getElementById('entz-fe-summary').textContent = `${allItems.length} Foto(s) gefunden${errors.length ? ', ' + errors.length + ' Fehler' : ''}`;
+    document.getElementById('entz-fe-result').style.display = 'block';
+    feCtx.lastResult = out;
+  } catch(err) {
+    if(typeof showToast === 'function') showToast('Fehler: ' + (err.message || err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalBtnText;
+  }
+}
+
+async function feCopy(){
+  const out = document.getElementById('entz-fe-output');
+  if(!out || !out.value){ if(typeof showToast === 'function') showToast('Nichts zu kopieren'); return; }
+  try {
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(out.value);
+      if(typeof showToast === 'function') showToast('Kopiert');
+    } else {
+      // Fallback fuer iOS Safari aelter
+      out.select();
+      document.execCommand('copy');
+      if(typeof showToast === 'function') showToast('Kopiert');
+    }
+  } catch(err) {
+    if(typeof showToast === 'function') showToast('Kopieren fehlgeschlagen: ' + err.message);
+  }
+}
+
+async function feShare(){
+  const out = document.getElementById('entz-fe-output');
+  if(!out || !out.value){ if(typeof showToast === 'function') showToast('Nichts zu teilen'); return; }
+  if(navigator.share){
+    try {
+      await navigator.share({
+        title: 'Hautfotos für Auswertung',
+        text: out.value
+      });
+    } catch(err) {
+      // User hat abgebrochen oder Share fehlgeschlagen - kein Toast
+    }
+  } else {
+    if(typeof showToast === 'function') showToast('Share auf diesem Gerät nicht verfügbar');
+  }
+}
+
+// Hilfsfunktion: ISO-Date lokal (kein UTC-Drift wie toISOString)
+function isoDate(d){
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
   window.entz_openNewRegion = openNewRegion;
   window.entz_openRegionMgr = openRegionMgr;
   window.entz_openSpontan = openSpontan;
@@ -9213,6 +9479,14 @@ function escAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;
   window.entz_csSaveNewRegion = csSaveNewRegion;
   window.entz_openCsRegionMgr = openCsRegionMgr;
   window.entz_csDelRegion = csDelRegion;
+  // Foto-Export (signed URLs)
+  window.entz_openFotoExport = openFotoExport;
+  window.entz_feToggleRegion = feToggleRegion;
+  window.entz_feSetDays = feSetDays;
+  window.entz_feSetAnker = feSetAnker;
+  window.entz_feGenerate = feGenerate;
+  window.entz_feCopy = feCopy;
+  window.entz_feShare = feShare;
 })();
 
 (function() {
