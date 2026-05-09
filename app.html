@@ -9573,6 +9573,8 @@ async function loadStammdaten(){
       sortierung: s.sortierung,
       tags: (s.get_sorte_tag || []).map(st => st.tag_id)
     }));
+    // Alphabetisch sortieren (stabil — kein Verschieben mehr durch DB-Sortierung)
+    getraenke.sort((a,b) => a.name.localeCompare(b.name, 'de'));
     stammdatenLoaded = true;
   } catch(err) {
     console.error('Get-Stammdaten-Lade-Fehler:', err);
