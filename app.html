@@ -2370,7 +2370,7 @@ async function collectTimelineItems(iso){
   // → Wir holen alle Einträge wo entweder schlaf_start ODER schlaf_ende am aktuellen Tag liegt.
   const garminEnde = await safeQuery(()=> window.sb
     .from('garmin_taeglich')
-    .select('tagesdatum, schlaf_start, schlaf_ende, schlaf_dauer_min, schlaf_score')
+    .select('tagesdatum, schlaf_start, schlaf_ende, schlaf_dauer_min, schlaf_score, schlaf_avg_hr')
     .eq('user_id', window.sbUser.id)
     .eq('tagesdatum', iso));
   (garminEnde?.data||[]).forEach(r => {
@@ -2378,10 +2378,11 @@ async function collectTimelineItems(iso){
       const dur = r.schlaf_dauer_min;
       const dauerStr = dur ? `${Math.floor(dur/60)}h ${dur%60}m` : '';
       const scoreStr = r.schlaf_score != null ? `Score ${r.schlaf_score}` : '';
+      const hrStr = r.schlaf_avg_hr != null ? `❤ ${r.schlaf_avg_hr} bpm` : '';
       items.push({
         ts: r.schlaf_ende, mod:'garmin',
         title: '☀ Aufwachen',
-        detail: [dauerStr, scoreStr].filter(Boolean).join(' · ')
+        detail: [dauerStr, scoreStr, hrStr].filter(Boolean).join(' · ')
       });
     }
     // Einschlafen wenn am gleichen Tag (Schlaf nach Mitternacht begonnen)
