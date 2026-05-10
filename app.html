@@ -3344,6 +3344,7 @@ function injectModules() {
   <div class="section-row">
     <div class="section-title">Ernährung</div>
     <div style="display:flex;gap:6px">
+      <button class="btn-ghost" onclick="window.ern_openLieferantenMgr()" title="Lieferanten verwalten">🛒</button>
       <button class="btn-del" id="ern-btn-del" onclick="window.ern_toggleDelMode()">🗑 Löschen</button>
       <button class="btn-edit-mode" id="ern-btn-edit" onclick="window.ern_toggleEditMode()">✎ Bearbeiten</button>
       <button class="btn-ghost" onclick="window.ern_openNewItem()">+ Neu</button>
@@ -3377,6 +3378,7 @@ function injectModules() {
     <div id="ern-target-indicator" style="font-size:9px;color:var(--accent3);border:1px solid var(--accent3);
       border-radius:10px;padding:1px 8px"></div>
   </div>
+    <div id="ern-lieferanten-row" style="display:none;flex-wrap:wrap;gap:5px;margin-bottom:8px"></div>
     <input class="mi" id="ern-bibli-search" placeholder="🔍 Suchen... (Enter = ersten Treffer hinzufügen)"
       style="margin-bottom:8px;font-size:12px"
       oninput="window.ern_filterBibli(this.value)"
@@ -3519,6 +3521,44 @@ function injectModules() {
       <button class="bp" onclick="window.ern_saveEditItem()">Speichern</button>
     </div>
   </div>
+</div>
+
+
+<!-- Lieferanten-Manager-Modal -->
+<div class="modal-overlay" id="ern-m-lieferanten">
+  <div class="modal-sheet">
+    <div class="mt">🛒 Lieferanten</div>
+    <div class="mt-sub">Verwalte deine Bezugsquellen (Antipasti-Mann, Fischstand, ...)</div>
+    <div id="ern-lieferanten-list" style="display:flex;flex-direction:column;gap:6px;margin-top:10px"></div>
+    <div class="modal-btn-row" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('ern-m-lieferanten')">Schließen</button>
+      <button class="bp" onclick="window.ern_openNewLieferant()">+ Neuer Lieferant</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Lieferant anlegen / bearbeiten -->
+<div class="modal-overlay" id="ern-m-lieferant-edit">
+  <div class="modal-sheet">
+    <div class="mt" id="ern-m-lieferant-edit-title">Lieferant anlegen</div>
+    <label class="ml">Name</label>
+    <input class="mi" id="ern-m-lieferant-name" placeholder="z.B. Antipasti-Mann">
+    <label class="ml" style="margin-top:10px">Emoji <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <input class="mi" id="ern-m-lieferant-emoji" placeholder="z.B. 🥖" maxlength="4">
+
+    <label class="ml" style="margin-top:14px">Sortiment <span style="color:var(--muted);font-size:9px">(antippen zum Anhaken)</span></label>
+    <input class="mi" id="ern-m-lieferant-search" placeholder="🔍 Lebensmittel suchen..." style="margin-top:6px;font-size:12px"
+      oninput="window.ern_filterLieferantItems(this.value)">
+    <div id="ern-m-lieferant-items" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;max-height:240px;overflow-y:auto"></div>
+
+    <div class="modal-btn-row" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('ern-m-lieferant-edit')">Abbrechen</button>
+      <button class="bs" id="ern-m-lieferant-del-btn" onclick="window.ern_deleteLieferant()" style="display:none;color:var(--delete)">Löschen</button>
+      <button class="bp" onclick="window.ern_saveLieferant()">Speichern</button>
+    </div>
+  </div>
+</div>
 </div>`;
   document.getElementById('schmerz-content').innerHTML = `<div class="form-section">
   <div class="section-row">
@@ -10289,6 +10329,7 @@ async function loadBibliothek(){
 async function loadFromDb(){
   if(!window.sbUser || !window.sb) return;
   await loadBibliothek();
+  if(typeof window.ern_loadLieferanten === 'function') await window.ern_loadLieferanten();
   const iso = getActiveISO();
   mahlzeitIds = {};
   mealEntries = { fruehstueck:[], mittagessen:[], abendessen:[] };
@@ -10817,7 +10858,11 @@ function renderBibliothek(){
   }
   const container = document.getElementById('ern-bibliothek-list');
   const q = bibliFilter.trim().toLowerCase();
-  const filtered = q ? bibliothek.filter(it => it.name.toLowerCase().includes(q)) : bibliothek;
+  // Erst Lieferanten-Filter anwenden, dann Suchfilter
+  const baseList = (typeof window.ern_getFilteredBibliotheksItems === 'function')
+    ? window.ern_getFilteredBibliotheksItems()
+    : bibliothek;
+  const filtered = q ? baseList.filter(it => it.name.toLowerCase().includes(q)) : baseList;
   const noHit = q && filtered.length===0;
   container.innerHTML = filtered.map(item=>{
     if(delMode){
@@ -11406,6 +11451,249 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   window.ern_toggleZutatenSection = toggleZutatenSection;
   window.ern_filterBibli = filterBibli;
   window.ern_searchEnter = searchEnter;
+
+  // ════════════════════════════════════════════════════════════
+  // ── LIEFERANTEN (Sortiments-Buendel) ────────────────────────
+  // ════════════════════════════════════════════════════════════
+
+  let lieferanten = [];                // [{id, name, emoji, sortierung, lebensmittel_ids:[]}]
+  let activeLieferantId = null;        // Filter aktiv im Mahlzeit-Bibliothek
+  let lieferantEditCtx = {             // State des Edit-Modals
+    id: null,
+    selectedItemIds: new Set(),
+    itemFilter: ''
+  };
+
+  async function loadLieferanten(){
+    if(!window.sbUser) return;
+    try {
+      const { data: lRows, error: lErr } = await window.sb
+        .from('ern_lieferanten')
+        .select('id, name, emoji, sortierung, ern_lieferant_lebensmittel(lebensmittel_id)')
+        .eq('user_id', window.sbUser.id)
+        .eq('aktiv', true)
+        .order('name', { ascending: true });
+      if(lErr) throw lErr;
+      lieferanten = (lRows||[]).map(l => ({
+        id: l.id,
+        name: l.name,
+        emoji: l.emoji || '',
+        sortierung: l.sortierung || 0,
+        lebensmittel_ids: new Set((l.ern_lieferant_lebensmittel||[]).map(x => x.lebensmittel_id))
+      }));
+      lieferanten.sort((a,b) => a.name.localeCompare(b.name, 'de'));
+      renderLieferantenRow();
+    } catch(err) {
+      console.error('Lieferanten Load Error:', err);
+    }
+  }
+
+  function renderLieferantenRow(){
+    const row = document.getElementById('ern-lieferanten-row');
+    if(!row) return;
+    if(!lieferanten.length){ row.style.display = 'none'; return; }
+    row.style.display = 'flex';
+    row.innerHTML = lieferanten.map(l => {
+      const sel = activeLieferantId === l.id;
+      return `<button type="button" class="chip${sel ? ' sel' : ''}" data-lid="${l.id}"
+        style="${sel ? 'background:var(--accent);color:#f5f0e8;border-color:var(--accent)' : ''}"
+        onclick="window.ern_toggleLieferantFilter('${l.id}')">${l.emoji ? l.emoji + ' ' : ''}${escHtml(l.name)}</button>`;
+    }).join('');
+  }
+
+  function toggleLieferantFilter(lid){
+    activeLieferantId = (activeLieferantId === lid) ? null : lid;
+    renderLieferantenRow();
+    renderBibliothek();  // re-render mit Filter
+  }
+
+  // Helper: gefiltere Lebensmittel-Liste basierend auf activeLieferantId
+  function getFilteredBibliotheksItems(){
+    if(!activeLieferantId) return bibliothek;
+    const l = lieferanten.find(x => x.id === activeLieferantId);
+    if(!l) return bibliothek;
+    return bibliothek.filter(item => l.lebensmittel_ids.has(item.id));
+  }
+
+  // ── Manager-Modal ──
+  async function openLieferantenMgr(){
+    await loadLieferanten();
+    renderLieferantenList();
+    openModal('ern-m-lieferanten');
+  }
+
+  function renderLieferantenList(){
+    const cont = document.getElementById('ern-lieferanten-list');
+    if(!lieferanten.length){
+      cont.innerHTML = '<div style="font-size:11px;color:var(--muted);text-align:center;padding:20px">Noch keine Lieferanten angelegt</div>';
+      return;
+    }
+    cont.innerHTML = lieferanten.map(l => {
+      const itemCount = l.lebensmittel_ids.size;
+      return `<button type="button" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:'JetBrains Mono',monospace"
+        onclick="window.ern_openEditLieferant('${l.id}')">
+        <span>${l.emoji ? l.emoji + ' ' : ''}${escHtml(l.name)}</span>
+        <span style="font-size:10px;color:var(--muted)">${itemCount} Item${itemCount === 1 ? '' : 's'}</span>
+      </button>`;
+    }).join('');
+  }
+
+  // ── Lieferant anlegen / bearbeiten ──
+  function openNewLieferant(){
+    lieferantEditCtx = { id: null, selectedItemIds: new Set(), itemFilter: '' };
+    document.getElementById('ern-m-lieferant-edit-title').textContent = 'Lieferant anlegen';
+    document.getElementById('ern-m-lieferant-name').value = '';
+    document.getElementById('ern-m-lieferant-emoji').value = '';
+    document.getElementById('ern-m-lieferant-search').value = '';
+    document.getElementById('ern-m-lieferant-del-btn').style.display = 'none';
+    closeModal('ern-m-lieferanten');
+    renderLieferantItems();
+    openModal('ern-m-lieferant-edit');
+  }
+
+  function openEditLieferant(lid){
+    const l = lieferanten.find(x => x.id === lid);
+    if(!l) return;
+    lieferantEditCtx = {
+      id: lid,
+      selectedItemIds: new Set(l.lebensmittel_ids),
+      itemFilter: ''
+    };
+    document.getElementById('ern-m-lieferant-edit-title').textContent = 'Lieferant bearbeiten';
+    document.getElementById('ern-m-lieferant-name').value = l.name;
+    document.getElementById('ern-m-lieferant-emoji').value = l.emoji || '';
+    document.getElementById('ern-m-lieferant-search').value = '';
+    document.getElementById('ern-m-lieferant-del-btn').style.display = '';
+    closeModal('ern-m-lieferanten');
+    renderLieferantItems();
+    openModal('ern-m-lieferant-edit');
+  }
+
+  function renderLieferantItems(){
+    const cont = document.getElementById('ern-m-lieferant-items');
+    const q = lieferantEditCtx.itemFilter.trim().toLowerCase();
+    // Nur "echte" Lebensmittel (kein typ='gericht'), alphabetisch
+    const items = bibliothek
+      .filter(it => it.typ !== 'gericht')
+      .filter(it => !q || it.name.toLowerCase().includes(q))
+      .sort((a,b) => a.name.localeCompare(b.name, 'de'));
+    if(!items.length){
+      cont.innerHTML = '<span style="font-size:11px;color:var(--muted)">Kein Treffer</span>';
+      return;
+    }
+    cont.innerHTML = items.map(it => {
+      const sel = lieferantEditCtx.selectedItemIds.has(it.id);
+      const bw = it.bewertung || 'unklar';
+      return `<button type="button" class="chip${sel ? ' sel' : ''}"
+        style="background:${sel ? 'var(--accent)' : BW_COLOR[bw]};color:${sel ? '#f5f0e8' : 'inherit'};border-color:${sel ? 'var(--accent)' : BW_BORDER[bw]}"
+        onclick="window.ern_toggleLieferantItem('${it.id}')">${escHtml(it.name)}</button>`;
+    }).join('');
+  }
+
+  function filterLieferantItems(val){
+    lieferantEditCtx.itemFilter = val || '';
+    renderLieferantItems();
+  }
+
+  function toggleLieferantItem(itemId){
+    if(lieferantEditCtx.selectedItemIds.has(itemId)){
+      lieferantEditCtx.selectedItemIds.delete(itemId);
+    } else {
+      lieferantEditCtx.selectedItemIds.add(itemId);
+    }
+    renderLieferantItems();
+  }
+
+  async function saveLieferant(){
+    const name = document.getElementById('ern-m-lieferant-name').value.trim();
+    if(!name){ if(typeof showToast === 'function') showToast('Name fehlt'); return; }
+    const emoji = document.getElementById('ern-m-lieferant-emoji').value.trim() || null;
+    if(!window.sbUser) return;
+
+    try {
+      let lieferantId = lieferantEditCtx.id;
+      if(lieferantId){
+        // Update
+        const { error: uErr } = await window.sb
+          .from('ern_lieferanten')
+          .update({ name, emoji, updated_at: new Date().toISOString() })
+          .eq('id', lieferantId)
+          .eq('user_id', window.sbUser.id);
+        if(uErr) throw uErr;
+        // Verknuepfungen ersetzen: alte loeschen, neue anlegen
+        const { error: dErr } = await window.sb
+          .from('ern_lieferant_lebensmittel')
+          .delete()
+          .eq('lieferant_id', lieferantId);
+        if(dErr) throw dErr;
+      } else {
+        // Insert
+        const { data: nRow, error: nErr } = await window.sb
+          .from('ern_lieferanten')
+          .insert({ user_id: window.sbUser.id, name, emoji })
+          .select()
+          .single();
+        if(nErr) throw nErr;
+        lieferantId = nRow.id;
+      }
+      // Verknuepfungen anlegen
+      if(lieferantEditCtx.selectedItemIds.size){
+        const links = [...lieferantEditCtx.selectedItemIds].map(lmid => ({
+          lieferant_id: lieferantId,
+          lebensmittel_id: lmid
+        }));
+        const { error: iErr } = await window.sb
+          .from('ern_lieferant_lebensmittel')
+          .insert(links);
+        if(iErr) throw iErr;
+      }
+      if(typeof showToast === 'function') showToast('Gespeichert');
+      closeModal('ern-m-lieferant-edit');
+      await loadLieferanten();
+      // Wenn Mahlzeit-Bibliothek einen aktiven Lieferanten-Filter hat, neu rendern
+      if(activeLieferantId === lieferantId) renderBibliothek();
+    } catch(err) {
+      console.error('Lieferant save error:', err);
+      if(typeof showToast === 'function') showToast('Fehler: ' + err.message);
+    }
+  }
+
+  async function deleteLieferant(){
+    if(!lieferantEditCtx.id) return;
+    if(!confirm('Diesen Lieferanten löschen? (Lebensmittel selbst bleiben erhalten)')) return;
+    try {
+      const { error } = await window.sb
+        .from('ern_lieferanten')
+        .update({ aktiv: false })
+        .eq('id', lieferantEditCtx.id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      if(typeof showToast === 'function') showToast('Gelöscht');
+      // Falls aktiv gefiltert, Filter aufheben
+      if(activeLieferantId === lieferantEditCtx.id){
+        activeLieferantId = null;
+      }
+      closeModal('ern-m-lieferant-edit');
+      await loadLieferanten();
+      renderBibliothek();
+    } catch(err) {
+      console.error('Lieferant delete error:', err);
+      if(typeof showToast === 'function') showToast('Fehler: ' + err.message);
+    }
+  }
+
+  // Window-Exports fuer Lieferanten
+  window.ern_openLieferantenMgr = openLieferantenMgr;
+  window.ern_openNewLieferant = openNewLieferant;
+  window.ern_openEditLieferant = openEditLieferant;
+  window.ern_toggleLieferantItem = toggleLieferantItem;
+  window.ern_filterLieferantItems = filterLieferantItems;
+  window.ern_saveLieferant = saveLieferant;
+  window.ern_deleteLieferant = deleteLieferant;
+  window.ern_toggleLieferantFilter = toggleLieferantFilter;
+  // Public-Hooks fuer Render-Pfad
+  window.ern_loadLieferanten = loadLieferanten;
+  window.ern_getFilteredBibliotheksItems = getFilteredBibliotheksItems;
 })();
 
 (function() {
