@@ -1585,6 +1585,42 @@ window.sbUser = null;
 </div>
 
 
+<!-- Lieferanten-Manager-Modal -->
+<div class="modal-overlay" id="ern-m-lieferanten">
+  <div class="modal-sheet">
+    <div class="mt">🛒 Lieferanten</div>
+    <div class="mt-sub">Verwalte deine Bezugsquellen (Antipasti-Mann, Fischstand, ...)</div>
+    <div id="ern-lieferanten-list" style="display:flex;flex-direction:column;gap:6px;margin-top:10px"></div>
+    <div class="modal-btn-row" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('ern-m-lieferanten')">Schließen</button>
+      <button class="bp" onclick="window.ern_openNewLieferant()">+ Neuer Lieferant</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Lieferant anlegen / bearbeiten -->
+<div class="modal-overlay" id="ern-m-lieferant-edit">
+  <div class="modal-sheet">
+    <div class="mt" id="ern-m-lieferant-edit-title">Lieferant anlegen</div>
+    <label class="ml">Name</label>
+    <input class="mi" id="ern-m-lieferant-name" placeholder="z.B. Antipasti-Mann">
+    <label class="ml" style="margin-top:10px">Emoji <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+    <input class="mi" id="ern-m-lieferant-emoji" placeholder="z.B. 🥖" maxlength="4">
+
+    <label class="ml" style="margin-top:14px">Sortiment <span style="color:var(--muted);font-size:9px">(antippen zum Anhaken)</span></label>
+    <input class="mi" id="ern-m-lieferant-search" placeholder="🔍 Lebensmittel suchen..." style="margin-top:6px;font-size:12px"
+      oninput="window.ern_filterLieferantItems(this.value)">
+    <div id="ern-m-lieferant-items" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;max-height:240px;overflow-y:auto"></div>
+
+    <div class="modal-btn-row" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('ern-m-lieferant-edit')">Abbrechen</button>
+      <button class="bs" id="ern-m-lieferant-del-btn" onclick="window.ern_deleteLieferant()" style="display:none;color:var(--delete)">Löschen</button>
+      <button class="bp" onclick="window.ern_saveLieferant()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="stress-m-akut">
   <div class="modal-sheet">
     <div class="mt" id="stress-m-akut-title">Akut-Signal erfassen</div>
@@ -3524,41 +3560,6 @@ function injectModules() {
 </div>
 
 
-<!-- Lieferanten-Manager-Modal -->
-<div class="modal-overlay" id="ern-m-lieferanten">
-  <div class="modal-sheet">
-    <div class="mt">🛒 Lieferanten</div>
-    <div class="mt-sub">Verwalte deine Bezugsquellen (Antipasti-Mann, Fischstand, ...)</div>
-    <div id="ern-lieferanten-list" style="display:flex;flex-direction:column;gap:6px;margin-top:10px"></div>
-    <div class="modal-btn-row" style="margin-top:14px">
-      <button class="bs" onclick="closeModal('ern-m-lieferanten')">Schließen</button>
-      <button class="bp" onclick="window.ern_openNewLieferant()">+ Neuer Lieferant</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- Lieferant anlegen / bearbeiten -->
-<div class="modal-overlay" id="ern-m-lieferant-edit">
-  <div class="modal-sheet">
-    <div class="mt" id="ern-m-lieferant-edit-title">Lieferant anlegen</div>
-    <label class="ml">Name</label>
-    <input class="mi" id="ern-m-lieferant-name" placeholder="z.B. Antipasti-Mann">
-    <label class="ml" style="margin-top:10px">Emoji <span style="color:var(--muted);font-size:9px">(optional)</span></label>
-    <input class="mi" id="ern-m-lieferant-emoji" placeholder="z.B. 🥖" maxlength="4">
-
-    <label class="ml" style="margin-top:14px">Sortiment <span style="color:var(--muted);font-size:9px">(antippen zum Anhaken)</span></label>
-    <input class="mi" id="ern-m-lieferant-search" placeholder="🔍 Lebensmittel suchen..." style="margin-top:6px;font-size:12px"
-      oninput="window.ern_filterLieferantItems(this.value)">
-    <div id="ern-m-lieferant-items" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;max-height:240px;overflow-y:auto"></div>
-
-    <div class="modal-btn-row" style="margin-top:14px">
-      <button class="bs" onclick="closeModal('ern-m-lieferant-edit')">Abbrechen</button>
-      <button class="bs" id="ern-m-lieferant-del-btn" onclick="window.ern_deleteLieferant()" style="display:none;color:var(--delete)">Löschen</button>
-      <button class="bp" onclick="window.ern_saveLieferant()">Speichern</button>
-    </div>
-  </div>
-</div>
 </div>`;
   document.getElementById('schmerz-content').innerHTML = `<div class="form-section">
   <div class="section-row">
