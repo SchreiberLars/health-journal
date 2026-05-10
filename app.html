@@ -11573,9 +11573,8 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
   function renderLieferantItems(){
     const cont = document.getElementById('ern-m-lieferant-items');
     const q = lieferantEditCtx.itemFilter.trim().toLowerCase();
-    // Nur "echte" Lebensmittel (kein typ='gericht'), alphabetisch
+    // Lebensmittel + Gerichte beide moeglich, alphabetisch
     const items = bibliothek
-      .filter(it => it.typ !== 'gericht')
       .filter(it => !q || it.name.toLowerCase().includes(q))
       .sort((a,b) => a.name.localeCompare(b.name, 'de'));
     if(!items.length){
@@ -11585,9 +11584,11 @@ window.ern_lpEntryAction=function(el){if(typeof openMoveModal==='function')openM
     cont.innerHTML = items.map(it => {
       const sel = lieferantEditCtx.selectedItemIds.has(it.id);
       const bw = it.bewertung || 'unklar';
+      const isGericht = it.type === 'gericht';
+      const prefix = isGericht ? '🍽 ' : '';
       return `<button type="button" class="chip${sel ? ' sel' : ''}"
         style="background:${sel ? 'var(--accent)' : BW_COLOR[bw]};color:${sel ? '#f5f0e8' : 'inherit'};border-color:${sel ? 'var(--accent)' : BW_BORDER[bw]}"
-        onclick="window.ern_toggleLieferantItem('${it.id}')">${escHtml(it.name)}</button>`;
+        onclick="window.ern_toggleLieferantItem('${it.id}')">${prefix}${escHtml(it.name)}</button>`;
     }).join('');
   }
 
