@@ -3631,6 +3631,10 @@ function injectModules() {
       <button class="grp-btn" data-g="morgen" onclick="this.classList.toggle('sel')">🌅 Morgen</button>
       <button class="grp-btn" data-g="abend"  onclick="this.classList.toggle('sel')">🌆 Abend</button>
     </div>
+    <label class="ml" style="margin-top:12px;display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="schmerz-m-region-seitigkeit" checked style="margin:0">
+      <span style="text-transform:none;letter-spacing:0">Seitigkeit (Links / Rechts unterscheiden)</span>
+    </label>
     <div class="mbr">
       <button class="bs" onclick="closeModal('schmerz-m-region')">Abbrechen</button>
       <button class="bp" onclick="window.schmerz_saveRegion()">Speichern</button>
@@ -12299,6 +12303,8 @@ function openNewRegion(){
   document.getElementById('schmerz-m-region-title').textContent='Region anlegen';
   document.getElementById('schmerz-m-region-name').value='';
   document.querySelectorAll('#schmerz-m-region-grps .grp-btn').forEach(b=>b.classList.add('sel'));
+  const cb = document.getElementById('schmerz-m-region-seitigkeit');
+  if(cb) cb.checked = true; // Default an
   openModal('schmerz-m-region');
   setTimeout(()=>document.getElementById('schmerz-m-region-name').focus(),100);
 }
@@ -12311,6 +12317,8 @@ function openEditRegion(rid){
   document.getElementById('schmerz-m-region-name').value=r.name;
   document.querySelectorAll('#schmerz-m-region-grps .grp-btn').forEach(b=>
     b.classList.toggle('sel',r.groups.includes(b.dataset.g)));
+  const cb = document.getElementById('schmerz-m-region-seitigkeit');
+  if(cb) cb.checked = !!r.hatSeitigkeit;
   openModal('schmerz-m-region');
   setTimeout(()=>document.getElementById('schmerz-m-region-name').focus(),100);
 }
@@ -12318,16 +12326,18 @@ function openEditRegion(rid){
 async function saveRegion(){
   const name=document.getElementById('schmerz-m-region-name').value.trim();
   const groups=[...document.querySelectorAll('#schmerz-m-region-grps .grp-btn.sel')].map(b=>b.dataset.g);
+  const seitCheckbox = document.getElementById('schmerz-m-region-seitigkeit');
+  const hatSeitigkeit = seitCheckbox ? !!seitCheckbox.checked : true;
   if(!name){showToast('Name fehlt');return}
   if(!groups.length){showToast('Mindestens einen Block wählen');return}
   if(!window.sbUser){
     if(editRegionCtx){
       const r=regions.find(x=>x.id===editRegionCtx.rid);
-      if(r){r.name=name;r.groups=groups;}
+      if(r){r.name=name;r.groups=groups;r.hatSeitigkeit=hatSeitigkeit;}
       showToast(`${name} gespeichert ✓`);
     } else {
       if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){showToast('Bereits vorhanden');return}
-      regions.push({id:uid(),name,groups});
+      regions.push({id:uid(),name,groups,hatSeitigkeit});
       regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
       showToast(`${name} hinzugefügt`);
     }
@@ -12339,12 +12349,12 @@ async function saveRegion(){
       const rid = editRegionCtx.rid;
       const { error } = await window.sb
         .from('schmerz_regionen')
-        .update({ name, groups })
+        .update({ name, groups, hat_seitigkeit: hatSeitigkeit })
         .eq('id', rid)
         .eq('user_id', window.sbUser.id);
       if(error) throw error;
       const r=regions.find(x=>x.id===rid);
-      if(r){r.name=name;r.groups=groups;}
+      if(r){r.name=name;r.groups=groups;r.hatSeitigkeit=hatSeitigkeit;}
       showToast(`${name} gespeichert ✓`);
     } else {
       if(regions.find(r=>r.name.toLowerCase()===name.toLowerCase())){
@@ -12357,13 +12367,14 @@ async function saveRegion(){
           user_id: window.sbUser.id,
           name,
           groups,
+          hat_seitigkeit: hatSeitigkeit,
           aktiv: true,
           sortierung: sortMax + 10
         })
         .select()
         .single();
       if(error) throw error;
-      regions.push({id:data.id, name, groups, sortierung: data.sortierung});
+      regions.push({id:data.id, name, groups, sortierung: data.sortierung, hatSeitigkeit});
       showToast(`${name} hinzugefügt`);
     }
     regions.sort((a,b)=>a.name.localeCompare(b.name,'de'));
