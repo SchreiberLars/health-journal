@@ -3741,6 +3741,17 @@ function injectModules() {
       <button class="bs" onclick="closeModal('stuhl-m-legend')">Schließen</button>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay" id="stuhl-m-time">
+  <div class="modal-sheet">
+    <div class="mt">Zeit ändern</div>
+    <input class="mi" id="stuhl-m-time-input" type="time" style="margin-top:8px">
+    <div class="mbr" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('stuhl-m-time')">Abbrechen</button>
+      <button class="bp" onclick="window.stuhl_saveTime()">Speichern</button>
+    </div>
+  </div>
 </div>`;
   document.getElementById('akt-content').innerHTML = `<div class="form-section">
   <div class="section-row">
@@ -12987,7 +12998,7 @@ function renderEntries(){
 
     return `<div class="entry-card" data-entry-id="${e.id}">
       <div class="entry-header">
-        <span class="entry-time">${e.time}</span>
+        <span class="entry-time" onclick="window.stuhl_openEditTime('${e.id}')" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--muted);text-underline-offset:3px" title="Zeit ändern">${e.time}</span>
         <span class="entry-badge" style="background:${color}20;color:${color};border:1px solid ${color};border-radius:20px;padding:2px 8px;font-size:10px">Bristol ${b} · ${label}</span>
         <button class="entry-action del" onclick="window.stuhl_deleteEntry('${e.id}')" title="Löschen">✕</button>
       </div>
@@ -13090,6 +13101,47 @@ function showToast(msg){
   el.textContent=msg;el.classList.add('show');
   clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2500);
 }
+// ── ZEIT-EDIT ────────────────────────────
+let timeEditCtx = null;  // entry id
+
+function openEditTime(id){
+  const e = entries.find(x=>x.id===id);
+  if(!e) return;
+  timeEditCtx = id;
+  document.getElementById('stuhl-m-time-input').value = e.time;
+  openModal('stuhl-m-time');
+}
+
+async function saveTime(){
+  if(!timeEditCtx) return;
+  const newTime = document.getElementById('stuhl-m-time-input').value;
+  if(!newTime){ showToast('Keine Zeit angegeben'); return; }
+  const e = entries.find(x=>x.id===timeEditCtx);
+  if(!e){ timeEditCtx = null; closeModal('stuhl-m-time'); return; }
+  const id = timeEditCtx;
+  const iso = getActiveISO();
+  const [hh, mm] = newTime.split(':');
+  const dt = new Date(`${iso}T${hh}:${mm}:00`);
+  const newTs = dt.toISOString();
+  try {
+    if(window.sbUser){
+      const { error } = await window.sb
+        .from('stuhl_eintraege')
+        .update({ erfasst_am: newTs })
+        .eq('id', id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    }
+    e.time = newTime;
+    closeModal('stuhl-m-time');
+    renderUI();
+    showToast('Zeit aktualisiert ✓');
+  } catch(err) {
+    showToast('Fehler: ' + err.message);
+  }
+  timeEditCtx = null;
+}
+
 // Exports
   window.stuhl_deleteEntry = deleteEntry;
   window.stuhl_setVal = setVal;
@@ -13098,6 +13150,8 @@ function showToast(msg){
   window.stuhl_openLegend = openLegend;
   window.stuhl_toggleComment = toggleComment;
   window.stuhl_saveComment = saveComment;
+  window.stuhl_openEditTime = openEditTime;
+  window.stuhl_saveTime = saveTime;
   window.stuhl_render = render;
 })();
 
