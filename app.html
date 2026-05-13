@@ -1079,6 +1079,7 @@ window.sbUser = null;
     <div class="section-right">
       <span class="anker-marks" id="anker-bef">
         <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="mittag" title="Mittag">🍴</span>
         <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
       </span>
       <span class="section-chevron" id="chev-bef">▼</span>
@@ -3036,6 +3037,23 @@ function injectModules() {
     <div class="anker-body" id="bef-body-morgen" style="display:none">
       <div id="bef-metrics-morgen"></div>
       <div id="bef-comment-area-morgen"></div>
+    </div>
+  </div>
+
+  
+  <div class="anker-card" id="bef-card-mittag">
+    <div class="anker-header" onclick="window.bef_toggleAnker('mittag')">
+      <span class="anker-label">🍴 Mittag</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="anker-badge" id="bef-badge-mittag">—</span>
+        <button class="comment-btn" id="bef-cbtn-mittag"
+          onclick="event.stopPropagation();window.bef_toggleComment('mittag')" title="Kommentar">💬</button>
+        <span style="color:var(--muted);font-size:12px" id="bef-arr-mittag">▼</span>
+      </span>
+    </div>
+    <div class="anker-body" id="bef-body-mittag" style="display:none">
+      <div id="bef-metrics-mittag"></div>
+      <div id="bef-comment-area-mittag"></div>
     </div>
   </div>
 
@@ -7079,13 +7097,13 @@ let metriken = []; // [{id, name, scale, pflicht, aktiv, sortierung}]
 function uid(){return Math.random().toString(36).slice(2,9)}
 
 // ── STATE ─────────────────────────────────
-// ankerData: { morgen: { metrikId:wert, ... }, abend:{...} }
-let ankerData = { morgen:{}, abend:{} };
-let ankerOpen = { morgen:true, abend:false };
-let ankerComments = { morgen:'', abend:'' };
-let ankerCommentOpen = { morgen:false, abend:false };
+// ankerData: { morgen: { metrikId:wert, ... }, mittag:{...}, abend:{...} }
+let ankerData = { morgen:{}, mittag:{}, abend:{} };
+let ankerOpen = { morgen:true, mittag:false, abend:false };
+let ankerComments = { morgen:'', mittag:'', abend:'' };
+let ankerCommentOpen = { morgen:false, mittag:false, abend:false };
 // which optional metriken are active per anker (only those with data show automatically)
-let activeOptional = { morgen: new Set(), abend: new Set() };
+let activeOptional = { morgen: new Set(), mittag: new Set(), abend: new Set() };
 // spontaneous entries (NOCH NICHT MIGRIERT — bleibt lokal vorerst)
 let spontanList = [];
 let krankData = { aktiv: false, kommentar: '' };
@@ -7141,9 +7159,9 @@ async function loadFromDb(){
   await loadMetriken();
   const iso = getActiveISO();
   // Reset
-  ankerData = { morgen:{}, abend:{} };
-  ankerComments = { morgen:'', abend:'' };
-  activeOptional = { morgen: new Set(), abend: new Set() };
+  ankerData = { morgen:{}, mittag:{}, abend:{} };
+  ankerComments = { morgen:'', mittag:'', abend:'' };
+  activeOptional = { morgen: new Set(), mittag: new Set(), abend: new Set() };
   krankData = { aktiv: false, kommentar: '' };
   spontanList = [];
 
@@ -7328,7 +7346,7 @@ function renderUI(){
   if(kArea)kArea.style.display=krankData.aktiv?'block':'none';
   if(kInput&&document.activeElement!==kInput)kInput.value=krankData.kommentar||'';
 
-  ['morgen','abend'].forEach(anker => {
+  ['morgen','mittag','abend'].forEach(anker => {
     const body = document.getElementById('bef-body-'+anker);
     const arr = document.getElementById('bef-arr-'+anker);
     if(ankerOpen[anker]){
@@ -7348,7 +7366,7 @@ function renderUI(){
   // wenn mindestens ein Metrik-Wert ODER ein Kommentar vorhanden ist
   if(typeof setAnkerStatus === 'function'){
     const status = {};
-    ['morgen','abend'].forEach(a => {
+    ['morgen','mittag','abend'].forEach(a => {
       const hasValues = Object.values(ankerData[a]||{}).some(v => v != null);
       const hasComment = !!(ankerComments[a] && ankerComments[a].trim());
       status[a] = hasValues || hasComment;
@@ -7426,7 +7444,7 @@ function renderCommentArea(anker){
   if(isOpen){
     container.innerHTML = `
       <textarea class="comment-textarea" id="ta-${anker}"
-        placeholder="Kommentar zum ${anker==='morgen'?'Morgen':'Abend'}..."
+        placeholder="Kommentar zum ${anker==='morgen'?'Morgen':(anker==='mittag'?'Mittag':'Abend')}..."
       >${comment}</textarea>
       <div class="comment-actions">
         <button class="comment-clear" onclick="document.getElementById('ta-${anker}').value=''">Leeren</button>
