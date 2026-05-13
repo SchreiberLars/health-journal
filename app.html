@@ -995,13 +995,12 @@ window.sbUser = null;
 <!-- ── DATE HEADER ── -->
 <div class="date-header" id="date-header">
   <button class="date-nav" onclick="shiftDay(-1)">‹</button>
-  <div class="date-center" onclick="openCalendar()">
-    <div class="date-main" id="date-main">Heute</div>
-    <div class="date-sub" id="date-sub">Tippen zum Wechseln</div>
+  <div class="date-center">
+    <div class="date-main" id="date-main" onclick="openCalendar()" style="cursor:pointer">Heute</div>
+    <div class="date-sub" id="date-sub" onclick="handleSubClick()" style="cursor:pointer">Tippen zum Wechseln</div>
   </div>
   <div id="date-badge"></div>
   <button class="date-nav" onclick="shiftDay(+1)">›</button>
-  <button class="date-nav" id="btn-today" onclick="goToToday()" title="Zum heutigen Tag" style="display:none;font-size:10px;padding:5px 8px">Heute</button>
   <button id="btn-collapse-all" onclick="toggleAllSections()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:9px;color:var(--muted);cursor:pointer;font-family:'JetBrains Mono',monospace;white-space:nowrap;flex-shrink:0">▼ Alle zuklappen</button>
   <button id="btn-sort-mode" onclick="toggleSortMode()" title="Module sortieren" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:11px;color:var(--muted);cursor:pointer;flex-shrink:0">⇅</button>
 </div>
@@ -1732,14 +1731,33 @@ function renderDateHeader(){
   else if(diff===1) mainHtml=`Morgen · <em>${dateStr}</em>`;
   else mainHtml=`<em>${dateStr} ${d.getFullYear()}</em>`;
   document.getElementById('date-main').innerHTML=mainHtml;
-  document.getElementById('date-sub').textContent=`${d.getDate()}. ${MONTHS_DE[d.getMonth()]} ${d.getFullYear()}`;
+  // Sub-Zeile: Hinweis je nach Tag
+  const subEl = document.getElementById('date-sub');
+  if(diff===0){
+    subEl.textContent = `${d.getDate()}. ${MONTHS_DE[d.getMonth()]} ${d.getFullYear()}`;
+    subEl.style.color = '';
+    subEl.style.fontWeight = '';
+  } else {
+    subEl.innerHTML = `↩ Zurück zu heute`;
+    subEl.style.color = 'var(--accent)';
+    subEl.style.fontWeight = '600';
+  }
   const badge=document.getElementById('date-badge');
   if(diff===0) badge.innerHTML='<span class="badge-today">Heute</span>';
   else if(diff>0) badge.innerHTML='<span class="badge-future">🗓 Geplant</span>';
   else badge.innerHTML='<span class="badge-past">Vergangen</span>';
-  // "Heute"-Button nur anzeigen wenn wir NICHT auf heute sind
-  const todayBtn = document.getElementById('btn-today');
-  if(todayBtn) todayBtn.style.display = (diff===0) ? 'none' : 'inline-block';
+}
+
+function handleSubClick(){
+  const d=activeDate, t=todayDate();
+  const diff=Math.round((d-t)/(1000*60*60*24));
+  if(diff===0){
+    // Auf heute: oeffne Kalender (wie der Haupt-Tap)
+    openCalendar();
+  } else {
+    // Anderer Tag: spring zu heute
+    goToToday();
+  }
 }
 
 function goToToday(){
