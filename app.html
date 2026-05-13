@@ -1164,6 +1164,11 @@ window.sbUser = null;
       <span class="section-badge" id="badge-ern">—</span>
     </div>
     <div class="section-right">
+      <span class="anker-marks" id="anker-ern">
+        <span class="anker-mark" data-anker="morgen" title="Frühstück">☀</span>
+        <span class="anker-mark" data-anker="mittag" title="Mittagessen">🍴</span>
+        <span class="anker-mark" data-anker="abend" title="Abendessen">🌙</span>
+      </span>
       <span class="section-chevron" id="chev-ern">▼</span>
     </div>
   </div>
@@ -10670,6 +10675,15 @@ function renderUI(){
   renderMeals();
   renderBibliothek();
   renderSpontan();
+  // Anker-Indikator: Frühstück → morgen, Mittagessen → mittag, Abendessen → abend
+  // "Erfasst" = mindestens ein Item im Slot
+  if(typeof setAnkerStatus === 'function'){
+    setAnkerStatus('ern', {
+      morgen: (mealEntries.fruehstueck || []).length > 0,
+      mittag: (mealEntries.mittagessen || []).length > 0,
+      abend:  (mealEntries.abendessen  || []).length > 0
+    });
+  }
 }
 
 function renderSpontan(){
