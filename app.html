@@ -1001,6 +1001,7 @@ window.sbUser = null;
   </div>
   <div id="date-badge"></div>
   <button class="date-nav" onclick="shiftDay(+1)">›</button>
+  <button class="date-nav" id="btn-today" onclick="goToToday()" title="Zum heutigen Tag" style="display:none;font-size:10px;padding:5px 8px">Heute</button>
   <button id="btn-collapse-all" onclick="toggleAllSections()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:9px;color:var(--muted);cursor:pointer;font-family:'JetBrains Mono',monospace;white-space:nowrap;flex-shrink:0">▼ Alle zuklappen</button>
   <button id="btn-sort-mode" onclick="toggleSortMode()" title="Module sortieren" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:11px;color:var(--muted);cursor:pointer;flex-shrink:0">⇅</button>
 </div>
@@ -1736,6 +1737,15 @@ function renderDateHeader(){
   if(diff===0) badge.innerHTML='<span class="badge-today">Heute</span>';
   else if(diff>0) badge.innerHTML='<span class="badge-future">🗓 Geplant</span>';
   else badge.innerHTML='<span class="badge-past">Vergangen</span>';
+  // "Heute"-Button nur anzeigen wenn wir NICHT auf heute sind
+  const todayBtn = document.getElementById('btn-today');
+  if(todayBtn) todayBtn.style.display = (diff===0) ? 'none' : 'inline-block';
+}
+
+function goToToday(){
+  activeDate = todayDate();
+  renderDateHeader();
+  rerenderAllModulesForDate();
 }
 
 function shiftDay(n){
