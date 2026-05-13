@@ -1037,7 +1037,9 @@ window.sbUser = null;
     <div class="section-right">
       <span class="anker-marks" id="anker-supp">
         <span class="anker-mark" data-anker="morgen" title="Morgen">☀</span>
+        <span class="anker-mark" data-anker="mittag" title="Mittag">🍴</span>
         <span class="anker-mark" data-anker="abend" title="Abend">🌙</span>
+        <span class="anker-mark" data-anker="schlaf" title="Schlaf">💤</span>
       </span>
       <span class="section-chevron" id="chev-supp">▼</span>
     </div>
@@ -5247,12 +5249,14 @@ function render(){
 
 function renderUI(){
   document.getElementById('supp-stacks').innerHTML=STACKS.map(renderStack).join('');
-  // Anker-Indikator: Morgen-Stack + Abend-Stack (Mittag/Schlaf werden nicht angezeigt)
+  // Anker-Indikator: alle 4 Stacks
   // "Erfasst" = mindestens ein Supplement in dem Stack heute "taken"
   if(typeof setAnkerStatus === 'function'){
     setAnkerStatus('supp', {
       morgen: takenCount('morgen') > 0,
-      abend:  takenCount('abend')  > 0
+      mittag: takenCount('mittag') > 0,
+      abend:  takenCount('abend')  > 0,
+      schlaf: takenCount('schlaf') > 0
     });
   }
 }
