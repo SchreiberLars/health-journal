@@ -5977,6 +5977,7 @@ async function loadStammdaten(){
     if(rErr) throw rErr;
     GROUPS = (rData||[]).map(r => ({
       id: r.id,
+      name: r.name || '',
       label: `${r.emoji||''} ${r.name}`.trim()
     }));
     GROUPS.forEach(g => { if(openGroups[g.id] === undefined) openGroups[g.id] = false; });
@@ -6126,16 +6127,16 @@ function renderUI(){
   // Anker-Indikator: erfasst wenn mind. 1 Item in der jeweiligen Routine markiert
   // ODER Kommentar gesetzt
   if(typeof setAnkerStatus === 'function'){
-    // Map Routine-IDs auf 'morgen'/'abend' (heuristisch via Sortierung: 1. = morgen, letzte = abend)
+    // Routinen explizit per Name auf morgen/abend mappen (nicht per Position -
+    // es gibt auch eine "Bei Bedarf"-Routine, die kein Anker ist)
     const status = {morgen:false, abend:false};
-    if(GROUPS.length >= 1){
-      const morgenG = GROUPS[0];
-      status.morgen = doneCount(morgenG.id) > 0 || !!(comments[morgenG.id]&&comments[morgenG.id].trim());
-    }
-    if(GROUPS.length >= 2){
-      const abendG = GROUPS[GROUPS.length-1];
-      status.abend = doneCount(abendG.id) > 0 || !!(comments[abendG.id]&&comments[abendG.id].trim());
-    }
+    GROUPS.forEach(g => {
+      const n = (g.name||'').toLowerCase();
+      const hasData = doneCount(g.id) > 0 || !!(comments[g.id]&&comments[g.id].trim());
+      if(!hasData) return;
+      if(n.includes('morgen')) status.morgen = true;
+      else if(n.includes('abend')) status.abend = true;
+    });
     setAnkerStatus('haut', status);
   }
 }
