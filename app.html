@@ -1203,7 +1203,7 @@ window.sbUser = null;
   <div class="section-header" onclick="toggleSection('stuhl')">
     <div class="section-left">
       <span>💩</span>
-      <span class="section-label">Stuhlgang</span>
+      <span class="section-label">Verdauung</span>
       <span class="section-badge" id="badge-stuhl">—</span>
     </div>
     <div class="section-right">
@@ -1813,7 +1813,7 @@ function confirmDate(){activeDate=new Date(calSelectedDate);closeModal('m-cal');
 
 // Re-render alle Module nach Tag-Wechsel (laedt aus DB neu, soweit Modul migriert)
 function rerenderAllModulesForDate(){
-  ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
+  ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','verd','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+' rerender:',e.message);}
   });
@@ -3774,6 +3774,15 @@ function injectModules() {
     <span>Jetzt erfassen</span>
     <span style="font-size:9px;opacity:0.75">· Uhrzeit wird gesetzt</span>
   </button>
+</div>
+
+<div class="form-section">
+  <div class="section-row">
+    <div class="section-title">Akute Symptome</div>
+    <div style="font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace">Skala 1–3</div>
+  </div>
+  <div id="verd-akut-list"></div>
+  <div id="verd-akut-buttons" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
 </div>
 
 <div class="modal-overlay" id="stuhl-m-legend">
@@ -13224,6 +13233,221 @@ async function saveTime(){
   window.stuhl_render = render;
 })();
 
+// ═══════════════════════════════════════════
+// VERDAUUNGS-AKUT-SYMPTOME (Teil des Verdauungs-Moduls)
+// ═══════════════════════════════════════════
+(function(){
+let types = [];     // [{id, name, emoji, sortierung}]
+let entries = [];   // [{id, typ_id, wert, time, kommentar, erfasst_am}]
+let lastLoadedISO = null;
+let commentOpen = {}; // {entryId: bool}
+
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d=activeDate, y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dd}`;
+  }
+  return new Date().toISOString().slice(0,10);
+}
+
+async function loadFromDb(){
+  if(!window.sb || !window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    // Typen einmalig laden (bleiben pro Session konstant)
+    if(types.length === 0){
+      const {data:tData, error:tErr} = await window.sb
+        .from('verdauung_akut_typen')
+        .select('id,name,emoji,sortierung')
+        .eq('user_id', window.sbUser.id)
+        .eq('aktiv', true)
+        .order('sortierung', {ascending:true});
+      if(tErr) throw tErr;
+      types = tData || [];
+    }
+    // Eintraege pro Tag
+    const {data:eData, error:eErr} = await window.sb
+      .from('verdauung_akut_eintraege')
+      .select('id,typ_id,wert,kommentar,erfasst_am')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso)
+      .order('erfasst_am', {ascending:true});
+    if(eErr) throw eErr;
+    entries = (eData||[]).map(e => ({
+      id: e.id, typ_id: e.typ_id, wert: e.wert, kommentar: e.kommentar || '',
+      erfasst_am: e.erfasst_am,
+      time: new Date(e.erfasst_am).toTimeString().slice(0,5)
+    }));
+    renderUI();
+  } catch(err){
+    console.warn('verd akut load:', err.message);
+  }
+}
+
+function render(){
+  const iso = getActiveISO();
+  if(window.sbUser && lastLoadedISO !== iso){
+    lastLoadedISO = iso;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function renderUI(){
+  renderEntries();
+  renderButtons();
+}
+
+function typeById(id){return types.find(t => t.id === id);}
+
+function renderEntries(){
+  const el = document.getElementById('verd-akut-list');
+  if(!el) return;
+  if(!entries.length){
+    el.innerHTML = '<div style="color:var(--muted);font-size:11px;font-style:italic;margin:6px 0">Keine akuten Symptome erfasst</div>';
+    return;
+  }
+  el.innerHTML = entries.map(e => {
+    const t = typeById(e.typ_id);
+    if(!t) return '';
+    const emoji = t.emoji || '•';
+    const stufenHtml = [1,2,3].map(v => {
+      const active = (e.wert === v);
+      return `<button onclick="window.verd_setVal('${e.id}',${v})"
+        style="width:26px;height:26px;border-radius:50%;border:1.5px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'transparent'};color:${active?'#f5f0e8':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;font-weight:${active?'700':'400'}">${v}</button>`;
+    }).join('');
+    const cmtOpen = !!commentOpen[e.id];
+    const cmtBtn = `<button onclick="window.verd_toggleComment('${e.id}')" title="Kommentar"
+      style="background:none;border:none;font-size:14px;cursor:pointer;padding:2px 4px;opacity:${e.kommentar?'1':'0.5'}">💬</button>`;
+    const cmtArea = cmtOpen ? `
+      <div style="margin-top:6px;padding-left:34px">
+        <textarea class="comment-textarea" id="ta-verd-${e.id}"
+          placeholder="Kommentar (optional)…">${escHtml(e.kommentar)}</textarea>
+        <div class="comment-actions">
+          <button class="comment-clear" onclick="document.getElementById('ta-verd-${e.id}').value=''">Leeren</button>
+          <button class="comment-save" onclick="window.verd_saveComment('${e.id}')">Speichern</button>
+        </div>
+      </div>` : (e.kommentar ? `<div style="margin-top:4px;padding-left:34px;color:var(--muted);font-size:11px;font-style:italic" onclick="window.verd_toggleComment('${e.id}')">${escHtml(e.kommentar)}</div>` : '');
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px;width:22px;text-align:center">${emoji}</span>
+        <span style="flex:1;font-size:12px">${escHtml(t.name)}</span>
+        <span style="display:flex;gap:4px">${stufenHtml}</span>
+        <span class="entry-time" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);min-width:36px;text-align:right">${e.time}</span>
+        ${cmtBtn}
+        <button onclick="window.verd_deleteEntry('${e.id}')" title="Löschen"
+          style="background:none;border:none;font-size:13px;cursor:pointer;color:var(--delete);padding:2px 4px">✕</button>
+      </div>
+      ${cmtArea}
+    </div>`;
+  }).join('');
+}
+
+function renderButtons(){
+  const el = document.getElementById('verd-akut-buttons');
+  if(!el) return;
+  el.innerHTML = types.map(t => {
+    const emoji = t.emoji || '•';
+    return `<button onclick="window.verd_addEntry('${t.id}')"
+      style="flex:1;min-width:90px;padding:8px 10px;border-radius:18px;border:1px dashed var(--border);background:var(--surface2);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center">
+      <span style="font-size:14px">${emoji}</span>${escHtml(t.name)}
+    </button>`;
+  }).join('');
+}
+
+async function addEntry(typId){
+  if(!window.sb || !window.sbUser) {showToast('Nicht eingeloggt'); return;}
+  const t = typeById(typId);
+  if(!t) return;
+  try {
+    const {data, error} = await window.sb
+      .from('verdauung_akut_eintraege')
+      .insert({user_id: window.sbUser.id, typ_id: typId, wert: 1})
+      .select('id,typ_id,wert,kommentar,erfasst_am')
+      .single();
+    if(error) throw error;
+    entries.push({
+      id: data.id, typ_id: data.typ_id, wert: data.wert, kommentar: '',
+      erfasst_am: data.erfasst_am,
+      time: new Date(data.erfasst_am).toTimeString().slice(0,5)
+    });
+    renderUI();
+    showToast(`${t.name} erfasst (1) ✓`);
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+async function setVal(entryId, wert){
+  const e = entries.find(x => x.id === entryId);
+  if(!e) return;
+  try {
+    const {error} = await window.sb
+      .from('verdauung_akut_eintraege')
+      .update({wert})
+      .eq('id', entryId)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    e.wert = wert;
+    renderUI();
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+async function deleteEntry(entryId){
+  if(!confirm('Eintrag löschen?')) return;
+  try {
+    const {error} = await window.sb
+      .from('verdauung_akut_eintraege')
+      .delete()
+      .eq('id', entryId)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    entries = entries.filter(e => e.id !== entryId);
+    delete commentOpen[entryId];
+    renderUI();
+    showToast('Gelöscht ✓');
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+function toggleComment(entryId){
+  commentOpen[entryId] = !commentOpen[entryId];
+  renderUI();
+}
+
+async function saveComment(entryId){
+  const ta = document.getElementById('ta-verd-' + entryId);
+  if(!ta) return;
+  const newCmt = ta.value.trim();
+  try {
+    const {error} = await window.sb
+      .from('verdauung_akut_eintraege')
+      .update({kommentar: newCmt || null})
+      .eq('id', entryId)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    const e = entries.find(x => x.id === entryId);
+    if(e) e.kommentar = newCmt;
+    commentOpen[entryId] = false;
+    renderUI();
+    showToast('Kommentar gespeichert ✓');
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+window.verd_addEntry = addEntry;
+window.verd_setVal = setVal;
+window.verd_deleteEntry = deleteEntry;
+window.verd_toggleComment = toggleComment;
+window.verd_saveComment = saveComment;
+window.verd_render = render;
+})();
+
 (function() {
 const DAUER_QUICK = [15,20,30,45,60,90];
 let aktivitaeten = [];
@@ -16323,7 +16547,7 @@ async function initAllModules(){
   injectModules();
   // Custom-Reihenfolge laden (falls vorhanden) bevor wir rendern
   await loadOrderAndApply();
-  ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
+  ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','verd','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+':',e.message);}
   });
