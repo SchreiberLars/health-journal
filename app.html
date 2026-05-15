@@ -3818,6 +3818,17 @@ function injectModules() {
       <button class="bp" onclick="window.stuhl_saveTime()">Speichern</button>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay" id="verd-m-time">
+  <div class="modal-sheet">
+    <div class="mt">Zeit ändern</div>
+    <input class="mi" id="verd-m-time-input" type="time" style="margin-top:8px">
+    <div class="mbr" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('verd-m-time')">Abbrechen</button>
+      <button class="bp" onclick="window.verd_saveTime()">Speichern</button>
+    </div>
+  </div>
 </div>`;
   document.getElementById('akt-content').innerHTML = `<div class="form-section">
   <div class="section-row">
@@ -13334,7 +13345,7 @@ function renderEntries(){
         <span style="font-size:16px;width:22px;text-align:center">${emoji}</span>
         <span style="flex:1;font-size:12px">${escHtml(t.name)}</span>
         <span style="display:flex;gap:4px">${stufenHtml}</span>
-        <span class="entry-time" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);min-width:36px;text-align:right">${e.time}</span>
+        <span class="entry-time" onclick="window.verd_openEditTime('${e.id}')" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);min-width:36px;text-align:right;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--muted);text-underline-offset:3px" title="Zeit ändern">${e.time}</span>
         ${cmtBtn}
         <button onclick="window.verd_deleteEntry('${e.id}')" title="Löschen"
           style="background:none;border:none;font-size:13px;cursor:pointer;color:var(--delete);padding:2px 4px">✕</button>
@@ -13440,11 +13451,55 @@ async function saveComment(entryId){
   }
 }
 
+// ── ZEIT-EDIT ────────────────────────────
+let timeEditCtx = null;
+
+function openEditTime(id){
+  const e = entries.find(x => x.id === id);
+  if(!e) return;
+  timeEditCtx = id;
+  document.getElementById('verd-m-time-input').value = e.time;
+  openModal('verd-m-time');
+}
+
+async function saveTime(){
+  if(!timeEditCtx) return;
+  const newTime = document.getElementById('verd-m-time-input').value;
+  if(!newTime){ showToast('Keine Zeit angegeben'); return; }
+  const e = entries.find(x => x.id === timeEditCtx);
+  if(!e){ timeEditCtx = null; closeModal('verd-m-time'); return; }
+  const id = timeEditCtx;
+  const iso = getActiveISO();
+  const [hh, mm] = newTime.split(':');
+  const dt = new Date(`${iso}T${hh}:${mm}:00`);
+  const newTs = dt.toISOString();
+  try {
+    if(window.sbUser){
+      const {error} = await window.sb
+        .from('verdauung_akut_eintraege')
+        .update({erfasst_am: newTs})
+        .eq('id', id)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+    }
+    e.erfasst_am = newTs;
+    e.time = newTime;
+    closeModal('verd-m-time');
+    renderUI();
+    showToast('Zeit aktualisiert ✓');
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+  timeEditCtx = null;
+}
+
 window.verd_addEntry = addEntry;
 window.verd_setVal = setVal;
 window.verd_deleteEntry = deleteEntry;
 window.verd_toggleComment = toggleComment;
 window.verd_saveComment = saveComment;
+window.verd_openEditTime = openEditTime;
+window.verd_saveTime = saveTime;
 window.verd_render = render;
 })();
 
