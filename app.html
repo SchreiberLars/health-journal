@@ -2168,6 +2168,7 @@ const TIMELINE_MODULES = [
   {key:'regen',   icon:'🔋', label:'Regeneration',     color:'var(--c-regen)'},
   {key:'messw',   icon:'📊', label:'Messwert',         color:'var(--c-messw)'},
   {key:'stuhl',   icon:'💩', label:'Stuhlgang',        color:'var(--c-stuhl)'},
+  {key:'verd',    icon:'🌀', label:'Verdauung',        color:'var(--c-stuhl)'},
   {key:'stress',  icon:'⚡', label:'Akut-Signal',      color:'var(--c-bef)'},
   {key:'schmerz', icon:'💪', label:'Schmerz-Episode',  color:'var(--c-schmerz)'},
   {key:'entz',    icon:'🔥', label:'Akut-Symptom',     color:'var(--c-entz)'},
@@ -2212,14 +2213,15 @@ async function collectTimelineItems(iso){
   }
 
   // Stammdaten cachen die wir auflösen muessen (Namen)
-  const [medsData, suppsData, prodsData, sortenData, aktArtenData, akutTypenData, regionsData] = await Promise.all([
+  const [medsData, suppsData, prodsData, sortenData, aktArtenData, akutTypenData, regionsData, verdTypenData] = await Promise.all([
     safeQuery(()=> window.sb.from('medikamente').select('id,name').eq('user_id', window.sbUser.id)),
     safeQuery(()=> window.sb.from('supplements').select('id,name').eq('user_id', window.sbUser.id)),
     safeQuery(()=> window.sb.from('haut_produkte').select('id,name').eq('user_id', window.sbUser.id)),
     safeQuery(()=> window.sb.from('get_sorten').select('id,name').eq('user_id', window.sbUser.id)),
     safeQuery(()=> window.sb.from('akt_arten').select('id,name,emoji').eq('user_id', window.sbUser.id)),
     safeQuery(()=> window.sb.from('stress_akut_typen').select('id,name,emoji').eq('user_id', window.sbUser.id)),
-    safeQuery(()=> window.sb.from('schmerz_regionen').select('id,name').eq('user_id', window.sbUser.id))
+    safeQuery(()=> window.sb.from('schmerz_regionen').select('id,name').eq('user_id', window.sbUser.id)),
+    safeQuery(()=> window.sb.from('verdauung_akut_typen').select('id,name,emoji').eq('user_id', window.sbUser.id))
   ]);
   const lookup = {
     med: Object.fromEntries(((medsData?.data)||[]).map(x=>[x.id,x.name])),
@@ -2228,7 +2230,8 @@ async function collectTimelineItems(iso){
     get: Object.fromEntries(((sortenData?.data)||[]).map(x=>[x.id,x.name])),
     akt: Object.fromEntries(((aktArtenData?.data)||[]).map(x=>[x.id,(x.emoji||'')+' '+x.name])),
     stress: Object.fromEntries(((akutTypenData?.data)||[]).map(x=>[x.id,(x.emoji||'')+' '+x.name])),
-    schmerz: Object.fromEntries(((regionsData?.data)||[]).map(x=>[x.id,x.name]))
+    schmerz: Object.fromEntries(((regionsData?.data)||[]).map(x=>[x.id,x.name])),
+    verd: Object.fromEntries(((verdTypenData?.data)||[]).map(x=>[x.id,(x.emoji||'')+' '+x.name]))
   };
 
   // 1. Medikamente
@@ -2372,6 +2375,18 @@ async function collectTimelineItems(iso){
     ts: r.erfasst_am, mod:'stress',
     title: lookup.stress[r.typ_id] || 'Akut-Signal',
     detail: [r.detail, r.notiz].filter(Boolean).join(' · ')
+  }));
+
+  // 9b. Verdauungs-Akut-Symptome
+  const verdA = await safeQuery(()=> window.sb
+    .from('verdauung_akut_eintraege')
+    .select('id, typ_id, wert, kommentar, erfasst_am')
+    .eq('user_id', window.sbUser.id)
+    .gte('erfasst_am', dayStart).lte('erfasst_am', dayEnd));
+  (verdA?.data||[]).forEach(r => items.push({
+    ts: r.erfasst_am, mod:'verd',
+    title: lookup.verd[r.typ_id] || 'Verdauungs-Symptom',
+    detail: [r.wert ? `Stufe ${r.wert}/3` : null, r.kommentar].filter(Boolean).join(' · ')
   }));
 
   // 10. Schmerz-Episoden
