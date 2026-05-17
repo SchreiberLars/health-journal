@@ -486,7 +486,7 @@ body.sort-mode .sort-controls{display:inline-flex}
   border:1px solid var(--border);border-radius:30px;padding:5px 6px;gap:2px;
   box-shadow:0 4px 24px rgba(0,0,0,.18);backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);pointer-events:all;transition:all .25s}
-.fnav-tab{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:24px;
+.fnav-tab{display:flex;align-items:center;gap:4px;padding:7px 9px;border-radius:24px;
   cursor:pointer;border:none;background:none;font-family:'JetBrains Mono',monospace;
   font-size:10px;color:var(--muted);transition:all .15s;white-space:nowrap}
 .fnav-tab.active{background:var(--accent);color:#f5f0e8}
@@ -1347,6 +1347,9 @@ window.sbUser = null;
 <div id="tab-timeline" style="display:none;padding:0 16px 80px">
   <div id="timeline-content" style="padding:8px 0"></div>
 </div>
+<div id="tab-verlauf" style="display:none;padding:0 16px 80px">
+  <div id="verlauf-content" style="padding:8px 0"></div>
+</div>
 <!-- MODAL: Menge ändern -->
 <div class="modal-overlay" id="get-edit-ml-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:flex-end;justify-content:center">
   <div class="modal-sheet">
@@ -1376,6 +1379,9 @@ window.sbUser = null;
     </button>
     <button class="fnav-tab" id="tab-btn-timeline" onclick="switchTab('timeline')">
       📅 Zeitachse
+    </button>
+    <button class="fnav-tab" id="tab-btn-verlauf" onclick="switchTab('verlauf')">
+      📈 Verläufe
     </button>
     <button class="fnav-tab" id="tab-btn-export" onclick="toggleExport()">
       ⚙
@@ -2164,10 +2170,13 @@ function switchTab(tab){
   document.getElementById('tab-journal').style.display=tab==='journal'?'block':'none';
   document.getElementById('tab-hyp').style.display=tab==='hyp'?'block':'none';
   document.getElementById('tab-timeline').style.display=tab==='timeline'?'block':'none';
+  document.getElementById('tab-verlauf').style.display=tab==='verlauf'?'block':'none';
   document.getElementById('tab-btn-journal').classList.toggle('active',tab==='journal');
   document.getElementById('tab-btn-hyp').classList.toggle('active',tab==='hyp');
   document.getElementById('tab-btn-timeline').classList.toggle('active',tab==='timeline');
+  document.getElementById('tab-btn-verlauf').classList.toggle('active',tab==='verlauf');
   if(tab==='timeline') renderTimeline();
+  if(tab==='verlauf') renderVerlauf();
 }
 
 // ═══════════════════════════════════════════
@@ -2630,6 +2639,293 @@ function renderTimelineList(items, iso){
   }
   host.innerHTML = html;
 }
+
+// ═══════════════════════════════════════════
+// VERLÄUFE / KOHORTENANALYSE (Erkältungs-Episoden)
+// ═══════════════════════════════════════════
+const VERLAUF_SYMP = [
+  {key:'hals',         emoji:'🦠', label:'Hals'},
+  {key:'schnupfen',    emoji:'🤧', label:'Schnupfen'},
+  {key:'nase_zu',      emoji:'👃', label:'Nase zu'},
+  {key:'husten',       emoji:'😮‍💨', label:'Husten'},
+  {key:'abgeschlagen', emoji:'🥱', label:'Abgeschl.'},
+];
+let verlaufState = { view:'liste', selectedEpisode:null, cohort:[] };
+
+async function renderVerlauf(){
+  const host = document.getElementById('verlauf-content');
+  if(!host) return;
+  if(!window.sb || !window.sbUser){
+    host.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted)">Nicht eingeloggt</div>`;
+    return;
+  }
+  host.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted)">⏳ Lade Verläufe...</div>`;
+  try {
+    const {data:eps, error:e1} = await window.sb
+      .from('infekt_episoden')
+      .select('id,start_datum,end_datum,kommentar')
+      .eq('user_id', window.sbUser.id)
+      .order('start_datum', {ascending:false});
+    if(e1) throw e1;
+    if(!eps || !eps.length){
+      host.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--muted)">
+        <div style="font-size:32px;margin-bottom:12px">📈</div>
+        <div style="font-size:13px">Noch keine Erkältungen erfasst.</div>
+        <div style="font-size:11px;margin-top:8px;opacity:.7">Sobald du im Erkältungs-Modul Episoden anlegst, erscheinen hier Verlauf und Vergleich.</div>
+      </div>`;
+      return;
+    }
+    const {data:allEntries, error:e2} = await window.sb
+      .from('infekt_eintraege')
+      .select('episode_id,tagesdatum,symptom,wert')
+      .eq('user_id', window.sbUser.id);
+    if(e2) throw e2;
+
+    // Episoden mit abgeleiteten Kennzahlen anreichern
+    const today = new Date().toISOString().slice(0,10);
+    const episodes = eps.map(ep => {
+      const ende = ep.end_datum || today;
+      const dauer = Math.round((new Date(ende) - new Date(ep.start_datum))/(1000*60*60*24)) + 1;
+      const myEntries = (allEntries||[]).filter(x => x.episode_id === ep.id);
+      const werte = myEntries.map(x => x.wert);
+      const avg = werte.length ? (werte.reduce((a,b)=>a+b,0)/werte.length) : 0;
+      const peak = werte.length ? Math.max(...werte) : 0;
+      // Tag-seit-Beginn pro Eintrag
+      const withTag = myEntries.map(x => ({
+        ...x,
+        tag: Math.round((new Date(x.tagesdatum) - new Date(ep.start_datum))/(1000*60*60*24)) + 1
+      }));
+      return { ...ep, ende, dauer, avg, peak, laufend: !ep.end_datum, entries: withTag };
+    });
+
+    if(verlaufState.view === 'einzel' && verlaufState.selectedEpisode){
+      renderVerlaufEinzel(host, episodes.find(e => e.id === verlaufState.selectedEpisode), episodes);
+    } else if(verlaufState.view === 'kohorte'){
+      renderVerlaufKohorte(host, episodes);
+    } else {
+      renderVerlaufListe(host, episodes);
+    }
+  } catch(err){
+    host.innerHTML = `<div style="padding:30px;text-align:center;color:var(--delete)">Fehler: ${timelineEsc(err.message)}</div>`;
+  }
+}
+
+function fmtDM(iso){ return iso.slice(8,10)+'.'+iso.slice(5,7)+'.'; }
+
+function renderVerlaufListe(host, episodes){
+  const cards = episodes.map(ep => {
+    const checked = verlaufState.cohort.includes(ep.id);
+    const zeitraum = fmtDM(ep.start_datum) + (ep.laufend ? '–lfd.' : '–'+fmtDM(ep.end_datum));
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" ${checked?'checked':''} onclick="window.verlauf_toggleCohort('${ep.id}')"
+          style="width:18px;height:18px;accent-color:var(--accent);flex-shrink:0">
+        <div style="flex:1;cursor:pointer" onclick="window.verlauf_openEinzel('${ep.id}')">
+          <div style="font-size:13px;font-weight:600">🤧 ${zeitraum}${ep.laufend?' <span style=\"color:var(--accent);font-size:10px\">● aktiv</span>':''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;font-family:'JetBrains Mono',monospace">
+            ${ep.dauer} Tage · Ø ${ep.avg.toFixed(1)} · Peak ${ep.peak}
+          </div>
+        </div>
+        <span style="color:var(--muted);font-size:16px" onclick="window.verlauf_openEinzel('${ep.id}')">›</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  const canCompare = verlaufState.cohort.length >= 2;
+  const compareBtn = `<button onclick="window.verlauf_openKohorte()" ${canCompare?'':'disabled'}
+    style="width:100%;padding:12px;border-radius:10px;border:none;font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:6px;
+    background:${canCompare?'var(--accent)':'var(--surface2)'};color:${canCompare?'#f5f0e8':'var(--muted)'};
+    cursor:${canCompare?'pointer':'default'}">
+    📊 Kohorten-Vergleich (${verlaufState.cohort.length} ausgewählt)${canCompare?'':' — mind. 2 nötig'}
+  </button>`;
+
+  host.innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="font-size:16px;font-weight:600;margin-bottom:4px">Krankheitsverläufe</div>
+      <div style="font-size:11px;color:var(--muted)">${episodes.length} Erkältung${episodes.length===1?'':'en'} erfasst. Episode antippen für Details, oder mehrere ankreuzen und vergleichen.</div>
+    </div>
+    ${cards}
+    ${compareBtn}
+    ${episodes.length < 2 ? `<div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:14px;text-align:center;line-height:1.5">
+      Der Kohorten-Vergleich wird ab der zweiten erfassten Erkältung aussagekräftig.<br>Aktuell baust du die Datenbasis auf.
+    </div>` : ''}`;
+}
+
+function renderVerlaufEinzel(host, ep, allEps){
+  if(!ep){ verlaufState.view='liste'; renderVerlauf(); return; }
+  const maxTag = ep.dauer;
+  const map = {};
+  ep.entries.forEach(x => { map[x.symptom+'|'+x.tag] = x.wert; });
+
+  // Pro Symptom: Onset, Peak-Tag, letzter Tag
+  const symStats = VERLAUF_SYMP.map(s => {
+    const tage = ep.entries.filter(x => x.symptom === s.key);
+    if(!tage.length) return { ...s, onset:null, peakTag:null, lastTag:null, peakWert:0 };
+    const sorted = tage.slice().sort((a,b)=>a.tag-b.tag);
+    let peak = sorted[0];
+    sorted.forEach(t => { if(t.wert > peak.wert) peak = t; });
+    return {
+      ...s,
+      onset: sorted[0].tag,
+      peakTag: peak.tag,
+      peakWert: peak.wert,
+      lastTag: sorted[sorted.length-1].tag
+    };
+  });
+
+  // Matrix: Tage als Zeilen (vertikal scrollbar), Symptome als Spalten
+  const headCols = VERLAUF_SYMP.map(s => `<th style="font-weight:400;font-size:9px;color:var(--muted);padding:4px 3px;text-align:center">${s.emoji}</th>`).join('');
+  let rows = '';
+  for(let t=1; t<=maxTag; t++){
+    const cells = VERLAUF_SYMP.map(s => {
+      const w = map[s.key+'|'+t];
+      const bg = w ? `background:color-mix(in srgb,var(--accent) ${w*28}%,transparent)` : '';
+      return `<td style="text-align:center;padding:5px 3px;font-size:10px;font-family:'JetBrains Mono',monospace;${bg}">${w||'·'}</td>`;
+    }).join('');
+    rows += `<tr><td style="font-size:10px;color:var(--muted);padding:5px 8px 5px 0;white-space:nowrap;font-family:'JetBrains Mono',monospace">Tag ${t}</td>${cells}</tr>`;
+  }
+
+  const statsRows = symStats.map(s => {
+    if(s.onset === null) return `<tr>
+      <td style="padding:5px 6px;font-size:11px">${s.emoji} ${s.label}</td>
+      <td colspan="3" style="padding:5px 6px;font-size:11px;color:var(--muted);font-style:italic">nicht aufgetreten</td>
+    </tr>`;
+    return `<tr>
+      <td style="padding:5px 6px;font-size:11px">${s.emoji} ${s.label}</td>
+      <td style="padding:5px 6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Tag ${s.onset}</td>
+      <td style="padding:5px 6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Tag ${s.peakTag} (${s.peakWert})</td>
+      <td style="padding:5px 6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Tag ${s.lastTag}</td>
+    </tr>`;
+  }).join('');
+
+  const zeitraum = fmtDM(ep.start_datum) + (ep.laufend ? '–läuft' : '–'+fmtDM(ep.ende));
+
+  host.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <button onclick="window.verlauf_back()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text)">‹ Zurück</button>
+      <div style="font-size:14px;font-weight:600">🤧 ${zeitraum}</div>
+    </div>
+    <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">
+      Gesamtdauer: <b style="color:var(--text)">${ep.dauer} Tage</b> · Ø-Schwere ${ep.avg.toFixed(1)} · Peak ${ep.peak}
+    </div>
+
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Symptom-Kennzahlen</div>
+    <table style="border-collapse:collapse;width:100%;margin-bottom:20px">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:5px 6px;font-size:10px;color:var(--muted);font-weight:600">Symptom</th>
+        <th style="padding:5px 6px;font-size:10px;color:var(--muted);font-weight:600">Onset</th>
+        <th style="padding:5px 6px;font-size:10px;color:var(--muted);font-weight:600">Peak</th>
+        <th style="padding:5px 6px;font-size:10px;color:var(--muted);font-weight:600">Letzter</th>
+      </tr></thead>
+      <tbody>${statsRows}</tbody>
+    </table>
+
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Tagesverlauf (Tag seit Beginn)</div>
+    <table style="border-collapse:collapse;width:100%">
+      <thead><tr style="border-bottom:1px solid var(--border)"><th></th>${headCols}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderVerlaufKohorte(host, episodes){
+  const cohort = episodes.filter(e => verlaufState.cohort.includes(e.id))
+    .sort((a,b)=> new Date(a.start_datum) - new Date(b.start_datum));
+  if(cohort.length < 2){ verlaufState.view='liste'; renderVerlauf(); return; }
+
+  const maxTag = Math.max(...cohort.map(e => e.dauer));
+  const colors = ['#3a6ea5','#c0504d','#5a8a5a','#d4a017','#8a5a8a'];
+
+  // Aggregierte Gesamtschwere pro Tag-seit-Beginn (Mittel aller Symptome)
+  function aggByDay(ep){
+    const byDay = {};
+    ep.entries.forEach(x => {
+      if(!byDay[x.tag]) byDay[x.tag] = [];
+      byDay[x.tag].push(x.wert);
+    });
+    const res = {};
+    Object.keys(byDay).forEach(d => { res[d] = byDay[d].reduce((a,b)=>a+b,0)/byDay[d].length; });
+    return res;
+  }
+
+  // Aggregierte Kurve als simple Balken-Matrix (Tag-Spalten, Episoden-Zeilen)
+  const headCols = [];
+  for(let t=1;t<=maxTag;t++) headCols.push(`<th style="font-weight:400;font-size:9px;color:var(--muted);padding:3px 4px;font-family:'JetBrains Mono',monospace">${t}</th>`);
+  const aggRows = cohort.map((ep,i) => {
+    const agg = aggByDay(ep);
+    let cells = '';
+    for(let t=1;t<=maxTag;t++){
+      const v = agg[t];
+      if(v == null){ cells += `<td style="text-align:center;padding:4px;font-size:9px;color:var(--border)">·</td>`; }
+      else {
+        const op = Math.round((v/3)*100);
+        cells += `<td style="text-align:center;padding:4px;font-size:9px;font-family:'JetBrains Mono',monospace;background:color-mix(in srgb,${colors[i%5]} ${op}%,transparent);color:${v>1.8?'#fff':'var(--text)'}">${v.toFixed(1)}</td>`;
+      }
+    }
+    return `<tr>
+      <td style="font-size:10px;padding:4px 8px 4px 0;white-space:nowrap;color:${colors[i%5]};font-weight:600">${fmtDM(ep.start_datum)}</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  // Dauer-Vergleichstabelle
+  const durRows = cohort.map((ep,i) => `<tr>
+    <td style="padding:6px;font-size:11px;color:${colors[i%5]};font-weight:600">${fmtDM(ep.start_datum)}${ep.laufend?' (läuft)':''}</td>
+    <td style="padding:6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">${ep.dauer} Tage</td>
+    <td style="padding:6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Ø ${ep.avg.toFixed(1)}</td>
+    <td style="padding:6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Peak ${ep.peak}</td>
+  </tr>`).join('');
+
+  // Pro Symptom: Onset-Vergleich (ab welchem Tag in welcher Episode)
+  const perSymp = VERLAUF_SYMP.map(s => {
+    const cells = cohort.map((ep,i) => {
+      const tage = ep.entries.filter(x => x.symptom === s.key).map(x=>x.tag);
+      if(!tage.length) return `<span style="color:var(--muted);font-size:10px">${fmtDM(ep.start_datum)}: —</span>`;
+      const mn = Math.min(...tage), mx = Math.max(...tage);
+      return `<span style="font-size:10px;font-family:'JetBrains Mono',monospace"><span style="color:${colors[i%5]};font-weight:600">${fmtDM(ep.start_datum)}</span>: Tag ${mn}–${mx}</span>`;
+    }).join(' &nbsp;·&nbsp; ');
+    return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:600;margin-bottom:3px">${s.emoji} ${s.label}</div>
+      <div>${cells}</div>
+    </div>`;
+  }).join('');
+
+  host.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <button onclick="window.verlauf_back()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text)">‹ Zurück</button>
+      <div style="font-size:14px;font-weight:600">📊 Kohorten-Vergleich (${cohort.length})</div>
+    </div>
+
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Dauer &amp; Schwere</div>
+    <table style="border-collapse:collapse;width:100%;margin-bottom:20px">
+      <tbody>${durRows}</tbody>
+    </table>
+
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px">Gesamtschwere ab Tag 1</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Mittel aller Symptome je Tag seit Erkältungsbeginn — Zeilen auf gemeinsamem Nullpunkt</div>
+    <div style="overflow-x:auto;margin-bottom:20px">
+      <table style="border-collapse:collapse;min-width:100%">
+        <thead><tr><th style="font-size:9px;color:var(--muted);padding:3px 8px 3px 0;text-align:left">Beginn \\ Tag</th>${headCols.join('')}</tr></thead>
+        <tbody>${aggRows}</tbody>
+      </table>
+    </div>
+
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">Symptom-Fenster pro Episode</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Von welchem bis zu welchem Tag (seit Beginn) das Symptom erfasst war</div>
+    ${perSymp}
+
+    <div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:18px;line-height:1.5">
+      Daten ohne Wertung — die Einordnung („milder/schwerer", „schneller abgeklungen") triffst du selbst. Bei kurzem Tracking-Zeitraum und wenigen Episoden sind das Tendenzen, keine Beweise.
+    </div>`;
+}
+
+window.verlauf_openEinzel = function(id){ verlaufState.view='einzel'; verlaufState.selectedEpisode=id; renderVerlauf(); };
+window.verlauf_openKohorte = function(){ if(verlaufState.cohort.length>=2){ verlaufState.view='kohorte'; renderVerlauf(); } };
+window.verlauf_back = function(){ verlaufState.view='liste'; verlaufState.selectedEpisode=null; renderVerlauf(); };
+window.verlauf_toggleCohort = function(id){
+  const i = verlaufState.cohort.indexOf(id);
+  if(i>=0) verlaufState.cohort.splice(i,1); else verlaufState.cohort.push(id);
+  renderVerlauf();
+};
 
 function toggleExport(){
   const bar=document.getElementById('export-bar');
