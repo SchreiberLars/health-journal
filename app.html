@@ -3655,6 +3655,7 @@ function injectModules() {
   <div class="anker-card">
     <div class="anker-header" onclick="window.entz_toggleAnker('abend')">
       <span class="anker-label">🌆 Abend</span>
+          <button onclick="event.stopPropagation();window.entz_copyFromMorning()" style="font-size:9px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:'JetBrains Mono',monospace;margin-left:4px">⬆ Morgen</button>
       <span style="display:flex;align-items:center;gap:6px">
         <span class="anker-badge" id="entz-badge-abend">—</span>
         <button class="comment-btn" id="entz-cbtn-abend"
@@ -8823,6 +8824,51 @@ async function copyFromPrevDay(anker) {
     showToast('Fehler: ' + err.message);
   }
 }
+
+// Abend-Anker: Werte vom heutigen Morgen uebernehmen (Tipphilfe, danach anpassbar)
+async function copyFromMorning() {
+  if(!window.sbUser || !window.sb){
+    showToast('Nicht eingeloggt');
+    return;
+  }
+  const todayISO = getActiveISO();
+  try {
+    const { data, error } = await window.sb
+      .from('entz_anker_werte')
+      .select('region_id, wert')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', todayISO)
+      .eq('anker', 'morgen');
+    if(error) throw error;
+    if(!data || !data.length){
+      showToast('Keine Morgenwerte vorhanden');
+      return;
+    }
+    const newVals = {};
+    data.forEach(r => { if(r.wert != null) newVals[r.region_id] = parseFloat(r.wert); });
+    ankerData['abend'] = newVals;
+    renderRegions('abend');
+    renderBadge('abend');
+    updateAnkerIndicator();
+    const rows = Object.entries(newVals).map(([rid, val]) => ({
+      user_id: window.sbUser.id,
+      tagesdatum: todayISO,
+      anker: 'abend',
+      region_id: rid,
+      wert: val
+    }));
+    if(rows.length){
+      const { error: upErr } = await window.sb
+        .from('entz_anker_werte')
+        .upsert(rows, { onConflict: 'user_id,tagesdatum,anker,region_id' });
+      if(upErr) throw upErr;
+    }
+    showToast(`${rows.length} Morgenwerte übernommen ✓`);
+  } catch(err){
+    console.error('copyFromMorning-Fehler:', err);
+    showToast('Fehler: ' + err.message);
+  }
+}
 function renderRegions(anker){
   const container=document.getElementById('entz-regions-'+anker);
   const regs=regions.filter(r=>r.groups.includes(anker));
@@ -9976,12 +10022,14 @@ function isoDate(d){
   window.entz_openSpontan = openSpontan;
   window.entz_render = render;
   window.entz_copyFromPrevDay = copyFromPrevDay;
+  window.entz_copyFromMorning = copyFromMorning;
   window.entz_saveRegion = saveRegion;
   window.entz_saveSpontan = saveSpontan;
   window.entz_toggleAnker = toggleAnker;
   window.entz_toggleComment = toggleComment;
   window.entz_render = render;
   window.entz_copyFromPrevDay = copyFromPrevDay;
+  window.entz_copyFromMorning = copyFromMorning;
   window.entz_openFotoMenu = openFotoMenu;
   window.entz_handleFotoFile = handleFotoFile;
   window.entz_doRemoveFoto = doRemoveFoto;
