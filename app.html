@@ -22,6 +22,7 @@
   --c-akt:#8bb8d8;--c-regen:#8bc4a0;
   --c-messw:#c8a888;
   --c-fam:#d4a0b8;--c-soz:#a0b8d4;--c-hyp:#b09ec8;
+  --c-infekt:#c89a9a;
 }
 @media(prefers-color-scheme:dark){:root{
   --bg:#1a1714;--surface:#242018;--surface2:#2e2a22;--border:#3d3830;
@@ -1117,6 +1118,23 @@ window.sbUser = null;
   </div>
 </div>
 
+<!-- 4c. ERKÄLTUNG / INFEKT (Episode) -->
+<div class="section" id="sec-infekt" style="border-left-color:var(--c-infekt)">
+  <div class="section-header" onclick="toggleSection('infekt')">
+    <div class="section-left">
+      <span>🤧</span>
+      <span class="section-label">Erkältung</span>
+      <span class="section-badge" id="badge-infekt">—</span>
+    </div>
+    <div class="section-right">
+      <span class="section-chevron" id="chev-infekt">▼</span>
+    </div>
+  </div>
+  <div class="section-body" id="body-infekt" style="display:none">
+    <div id="infekt-content"><!-- infekt JS --></div>
+  </div>
+</div>
+
 <!-- 5. ENTZÜNDUNG & HAUT -->
 <div class="section" id="sec-entz" style="border-left-color:var(--c-entz)">
   <div class="section-header" onclick="toggleSection('entz')">
@@ -1813,7 +1831,7 @@ function confirmDate(){activeDate=new Date(calSelectedDate);closeModal('m-cal');
 
 // Re-render alle Module nach Tag-Wechsel (laedt aus DB neu, soweit Modul migriert)
 function rerenderAllModulesForDate(){
-  ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','verd','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
+  ['med','supp','haut','bef','stress','infekt','entz','get','ern','schmerz','stuhl','verd','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+' rerender:',e.message);}
   });
@@ -1925,11 +1943,11 @@ function setAnkerStatus(modulKey, status){
 // ═══════════════════════════════════════════
 // MODUL-SORTIERUNG (persistiert pro User)
 // ═══════════════════════════════════════════
-const MODUL_KEYS = ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','akt','regen','messw','fam','hyp'];
+const MODUL_KEYS = ['med','supp','haut','bef','stress','infekt','entz','get','ern','schmerz','stuhl','verd','akt','regen','messw','fam','hyp'];
 
 // Kategorien: Maßnahmen vs. Beobachtungen (alles Andere)
 const KATEGORIE_MASSNAHMEN = ['med','supp','haut','get','ern','akt'];
-const KATEGORIE_BEOBACHTUNG = ['bef','stress','entz','schmerz','stuhl','regen','messw','fam','hyp'];
+const KATEGORIE_BEOBACHTUNG = ['bef','stress','infekt','entz','schmerz','stuhl','verd','regen','messw','fam','hyp'];
 function getKategorie(key){
   if(KATEGORIE_MASSNAHMEN.includes(key)) return 'massnahmen';
   return 'beobachtung';
@@ -13518,6 +13536,349 @@ window.verd_saveTime = saveTime;
 window.verd_render = render;
 })();
 
+// ═══════════════════════════════════════════
+// ERKÄLTUNG / INFEKT (Episoden-Modul)
+// ═══════════════════════════════════════════
+(function(){
+const SYMPTOME = [
+  {key:'hals',        emoji:'🦠', label:'Halsschmerzen'},
+  {key:'schnupfen',   emoji:'🤧', label:'Schnupfen (laufend)'},
+  {key:'nase_zu',     emoji:'👃', label:'Nase verstopft'},
+  {key:'husten',      emoji:'😮‍💨', label:'Husten'},
+  {key:'abgeschlagen',emoji:'🥱', label:'Abgeschlagenheit'},
+];
+// Fieber-Schwellen an Lars' niedrige Baseline (~35.9 morgens) angepasst
+const FIEBER_ERHOEHT = 37.0;
+const FIEBER_FIEBER  = 37.5;
+
+let activeEpisode = null;   // {id, start_datum, end_datum, kommentar} oder null
+let dayValues = {};         // {symptomKey: wert}  fuer aktiven Tag
+let verlauf = [];           // [{tagesdatum, symptom, wert}] fuer Episode
+let mirror = {verdAvg:null, schmerz:[], temp:null};
+let lastLoadedKey = null;
+
+function getActiveISO(){
+  if(typeof activeDate !== 'undefined' && activeDate){
+    const d=activeDate, y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dd}`;
+  }
+  return new Date().toISOString().slice(0,10);
+}
+
+async function loadFromDb(){
+  if(!window.sb || !window.sbUser) return;
+  const iso = getActiveISO();
+  try {
+    // Aktive (offene) Episode ODER eine die den aktiven Tag abdeckt
+    const {data:eps, error:epErr} = await window.sb
+      .from('infekt_episoden')
+      .select('id,start_datum,end_datum,kommentar')
+      .eq('user_id', window.sbUser.id)
+      .lte('start_datum', iso)
+      .or(`end_datum.is.null,end_datum.gte.${iso}`)
+      .order('start_datum', {ascending:false})
+      .limit(1);
+    if(epErr) throw epErr;
+    activeEpisode = (eps && eps.length) ? eps[0] : null;
+
+    dayValues = {};
+    verlauf = [];
+    if(activeEpisode){
+      // Tageswerte fuer aktiven Tag
+      const {data:dv} = await window.sb
+        .from('infekt_eintraege')
+        .select('symptom,wert')
+        .eq('episode_id', activeEpisode.id)
+        .eq('tagesdatum', iso);
+      (dv||[]).forEach(r => { dayValues[r.symptom] = r.wert; });
+      // Gesamter Verlauf der Episode
+      const {data:vl} = await window.sb
+        .from('infekt_eintraege')
+        .select('tagesdatum,symptom,wert')
+        .eq('episode_id', activeEpisode.id)
+        .order('tagesdatum', {ascending:true});
+      verlauf = vl || [];
+    }
+    await loadMirror(iso);
+    renderUI();
+  } catch(err){
+    console.warn('infekt load:', err.message);
+  }
+}
+
+// Fremdmodul-Werte NUR LESEND fuer den Tag spiegeln
+async function loadMirror(iso){
+  mirror = {verdAvg:null, schmerz:[], temp:null};
+  try {
+    // Verdauung: Tages-Durchschnitt der akuten Symptome
+    const {data:vd} = await window.sb
+      .from('verdauung_akut_eintraege')
+      .select('wert')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso);
+    if(vd && vd.length){
+      mirror.verdAvg = (vd.reduce((s,r)=>s+r.wert,0) / vd.length);
+    }
+    // Schmerz: Regionen mit Wert > 0 heute (anker morgen ODER abend, hoechster)
+    const {data:sw} = await window.sb
+      .from('schmerz_anker_werte')
+      .select('wert, region_id, schmerz_regionen(name)')
+      .eq('user_id', window.sbUser.id)
+      .eq('tagesdatum', iso)
+      .gt('wert', 0);
+    if(sw && sw.length){
+      const byRegion = {};
+      sw.forEach(r => {
+        const nm = r.schmerz_regionen ? r.schmerz_regionen.name : '?';
+        byRegion[nm] = Math.max(byRegion[nm]||0, r.wert);
+      });
+      mirror.schmerz = Object.entries(byRegion).map(([name,wert])=>({name,wert}));
+    }
+    // Temperatur aus Messwerten (hoechster temp_c-Wert des Tages)
+    const dayStart = iso + 'T00:00:00';
+    const dayEnd   = iso + 'T23:59:59';
+    const {data:mw} = await window.sb
+      .from('messw_eintraege')
+      .select('temp_c, erfasst_am')
+      .eq('user_id', window.sbUser.id)
+      .gte('erfasst_am', dayStart)
+      .lte('erfasst_am', dayEnd);
+    if(mw && mw.length){
+      const temps = mw.map(r => parseFloat(r.temp_c)).filter(v => !isNaN(v) && v > 0);
+      if(temps.length) mirror.temp = Math.max(...temps);
+    }
+  } catch(err){
+    console.warn('infekt mirror:', err.message);
+  }
+}
+
+function render(){
+  const iso = getActiveISO();
+  const key = iso + '|' + (window.sbUser ? window.sbUser.id : '');
+  if(window.sbUser && lastLoadedKey !== key){
+    lastLoadedKey = key;
+    loadFromDb();
+    return;
+  }
+  renderUI();
+}
+
+function fieberStatus(t){
+  if(t == null) return null;
+  if(t >= FIEBER_FIEBER)  return {txt:'Fieber',  col:'var(--delete)'};
+  if(t >= FIEBER_ERHOEHT) return {txt:'erhöht',  col:'var(--accent)'};
+  return {txt:'normal', col:'var(--muted)'};
+}
+
+function renderUI(){
+  const el = document.getElementById('infekt-content');
+  if(!el) return;
+  const iso = getActiveISO();
+
+  if(!activeEpisode){
+    el.innerHTML = `<div class="form-section">
+      <div style="text-align:center;padding:18px 8px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
+          Aktuell keine Erkältung erfasst.
+        </div>
+        <button onclick="window.infekt_start()"
+          style="background:var(--accent);color:#f5f0e8;border:none;border-radius:10px;padding:11px 18px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer">
+          🤧 Erkältung beginnen (ab ${iso})
+        </button>
+      </div>
+    </div>`;
+    return;
+  }
+
+  // Symptom-Buttons mit 1-3 Skala
+  const symHtml = SYMPTOME.map(s => {
+    const cur = dayValues[s.key] || 0;
+    const stufen = [1,2,3].map(v => {
+      const active = (cur === v);
+      return `<button onclick="window.infekt_set('${s.key}',${v})"
+        style="width:30px;height:30px;border-radius:50%;border:1.5px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'transparent'};color:${active?'#f5f0e8':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer;font-weight:${active?'700':'400'}">${v}</button>`;
+    }).join('');
+    const clearBtn = cur ? `<button onclick="window.infekt_set('${s.key}',0)" title="Zurücksetzen"
+      style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 6px">✕</button>` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:16px;width:24px;text-align:center">${s.emoji}</span>
+      <span style="flex:1;font-size:12px">${s.label}</span>
+      <span style="display:flex;gap:5px;align-items:center">${stufen}${clearBtn}</span>
+    </div>`;
+  }).join('');
+
+  // Read-only Spiegel
+  const fs = fieberStatus(mirror.temp);
+  const mirrorRows = [];
+  mirrorRows.push(`<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px">
+    <span style="color:var(--muted)">Verdauung (Ø heute) <span style="opacity:.6">· aus Verdauung</span></span>
+    <span style="font-family:'JetBrains Mono',monospace">${mirror.verdAvg != null ? mirror.verdAvg.toFixed(1)+' / 3' : '—'}</span>
+  </div>`);
+  mirrorRows.push(`<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px">
+    <span style="color:var(--muted)">Fieber <span style="opacity:.6">· aus Messwerte</span></span>
+    <span style="font-family:'JetBrains Mono',monospace;color:${fs?fs.col:'var(--muted)'}">${fs ? fs.txt + (mirror.temp?' ('+mirror.temp.toFixed(1)+'°)':'') : '—'}</span>
+  </div>`);
+  const schmerzTxt = mirror.schmerz.length
+    ? mirror.schmerz.map(s=>`${s.name} ${s.wert}`).join(', ')
+    : '—';
+  mirrorRows.push(`<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:11px;gap:10px">
+    <span style="color:var(--muted);white-space:nowrap">Schmerz <span style="opacity:.6">· aus Schmerz</span></span>
+    <span style="font-family:'JetBrains Mono',monospace;text-align:right">${schmerzTxt}</span>
+  </div>`);
+
+  // Verlauf (kompakt: Symptom-Zeilen, Tage als Spalten)
+  let verlaufHtml = '';
+  if(verlauf.length){
+    const tage = [...new Set(verlauf.map(v=>v.tagesdatum))].sort();
+    const map = {};
+    verlauf.forEach(v => { map[v.symptom+'|'+v.tagesdatum] = v.wert; });
+    const headCols = tage.map(t => {
+      const dd = t.slice(8,10)+'.'+t.slice(5,7);
+      return `<th style="font-weight:400;color:var(--muted);font-size:9px;padding:2px 4px;font-family:'JetBrains Mono',monospace">${dd}</th>`;
+    }).join('');
+    const rows = SYMPTOME.map(s => {
+      const cells = tage.map(t => {
+        const w = map[s.key+'|'+t];
+        const bg = w ? `background:color-mix(in srgb,var(--accent) ${w*28}%,transparent)` : '';
+        return `<td style="text-align:center;padding:3px 4px;font-size:10px;font-family:'JetBrains Mono',monospace;${bg}">${w||'·'}</td>`;
+      }).join('');
+      return `<tr><td style="font-size:10px;color:var(--text);padding:3px 6px 3px 0;white-space:nowrap">${s.emoji} ${s.label}</td>${cells}</tr>`;
+    }).join('');
+    verlaufHtml = `<div class="form-section">
+      <div class="section-title" style="margin-bottom:8px">Verlauf</div>
+      <div style="overflow-x:auto">
+        <table style="border-collapse:collapse;width:100%">
+          <thead><tr><th></th>${headCols}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  const startTxt = activeEpisode.start_datum.slice(8,10)+'.'+activeEpisode.start_datum.slice(5,7)+'.';
+  const tagN = Math.round((new Date(iso) - new Date(activeEpisode.start_datum))/(1000*60*60*24)) + 1;
+
+  el.innerHTML = `<div class="form-section">
+    <div class="section-row">
+      <div class="section-title">Erkältung · seit ${startTxt} (Tag ${tagN})</div>
+      <button onclick="window.infekt_end()" title="Erkältung beenden"
+        style="background:none;border:1px solid var(--border);border-radius:16px;padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer">Beenden</button>
+    </div>
+    <div style="margin-top:6px">${symHtml}</div>
+  </div>
+
+  <div class="form-section">
+    <div class="section-title" style="margin-bottom:6px">Aus anderen Modulen (nur Anzeige)</div>
+    ${mirrorRows.join('')}
+    <div style="font-size:9px;color:var(--muted);margin-top:8px;font-style:italic">
+      Diese Werte erfasst du in den jeweiligen Modulen — hier nur zur Übersicht im Infekt-Verlauf.
+    </div>
+  </div>
+
+  ${verlaufHtml}`;
+}
+
+async function startEpisode(){
+  if(!window.sb || !window.sbUser){ showToast('Nicht eingeloggt'); return; }
+  const iso = getActiveISO();
+  try {
+    const {data, error} = await window.sb
+      .from('infekt_episoden')
+      .insert({user_id: window.sbUser.id, start_datum: iso})
+      .select('id,start_datum,end_datum,kommentar')
+      .single();
+    if(error) throw error;
+    activeEpisode = data;
+    await setKrankFlag(iso, true);
+    lastLoadedKey = null;
+    await loadFromDb();
+    showToast('Erkältung gestartet 🤧');
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+async function endEpisode(){
+  if(!activeEpisode) return;
+  if(!confirm('Erkältung als beendet markieren?')) return;
+  const iso = getActiveISO();
+  try {
+    const {error} = await window.sb
+      .from('infekt_episoden')
+      .update({end_datum: iso})
+      .eq('id', activeEpisode.id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    showToast('Erkältung beendet ✓');
+    activeEpisode = null;
+    lastLoadedKey = null;
+    await loadFromDb();
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+async function setSymptom(symKey, wert){
+  if(!activeEpisode) return;
+  const iso = getActiveISO();
+  try {
+    if(wert === 0){
+      // loeschen
+      const {error} = await window.sb
+        .from('infekt_eintraege')
+        .delete()
+        .eq('episode_id', activeEpisode.id)
+        .eq('tagesdatum', iso)
+        .eq('symptom', symKey)
+        .eq('user_id', window.sbUser.id);
+      if(error) throw error;
+      delete dayValues[symKey];
+    } else {
+      // upsert (unique auf episode_id+tagesdatum+symptom)
+      const {error} = await window.sb
+        .from('infekt_eintraege')
+        .upsert({
+          user_id: window.sbUser.id,
+          episode_id: activeEpisode.id,
+          tagesdatum: iso,
+          symptom: symKey,
+          wert: wert
+        }, {onConflict: 'episode_id,tagesdatum,symptom'});
+      if(error) throw error;
+      dayValues[symKey] = wert;
+    }
+    // Verlauf lokal aktualisieren
+    verlauf = verlauf.filter(v => !(v.tagesdatum===iso && v.symptom===symKey));
+    if(wert !== 0) verlauf.push({tagesdatum:iso, symptom:symKey, wert});
+    // Erkaeltung => krank-Flag fuer den Tag setzen
+    await setKrankFlag(iso, true);
+    renderUI();
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
+// bef_krank fuer den Tag setzen (Erkaeltung ⊂ Krankheit)
+async function setKrankFlag(iso, aktiv){
+  try {
+    await window.sb
+      .from('bef_krank')
+      .upsert({
+        user_id: window.sbUser.id,
+        tagesdatum: iso,
+        aktiv: aktiv
+      }, {onConflict: 'user_id,tagesdatum'});
+  } catch(err){
+    console.warn('krank flag:', err.message);
+  }
+}
+
+window.infekt_start = startEpisode;
+window.infekt_end = endEpisode;
+window.infekt_set = setSymptom;
+window.infekt_render = render;
+})();
+
 (function() {
 const DAUER_QUICK = [15,20,30,45,60,90];
 let aktivitaeten = [];
@@ -16617,7 +16978,7 @@ async function initAllModules(){
   injectModules();
   // Custom-Reihenfolge laden (falls vorhanden) bevor wir rendern
   await loadOrderAndApply();
-  ['med','supp','haut','bef','stress','entz','get','ern','schmerz','stuhl','verd','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
+  ['med','supp','haut','bef','stress','infekt','entz','get','ern','schmerz','stuhl','verd','akt','regen','messw','fam','hyp','notes'].forEach(function(m){
     try{var fn=window[m+'_render'];if(typeof fn==='function')fn();}
     catch(e){console.warn(m+':',e.message);}
   });
