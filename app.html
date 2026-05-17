@@ -2677,7 +2677,7 @@ async function renderVerlauf(){
     }
     const {data:allEntries, error:e2} = await window.sb
       .from('infekt_eintraege')
-      .select('episode_id,tagesdatum,symptom,wert')
+      .select('episode_id,tagesdatum,symptom,wert,anker')
       .eq('user_id', window.sbUser.id);
     if(e2) throw e2;
 
@@ -2686,11 +2686,20 @@ async function renderVerlauf(){
     const episodes = eps.map(ep => {
       const ende = ep.end_datum || today;
       const dauer = Math.round((new Date(ende) - new Date(ep.start_datum))/(1000*60*60*24)) + 1;
-      const myEntries = (allEntries||[]).filter(x => x.episode_id === ep.id);
+      const rawEntries = (allEntries||[]).filter(x => x.episode_id === ep.id);
+      // Pro Symptom+Tag das Maximum ueber die Anker (Morgen/Mittag/Abend/Tag)
+      const aggMap = {};
+      rawEntries.forEach(x => {
+        const k = x.symptom+'|'+x.tagesdatum;
+        if(!aggMap[k] || x.wert > aggMap[k].wert){
+          aggMap[k] = { symptom:x.symptom, tagesdatum:x.tagesdatum, wert:x.wert };
+        }
+      });
+      const myEntries = Object.values(aggMap);
       const werte = myEntries.map(x => x.wert);
       const avg = werte.length ? (werte.reduce((a,b)=>a+b,0)/werte.length) : 0;
       const peak = werte.length ? Math.max(...werte) : 0;
-      // Tag-seit-Beginn pro Eintrag
+      // Tag-seit-Beginn pro (aggregiertem) Eintrag
       const withTag = myEntries.map(x => ({
         ...x,
         tag: Math.round((new Date(x.tagesdatum) - new Date(ep.start_datum))/(1000*60*60*24)) + 1
@@ -2773,30 +2782,39 @@ function renderVerlaufEinzel(host, ep, allEps){
     };
   });
 
-  // Matrix: Tage als Zeilen (vertikal scrollbar), Symptome als Spalten
-  const headCols = VERLAUF_SYMP.map(s => `<th style="font-weight:400;font-size:9px;color:var(--muted);padding:4px 3px;text-align:center">${s.emoji}</th>`).join('');
-  let rows = '';
-  for(let t=1; t<=maxTag; t++){
-    const cells = VERLAUF_SYMP.map(s => {
-      const w = map[s.key+'|'+t];
-      const bg = w ? `background:color-mix(in srgb,var(--accent) ${w*28}%,transparent)` : '';
-      return `<td style="text-align:center;padding:5px 3px;font-size:10px;font-family:'JetBrains Mono',monospace;${bg}">${w||'·'}</td>`;
-    }).join('');
-    rows += `<tr><td style="font-size:10px;color:var(--muted);padding:5px 8px 5px 0;white-space:nowrap;font-family:'JetBrains Mono',monospace">Tag ${t}</td>${cells}</tr>`;
-  }
+  const EP_COLOR = '#3a6ea5';
 
-  const statsRows = symStats.map(s => {
-    if(s.onset === null) return `<tr>
-      <td style="padding:5px 6px;font-size:11px">${s.emoji} ${s.label}</td>
-      <td colspan="3" style="padding:5px 6px;font-size:11px;color:var(--muted);font-style:italic">nicht aufgetreten</td>
-    </tr>`;
-    return `<tr>
-      <td style="padding:5px 6px;font-size:11px">${s.emoji} ${s.label}</td>
-      <td style="padding:5px 6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Tag ${s.onset}</td>
-      <td style="padding:5px 6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Tag ${s.peakTag} (${s.peakWert})</td>
-      <td style="padding:5px 6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Tag ${s.lastTag}</td>
-    </tr>`;
+  // Pro Symptom: farbcodierte Balkenreihe (Zelle = Tag-seit-Beginn,
+  // Intensitaet = Schweregrad) + Onset/Peak/Letzter als Textzeile
+  const perSymp = VERLAUF_SYMP.map(s => {
+    const st = symStats.find(x => x.key === s.key);
+    let cells = '';
+    for(let t=1; t<=maxTag; t++){
+      const w = map[s.key+'|'+t];
+      if(w){
+        const mix = Math.round((w/3)*100);
+        cells += `<i style="flex:1;height:16px;border-radius:2px;background:color-mix(in srgb,${EP_COLOR} ${mix}%,#e8e0d0)"></i>`;
+      } else {
+        cells += `<i style="flex:1;height:16px;border-radius:2px;background:#e8e0d0"></i>`;
+      }
+    }
+    const txt = (st.onset === null)
+      ? `<span style="font-style:italic">nicht aufgetreten</span>`
+      : `Tag ${st.onset}–${st.lastTag}${st.lastTag>st.onset?` (Peak T${st.peakTag}, Stärke ${st.peakWert})`:` (Stärke ${st.peakWert})`}`;
+    return `<div style="padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:600;margin-bottom:5px">${s.emoji} ${s.label}</div>
+      <div style="display:flex;align-items:center;gap:7px;margin:3px 0">
+        <span style="flex:1;display:flex;gap:2px">${cells}</span>
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-top:4px;font-family:'JetBrains Mono',monospace">${txt}</div>
+    </div>`;
   }).join('');
+
+  // Tag-Achsen-Markierung (1, Mitte, max) als Orientierung unter den Balken
+  const midTag = Math.ceil(maxTag/2);
+  const achse = `<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin:2px 0 14px">
+    <span>Tag 1</span>${maxTag>2?`<span>Tag ${midTag}</span>`:''}<span>Tag ${maxTag}</span>
+  </div>`;
 
   const zeitraum = fmtDM(ep.start_datum) + (ep.laufend ? '–läuft' : '–'+fmtDM(ep.ende));
 
@@ -2805,26 +2823,18 @@ function renderVerlaufEinzel(host, ep, allEps){
       <button onclick="window.verlauf_back()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text)">‹ Zurück</button>
       <div style="font-size:14px;font-weight:600">🤧 ${zeitraum}</div>
     </div>
-    <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">
+    <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;margin-bottom:18px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">
       Gesamtdauer: <b style="color:var(--text)">${ep.dauer} Tage</b> · Ø-Schwere ${ep.avg.toFixed(1)} · Peak ${ep.peak}
     </div>
 
-    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Symptom-Kennzahlen</div>
-    <table style="border-collapse:collapse;width:100%;margin-bottom:20px">
-      <thead><tr style="border-bottom:1px solid var(--border)">
-        <th style="text-align:left;padding:5px 6px;font-size:10px;color:var(--muted);font-weight:600">Symptom</th>
-        <th style="padding:5px 6px;font-size:10px;color:var(--muted);font-weight:600">Onset</th>
-        <th style="padding:5px 6px;font-size:10px;color:var(--muted);font-weight:600">Peak</th>
-        <th style="padding:5px 6px;font-size:10px;color:var(--muted);font-weight:600">Letzter</th>
-      </tr></thead>
-      <tbody>${statsRows}</tbody>
-    </table>
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px">Symptomverlauf ab Tag 1</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Balken zeigt Tag-seit-Beginn. Farbintensität = Schweregrad an dem Tag.</div>
+    ${perSymp}
+    ${achse}
 
-    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Tagesverlauf (Tag seit Beginn)</div>
-    <table style="border-collapse:collapse;width:100%">
-      <thead><tr style="border-bottom:1px solid var(--border)"><th></th>${headCols}</tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    <div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:14px;line-height:1.5">
+      Daten ohne Wertung — die Einordnung triffst du selbst. Eine zweite erfasste Erkältung schaltet den direkten Kohorten-Vergleich frei.
+    </div>`;
 }
 
 function renderVerlaufKohorte(host, episodes){
@@ -13893,8 +13903,13 @@ const FIEBER_ERHOEHT = 37.0;
 const FIEBER_FIEBER  = 37.5;
 
 let activeEpisode = null;   // {id, start_datum, end_datum, kommentar} oder null
-let dayValues = {};         // {symptomKey: wert}  fuer aktiven Tag
-let verlauf = [];           // [{tagesdatum, symptom, wert}] fuer Episode
+let dayValues = {};         // {symptomKey: {morgen,mittag,abend,tag}} fuer aktiven Tag
+const ANKER = [
+  {key:'morgen', emoji:'☀', label:'Morgen'},
+  {key:'mittag', emoji:'🍴', label:'Mittag'},
+  {key:'abend',  emoji:'🌙', label:'Abend'},
+];
+let verlauf = [];           // [{tagesdatum, symptom, wert, anker}] fuer Episode
 let mirror = {verdAvg:null, schmerz:[], temp:null};
 let lastLoadedKey = null;
 
@@ -13925,17 +13940,20 @@ async function loadFromDb(){
     dayValues = {};
     verlauf = [];
     if(activeEpisode){
-      // Tageswerte fuer aktiven Tag
+      // Tageswerte fuer aktiven Tag, nach Symptom + Anker gruppiert
       const {data:dv} = await window.sb
         .from('infekt_eintraege')
-        .select('symptom,wert')
+        .select('symptom,wert,anker')
         .eq('episode_id', activeEpisode.id)
         .eq('tagesdatum', iso);
-      (dv||[]).forEach(r => { dayValues[r.symptom] = r.wert; });
+      (dv||[]).forEach(r => {
+        if(!dayValues[r.symptom]) dayValues[r.symptom] = {};
+        dayValues[r.symptom][r.anker] = r.wert;
+      });
       // Gesamter Verlauf der Episode
       const {data:vl} = await window.sb
         .from('infekt_eintraege')
-        .select('tagesdatum,symptom,wert')
+        .select('tagesdatum,symptom,wert,anker')
         .eq('episode_id', activeEpisode.id)
         .order('tagesdatum', {ascending:true});
       verlauf = vl || [];
@@ -14031,20 +14049,30 @@ function renderUI(){
     return;
   }
 
-  // Symptom-Buttons mit 1-3 Skala
+  // Symptom-Block: pro Symptom 3 Anker-Reihen (Morgen/Mittag/Abend), je 1-3 Skala
   const symHtml = SYMPTOME.map(s => {
-    const cur = dayValues[s.key] || 0;
-    const stufen = [1,2,3].map(v => {
-      const active = (cur === v);
-      return `<button onclick="window.infekt_set('${s.key}',${v})"
-        style="width:30px;height:30px;border-radius:50%;border:1.5px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'transparent'};color:${active?'#f5f0e8':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer;font-weight:${active?'700':'400'}">${v}</button>`;
+    const sv = dayValues[s.key] || {};
+    const ankerRows = ANKER.map(a => {
+      const cur = sv[a.key] || 0;
+      const stufen = [1,2,3].map(v => {
+        const active = (cur === v);
+        return `<button onclick="window.infekt_set('${s.key}','${a.key}',${v})"
+          style="width:26px;height:26px;border-radius:50%;border:1.5px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'transparent'};color:${active?'#f5f0e8':'var(--text)'};font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;font-weight:${active?'700':'400'}">${v}</button>`;
+      }).join('');
+      const clearBtn = cur ? `<button onclick="window.infekt_set('${s.key}','${a.key}',0)" title="Zurücksetzen"
+        style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 5px">✕</button>` : '';
+      return `<div style="display:flex;align-items:center;gap:7px;padding:3px 0">
+        <span style="font-size:12px;width:20px;text-align:center" title="${a.label}">${a.emoji}</span>
+        <span style="flex:1;font-size:10px;color:var(--muted)">${a.label}</span>
+        <span style="display:flex;gap:4px;align-items:center">${stufen}${clearBtn}</span>
+      </div>`;
     }).join('');
-    const clearBtn = cur ? `<button onclick="window.infekt_set('${s.key}',0)" title="Zurücksetzen"
-      style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 6px">✕</button>` : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:16px;width:24px;text-align:center">${s.emoji}</span>
-      <span style="flex:1;font-size:12px">${s.label}</span>
-      <span style="display:flex;gap:5px;align-items:center">${stufen}${clearBtn}</span>
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+        <span style="font-size:16px;width:24px;text-align:center">${s.emoji}</span>
+        <span style="flex:1;font-size:12px;font-weight:600">${s.label}</span>
+      </div>
+      <div style="padding-left:6px">${ankerRows}</div>
     </div>`;
   }).join('');
 
@@ -14067,12 +14095,15 @@ function renderUI(){
     <span style="font-family:'JetBrains Mono',monospace;text-align:right">${schmerzTxt}</span>
   </div>`);
 
-  // Verlauf (kompakt: Symptom-Zeilen, Tage als Spalten)
+  // Verlauf (kompakt: Symptom-Zeilen, Tage als Spalten; pro Tag Max ueber Anker)
   let verlaufHtml = '';
   if(verlauf.length){
     const tage = [...new Set(verlauf.map(v=>v.tagesdatum))].sort();
     const map = {};
-    verlauf.forEach(v => { map[v.symptom+'|'+v.tagesdatum] = v.wert; });
+    verlauf.forEach(v => {
+      const k = v.symptom+'|'+v.tagesdatum;
+      map[k] = Math.max(map[k]||0, v.wert);
+    });
     const headCols = tage.map(t => {
       const dd = t.slice(8,10)+'.'+t.slice(5,7);
       return `<th style="font-weight:400;color:var(--muted);font-size:9px;padding:2px 4px;font-family:'JetBrains Mono',monospace">${dd}</th>`;
@@ -14086,7 +14117,7 @@ function renderUI(){
       return `<tr><td style="font-size:10px;color:var(--text);padding:3px 6px 3px 0;white-space:nowrap">${s.emoji} ${s.label}</td>${cells}</tr>`;
     }).join('');
     verlaufHtml = `<div class="form-section">
-      <div class="section-title" style="margin-bottom:8px">Verlauf</div>
+      <div class="section-title" style="margin-bottom:8px">Verlauf <span style="font-size:9px;color:var(--muted);font-weight:400">· Tages-Maximum</span></div>
       <div style="overflow-x:auto">
         <table style="border-collapse:collapse;width:100%">
           <thead><tr><th></th>${headCols}</tr></thead>
@@ -14159,23 +14190,24 @@ async function endEpisode(){
   }
 }
 
-async function setSymptom(symKey, wert){
+async function setSymptom(symKey, anker, wert){
   if(!activeEpisode) return;
   const iso = getActiveISO();
   try {
     if(wert === 0){
-      // loeschen
+      // loeschen (genau dieser Symptom+Anker an dem Tag)
       const {error} = await window.sb
         .from('infekt_eintraege')
         .delete()
         .eq('episode_id', activeEpisode.id)
         .eq('tagesdatum', iso)
         .eq('symptom', symKey)
+        .eq('anker', anker)
         .eq('user_id', window.sbUser.id);
       if(error) throw error;
-      delete dayValues[symKey];
+      if(dayValues[symKey]) delete dayValues[symKey][anker];
     } else {
-      // upsert (unique auf episode_id+tagesdatum+symptom)
+      // upsert (unique auf episode_id+tagesdatum+symptom+anker)
       const {error} = await window.sb
         .from('infekt_eintraege')
         .upsert({
@@ -14183,14 +14215,16 @@ async function setSymptom(symKey, wert){
           episode_id: activeEpisode.id,
           tagesdatum: iso,
           symptom: symKey,
+          anker: anker,
           wert: wert
-        }, {onConflict: 'episode_id,tagesdatum,symptom'});
+        }, {onConflict: 'episode_id,tagesdatum,symptom,anker'});
       if(error) throw error;
-      dayValues[symKey] = wert;
+      if(!dayValues[symKey]) dayValues[symKey] = {};
+      dayValues[symKey][anker] = wert;
     }
-    // Verlauf lokal aktualisieren
-    verlauf = verlauf.filter(v => !(v.tagesdatum===iso && v.symptom===symKey));
-    if(wert !== 0) verlauf.push({tagesdatum:iso, symptom:symKey, wert});
+    // Verlauf lokal aktualisieren (dieser Symptom+Anker an dem Tag)
+    verlauf = verlauf.filter(v => !(v.tagesdatum===iso && v.symptom===symKey && v.anker===anker));
+    if(wert !== 0) verlauf.push({tagesdatum:iso, symptom:symKey, wert, anker});
     // Erkaeltung => krank-Flag fuer den Tag setzen
     await setKrankFlag(iso, true);
     renderUI();
