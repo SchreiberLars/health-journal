@@ -1410,6 +1410,19 @@ window.sbUser = null;
   </div>
 </div>
 
+<!-- INFEKT STARTDATUM MODAL -->
+<div class="modal-overlay" id="infekt-m-start">
+  <div class="modal-sheet">
+    <div class="mt">Startdatum der Erkältung</div>
+    <div class="mt-sub">Rückwirkend anpassbar — z.B. wenn der Infekt eigentlich früher begann</div>
+    <input class="mi" id="infekt-m-start-input" type="date" style="margin-top:8px">
+    <div class="mbr" style="margin-top:14px">
+      <button class="bs" onclick="closeModal('infekt-m-start')">Abbrechen</button>
+      <button class="bp" onclick="window.infekt_saveStart()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- TAGESKOMMENTAR MODAL -->
 <div class="modal-overlay" id="m-tageskommentar">
   <div class="modal-sheet">
@@ -13760,7 +13773,7 @@ function renderUI(){
 
   el.innerHTML = `<div class="form-section">
     <div class="section-row">
-      <div class="section-title">Erkältung · seit ${startTxt} (Tag ${tagN})</div>
+      <div class="section-title">Erkältung · seit <span onclick="window.infekt_editStart()" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--muted);text-underline-offset:3px" title="Startdatum ändern">${startTxt}</span> (Tag ${tagN})</div>
       <button onclick="window.infekt_end()" title="Erkältung beenden"
         style="background:none;border:1px solid var(--border);border-radius:16px;padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer">Beenden</button>
     </div>
@@ -13873,9 +13886,47 @@ async function setKrankFlag(iso, aktiv){
   }
 }
 
+function editStart(){
+  if(!activeEpisode) return;
+  const inp = document.getElementById('infekt-m-start-input');
+  inp.value = activeEpisode.start_datum;
+  // Startdatum darf nicht in der Zukunft und nicht nach end_datum liegen
+  const today = new Date().toISOString().slice(0,10);
+  inp.max = activeEpisode.end_datum ? activeEpisode.end_datum : today;
+  openModal('infekt-m-start');
+}
+
+async function saveStart(){
+  if(!activeEpisode) return;
+  const neu = document.getElementById('infekt-m-start-input').value;
+  if(!neu){ showToast('Kein Datum angegeben'); return; }
+  if(activeEpisode.end_datum && neu > activeEpisode.end_datum){
+    showToast('Start kann nicht nach dem Ende liegen'); return;
+  }
+  const today = new Date().toISOString().slice(0,10);
+  if(neu > today){ showToast('Start kann nicht in der Zukunft liegen'); return; }
+  try {
+    const {error} = await window.sb
+      .from('infekt_episoden')
+      .update({start_datum: neu})
+      .eq('id', activeEpisode.id)
+      .eq('user_id', window.sbUser.id);
+    if(error) throw error;
+    activeEpisode.start_datum = neu;
+    closeModal('infekt-m-start');
+    lastLoadedKey = null;
+    await loadFromDb();
+    showToast('Startdatum aktualisiert ✓');
+  } catch(err){
+    showToast('Fehler: ' + err.message);
+  }
+}
+
 window.infekt_start = startEpisode;
 window.infekt_end = endEpisode;
 window.infekt_set = setSymptom;
+window.infekt_editStart = editStart;
+window.infekt_saveStart = saveStart;
 window.infekt_render = render;
 })();
 
