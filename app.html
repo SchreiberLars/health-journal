@@ -2875,17 +2875,49 @@ function renderVerlaufKohorte(host, episodes){
     <td style="padding:6px;font-size:11px;font-family:'JetBrains Mono',monospace;text-align:center">Peak ${ep.peak}</td>
   </tr>`).join('');
 
-  // Pro Symptom: Onset-Vergleich (ab welchem Tag in welcher Episode)
+  // Pro Symptom: farbcodierte Balkenreihe je Episode (Zelle = Tag-seit-Beginn,
+  // Intensitaet = Schweregrad) + Tag-von/bis-Textzeile darunter
   const perSymp = VERLAUF_SYMP.map(s => {
-    const cells = cohort.map((ep,i) => {
-      const tage = ep.entries.filter(x => x.symptom === s.key).map(x=>x.tag);
-      if(!tage.length) return `<span style="color:var(--muted);font-size:10px">${fmtDM(ep.start_datum)}: —</span>`;
-      const mn = Math.min(...tage), mx = Math.max(...tage);
-      return `<span style="font-size:10px;font-family:'JetBrains Mono',monospace"><span style="color:${colors[i%5]};font-weight:600">${fmtDM(ep.start_datum)}</span>: Tag ${mn}–${mx}</span>`;
+    const rows = cohort.map((ep,i) => {
+      const col = colors[i%5];
+      // Wert pro Tag fuer dieses Symptom
+      const byTag = {};
+      ep.entries.filter(x => x.symptom === s.key).forEach(x => { byTag[x.tag] = x.wert; });
+      const tageVorh = Object.keys(byTag).map(Number);
+      let cells = '';
+      for(let t=1;t<=maxTag;t++){
+        if(t > ep.dauer){
+          // jenseits der Episodendauer: dezent ausgegraut
+          cells += `<i style="flex:1;height:16px;border-radius:2px;background:#e8e0d0;opacity:.3"></i>`;
+        } else {
+          const w = byTag[t];
+          if(w){
+            const mix = Math.round((w/3)*100);
+            cells += `<i style="flex:1;height:16px;border-radius:2px;background:color-mix(in srgb,${col} ${mix}%,#e8e0d0)"></i>`;
+          } else {
+            cells += `<i style="flex:1;height:16px;border-radius:2px;background:#e8e0d0"></i>`;
+          }
+        }
+      }
+      return `<div style="display:flex;align-items:center;gap:7px;margin:3px 0">
+        <span style="font-size:9px;width:42px;font-weight:600;color:${col};font-family:'JetBrains Mono',monospace">${fmtDM(ep.start_datum)}</span>
+        <span style="flex:1;display:flex;gap:2px">${cells}</span>
+      </div>`;
+    }).join('');
+    // Text-Zeile: Tag von–bis (+ Peak) je Episode
+    const txt = cohort.map((ep,i) => {
+      const tage = ep.entries.filter(x => x.symptom === s.key);
+      if(!tage.length) return `<span style="color:${colors[i%5]};font-weight:600">${fmtDM(ep.start_datum)}</span>: —`;
+      const tg = tage.map(x=>x.tag);
+      const mn = Math.min(...tg), mx = Math.max(...tg);
+      let peak = tage[0];
+      tage.forEach(x=>{ if(x.wert>peak.wert) peak=x; });
+      return `<span style="color:${colors[i%5]};font-weight:600">${fmtDM(ep.start_datum)}</span>: Tag ${mn}–${mx}${mx>mn?` (Peak T${peak.tag})`:''}`;
     }).join(' &nbsp;·&nbsp; ');
-    return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:11px;font-weight:600;margin-bottom:3px">${s.emoji} ${s.label}</div>
-      <div>${cells}</div>
+    return `<div style="padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:600;margin-bottom:5px">${s.emoji} ${s.label}</div>
+      ${rows}
+      <div style="font-size:9px;color:var(--muted);margin-top:4px;font-family:'JetBrains Mono',monospace">${txt}</div>
     </div>`;
   }).join('');
 
@@ -2910,7 +2942,7 @@ function renderVerlaufKohorte(host, episodes){
     </div>
 
     <div style="font-size:12px;font-weight:600;margin-bottom:6px">Symptom-Fenster pro Episode</div>
-    <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Von welchem bis zu welchem Tag (seit Beginn) das Symptom erfasst war</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Balken zeigt Tag-seit-Beginn (1 bis max). Farbintensität = Schweregrad an dem Tag.</div>
     ${perSymp}
 
     <div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:18px;line-height:1.5">
