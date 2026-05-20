@@ -2681,6 +2681,29 @@ async function renderVerlauf(){
       .eq('user_id', window.sbUser.id);
     if(e2) throw e2;
 
+    // Temperaturmessungen ueber alle Episoden-Zeitraeume laden
+    // (frueheste Messung pro Tag = Basaltemperatur)
+    let minStart = null, maxEnd = null;
+    eps.forEach(ep => {
+      if(!minStart || ep.start_datum < minStart) minStart = ep.start_datum;
+      const end = ep.end_datum || new Date().toISOString().slice(0,10);
+      if(!maxEnd || end > maxEnd) maxEnd = end;
+    });
+    let tempMeasurements = [];
+    if(minStart && maxEnd){
+      const {data:mw} = await window.sb
+        .from('messw_eintraege')
+        .select('temp_c, erfasst_am')
+        .eq('user_id', window.sbUser.id)
+        .gte('erfasst_am', minStart + 'T00:00:00')
+        .lte('erfasst_am', maxEnd + 'T23:59:59')
+        .order('erfasst_am', {ascending: true});
+      tempMeasurements = (mw||[]).filter(r => {
+        const v = parseFloat(r.temp_c);
+        return !isNaN(v) && v > 0;
+      });
+    }
+
     // Episoden mit abgeleiteten Kennzahlen anreichern
     const today = new Date().toISOString().slice(0,10);
     const episodes = eps.map(ep => {
@@ -2704,7 +2727,17 @@ async function renderVerlauf(){
         ...x,
         tag: Math.round((new Date(x.tagesdatum) - new Date(ep.start_datum))/(1000*60*60*24)) + 1
       }));
-      return { ...ep, ende, dauer, avg, peak, laufend: !ep.end_datum, entries: withTag };
+      // Basaltemperatur pro Tag-seit-Beginn: frueheste temp_c-Messung des Kalendertages,
+      // der innerhalb dieser Episode liegt. tempMeasurements ist nach erfasst_am asc sortiert,
+      // also ist die erste gesehene Messung pro Tag automatisch die frueheste.
+      const basalByTag = {};
+      tempMeasurements.forEach(m => {
+        const isoDay = m.erfasst_am.slice(0,10);
+        if(isoDay < ep.start_datum || isoDay > ende) return;
+        const tag = Math.round((new Date(isoDay) - new Date(ep.start_datum))/(1000*60*60*24)) + 1;
+        if(basalByTag[tag] == null) basalByTag[tag] = parseFloat(m.temp_c);
+      });
+      return { ...ep, ende, dauer, avg, peak, laufend: !ep.end_datum, entries: withTag, basalByTag };
     });
 
     if(verlaufState.view === 'einzel' && verlaufState.selectedEpisode){
@@ -2810,6 +2843,43 @@ function renderVerlaufEinzel(host, ep, allEps){
     </div>`;
   }).join('');
 
+  // Basaltemperatur-Reihe (frueheste Tagesmessung). Intensitaet = Delta zur Baseline 35.9.
+  const BASE_TEMP = 35.9;
+  const basalByTag = ep.basalByTag || {};
+  const basalTags = Object.keys(basalByTag).map(Number);
+  let basalRow = '';
+  if(basalTags.length){
+    let cells = '';
+    for(let t=1; t<=maxTag; t++){
+      const v = basalByTag[t];
+      if(v != null){
+        const delta = v - BASE_TEMP;
+        // Skala: 0 = neutral, +0.6 = vollfarbig. Negativ bleibt schwach.
+        const mix = Math.max(0, Math.min(100, Math.round((delta / 0.6) * 100)));
+        cells += `<i title="Tag ${t}: ${v.toFixed(1)}°" style="flex:1;height:16px;border-radius:2px;background:color-mix(in srgb,${EP_COLOR} ${mix}%,#e8e0d0)"></i>`;
+      } else {
+        cells += `<i style="flex:1;height:16px;border-radius:2px;background:#e8e0d0"></i>`;
+      }
+    }
+    const vals = basalTags.map(t => basalByTag[t]);
+    const vmin = Math.min(...vals), vmax = Math.max(...vals);
+    const peakTagNum = basalTags.find(t => basalByTag[t] === vmax);
+    const range = (vmax === vmin) ? `${vmin.toFixed(1)}°` : `${vmin.toFixed(1)}–${vmax.toFixed(1)}°`;
+    const peakInfo = (vmax > BASE_TEMP) ? ` (Peak T${peakTagNum} +${(vmax-BASE_TEMP).toFixed(1)} vs. Baseline)` : '';
+    basalRow = `<div style="padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:600;margin-bottom:5px">🌡 Basaltemperatur <span style="font-weight:400;color:var(--muted);font-size:9px">· früheste Messung/Tag</span></div>
+      <div style="display:flex;align-items:center;gap:7px;margin:3px 0">
+        <span style="flex:1;display:flex;gap:2px">${cells}</span>
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-top:4px;font-family:'JetBrains Mono',monospace">Range ${range}${peakInfo}</div>
+    </div>`;
+  } else {
+    basalRow = `<div style="padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:600;margin-bottom:5px">🌡 Basaltemperatur</div>
+      <div style="font-size:9px;color:var(--muted);font-style:italic;font-family:'JetBrains Mono',monospace">Keine Temperaturmessungen in diesem Zeitraum erfasst</div>
+    </div>`;
+  }
+
   // Tag-Achsen-Markierung (1, Mitte, max) als Orientierung unter den Balken
   const midTag = Math.ceil(maxTag/2);
   const achse = `<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin:2px 0 14px">
@@ -2830,6 +2900,7 @@ function renderVerlaufEinzel(host, ep, allEps){
     <div style="font-size:12px;font-weight:600;margin-bottom:4px">Symptomverlauf ab Tag 1</div>
     <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Balken zeigt Tag-seit-Beginn. Farbintensität = Schweregrad an dem Tag.</div>
     ${perSymp}
+    ${basalRow}
     ${achse}
 
     <div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:14px;line-height:1.5">
@@ -2931,6 +3002,58 @@ function renderVerlaufKohorte(host, episodes){
     </div>`;
   }).join('');
 
+  // Basaltemperatur-Vergleich: pro Episode eine Reihe (frueheste Tagesmessung,
+  // Intensitaet = Delta zur Baseline 35.9). Tage jenseits der Episodendauer ausgegraut.
+  const KBASE = 35.9;
+  const anyBasal = cohort.some(ep => Object.keys(ep.basalByTag || {}).length > 0);
+  let basalCompareBlock = '';
+  if(anyBasal){
+    const basalRows = cohort.map((ep,i) => {
+      const col = colors[i%5];
+      const bbt = ep.basalByTag || {};
+      let cells = '';
+      for(let t=1;t<=maxTag;t++){
+        if(t > ep.dauer){
+          cells += `<i style="flex:1;height:16px;border-radius:2px;background:#e8e0d0;opacity:.3"></i>`;
+        } else {
+          const v = bbt[t];
+          if(v != null){
+            const delta = v - KBASE;
+            const mix = Math.max(0, Math.min(100, Math.round((delta / 0.6) * 100)));
+            cells += `<i title="Tag ${t}: ${v.toFixed(1)}°" style="flex:1;height:16px;border-radius:2px;background:color-mix(in srgb,${col} ${mix}%,#e8e0d0)"></i>`;
+          } else {
+            cells += `<i style="flex:1;height:16px;border-radius:2px;background:#e8e0d0"></i>`;
+          }
+        }
+      }
+      return `<div style="display:flex;align-items:center;gap:7px;margin:3px 0">
+        <span style="font-size:9px;width:42px;font-weight:600;color:${col};font-family:'JetBrains Mono',monospace">${fmtDM(ep.start_datum)}</span>
+        <span style="flex:1;display:flex;gap:2px">${cells}</span>
+      </div>`;
+    }).join('');
+    // Textzeile: Range + Peak je Episode
+    const basalTxt = cohort.map((ep,i) => {
+      const bbt = ep.basalByTag || {};
+      const tgs = Object.keys(bbt).map(Number);
+      if(!tgs.length) return `<span style="color:${colors[i%5]};font-weight:600">${fmtDM(ep.start_datum)}</span>: —`;
+      const vals = tgs.map(t => bbt[t]);
+      const vmin = Math.min(...vals), vmax = Math.max(...vals);
+      const peakT = tgs.find(t => bbt[t] === vmax);
+      const rangeStr = (vmax === vmin) ? `${vmin.toFixed(1)}°` : `${vmin.toFixed(1)}–${vmax.toFixed(1)}°`;
+      const peakStr = (vmax > KBASE) ? ` (Peak T${peakT} +${(vmax-KBASE).toFixed(1)})` : '';
+      return `<span style="color:${colors[i%5]};font-weight:600">${fmtDM(ep.start_datum)}</span>: ${rangeStr}${peakStr}`;
+    }).join(' &nbsp;·&nbsp; ');
+    basalCompareBlock = `<div style="padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:600;margin-bottom:5px">🌡 Basaltemperatur <span style="font-weight:400;color:var(--muted);font-size:9px">· früheste Messung/Tag, Delta zur Baseline ${KBASE.toFixed(1)}°</span></div>
+      ${basalRows}
+      <div style="font-size:9px;color:var(--muted);margin-top:4px;font-family:'JetBrains Mono',monospace">${basalTxt}</div>
+    </div>`;
+  } else {
+    basalCompareBlock = `<div style="padding:9px 0;border-bottom:1px solid var(--border);font-size:9px;color:var(--muted);font-style:italic;font-family:'JetBrains Mono',monospace">
+      🌡 Basaltemperatur: keine Temperaturmessungen in den ausgewählten Episoden-Zeiträumen erfasst
+    </div>`;
+  }
+
   host.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       <button onclick="window.verlauf_back()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text)">‹ Zurück</button>
@@ -2954,6 +3077,7 @@ function renderVerlaufKohorte(host, episodes){
     <div style="font-size:12px;font-weight:600;margin-bottom:6px">Symptom-Fenster pro Episode</div>
     <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Balken zeigt Tag-seit-Beginn (1 bis max). Farbintensität = Schweregrad an dem Tag.</div>
     ${perSymp}
+    ${basalCompareBlock}
 
     <div style="font-size:10px;color:var(--muted);font-style:italic;margin-top:18px;line-height:1.5">
       Daten ohne Wertung — die Einordnung („milder/schwerer", „schneller abgeklungen") triffst du selbst. Bei kurzem Tracking-Zeitraum und wenigen Episoden sind das Tendenzen, keine Beweise.
