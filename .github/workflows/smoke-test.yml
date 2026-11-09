@@ -1,0 +1,40 @@
+name: Smoke Test
+
+# Laeuft bei jedem Push: Syntax-Check + App im Browser laden,
+# alle Module, Tabs und Modals durchklicken.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: JavaScript-Syntax pruefen
+        run: python tests/syntax_check.py app.html
+
+      - name: Playwright installieren
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: App im Browser testen
+        run: |
+          python -m http.server 8000 >/dev/null 2>&1 &
+          sleep 2
+          python tests/smoke.py http://localhost:8000/app.html
+
+      - name: Screenshot bei Fehler
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshot
+          path: smoke.png
