@@ -1721,9 +1721,31 @@ window.sbUser = null;
 // ═══════════════════════════════════════════
 // SHARED UTILITIES
 // ═══════════════════════════════════════════
+// Zentrale Helfer fuer alle Module. Module definieren diese NICHT erneut.
 function uid(){return Math.random().toString(36).slice(2,9)}
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+// Aktiver Journal-Tag als YYYY-MM-DD in lokaler Zeit (nicht UTC)
+function getActiveISO(){
+  const d = (typeof activeDate !== 'undefined' && activeDate) ? activeDate : new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+// ISO-Timestamp -> "HH:MM" (lokal)
+function timeFromTimestamp(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+// "HH:MM" + YYYY-MM-DD -> ISO-Timestamp
+function timestampFromTime(timeStr, isoDate){
+  if(!timeStr) return new Date().toISOString();
+  const [h,m] = timeStr.split(':').map(Number);
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
+// "HH:MM" -> Minuten seit Mitternacht
+function timeToMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; }
 function isoDate(d){
   // Lokale Datum-Komponenten verwenden (nicht UTC), sonst Off-by-one in Zeitzonen mit Offset > 0
   const y = d.getFullYear();
@@ -4834,36 +4856,11 @@ function sortMedList() {
   medList.sort((a, b) => a.name.localeCompare(b.name, 'de'));
 }
 
-function nowTime() {
-  const n = new Date();
-  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
-}
 
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
 
 // ═══════════════════════════════════════════
 // DB HELPERS
 // ═══════════════════════════════════════════
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let medListLoaded = false;
 async function loadMedList(){
@@ -5471,9 +5468,6 @@ document.addEventListener('click', e => {
 // MODAL HELPERS
 // ═══════════════════════════════════════════
 
-function openModal(id) {
-  document.getElementById(id).classList.add('open');
-}
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
   takeCtx = null;
@@ -5484,14 +5478,6 @@ function closeModal(id) {
 // TOAST
 // ═══════════════════════════════════════════
 
-let toastTimer;
-function showToast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
-}
 
 // ── DATUM / INTERVALL ────────────────────
 let simDate = null;
@@ -5572,7 +5558,6 @@ async function saveEditMed(){
 
 let medCommentOpen = false;
 
-function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function toggleMedComment(){
   medCommentOpen = !medCommentOpen;
@@ -5709,7 +5694,6 @@ let commentOpen = {};
 let doseCtx = null;
 let lpTimer = null, lpFired = false;
 
-function uid(){return Math.random().toString(36).slice(2,9)}
 function isTaken(sid,stk){return takenMap[sid+'__'+stk]?.taken===true}
 function getODose(sid,stk){return takenMap[sid+'__'+stk]?.overrideDose??null}
 function getEinnahmeId(sid,stk){return takenMap[sid+'__'+stk]?.einnahmeId||null}
@@ -5727,14 +5711,6 @@ function stackSupps(stk){return suppList.filter(s=>s.stacks.includes(stk))}
 function takenCount(stk){return stackSupps(stk).filter(s=>isTaken(s.id,stk)).length}
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
 
 let suppListLoaded = false;
 async function loadSuppList(){
@@ -5916,7 +5892,6 @@ function renderStack(stk){
 function toggleStk(id){openStacks[id]=!openStacks[id];render()}
 
 // ── COMMENTS ─────────────────────────────
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 function toggleComment(stackId){
   commentOpen[stackId]=!commentOpen[stackId];
@@ -6394,16 +6369,8 @@ async function saveEdit(){
 }
 
 // ── MODALS ────────────────────────────────
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
-}
 
 // ── INIT ──────────────────────────────────
 // Exports
@@ -6464,7 +6431,6 @@ let doseCtx = null;
 let lpTimer = null, lpFired = false;
 
 // ── HELPERS ───────────────────────────────
-function uid(){return Math.random().toString(36).slice(2,9)}
 function today(){
   return new Date().toISOString().slice(0,10);
 }
@@ -6485,14 +6451,6 @@ function groupProds(grp){return products.filter(p=>p.groups.includes(grp))}
 function doneCount(grp){return groupProds(grp).filter(p=>isDone(p.id,grp)).length}
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
 
 let stammdatenLoaded = false;
 async function loadStammdaten(){
@@ -6772,7 +6730,6 @@ function remaining(p){
 function toggleGrp(id){openGroups[id]=!openGroups[id];renderUI()}
 
 // ── COMMENTS ─────────────────────────────
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 function toggleComment(grpId){
   commentOpen[grpId]=!commentOpen[grpId];
@@ -7052,10 +7009,6 @@ function openTimeEdit(pid, grp){
   openModal('haut-m-time');
 }
 
-function nowTime(){
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
 
 async function saveTime(){
   if(!timeCtx) return;
@@ -7597,16 +7550,8 @@ async function saveNew(){
 }
 
 // ── MODALS ────────────────────────────────
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
-}
 
 // ── INIT ──────────────────────────────────
 // Exports
@@ -7666,7 +7611,6 @@ const SCALES = {
 // ── METRIKEN (aus DB geladen) ─────────────
 let metriken = []; // [{id, name, scale, pflicht, aktiv, sortierung}]
 
-function uid(){return Math.random().toString(36).slice(2,9)}
 
 // ── STATE ─────────────────────────────────
 // ankerData: { morgen: { metrikId:wert, ... }, mittag:{...}, abend:{...} }
@@ -7681,25 +7625,7 @@ let spontanList = [];
 let krankData = { aktiv: false, kommentar: '' };
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
 
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let metrikenLoaded = false;
 async function loadMetriken(){
@@ -8098,7 +8024,6 @@ async function toggleOptional(anker, metrikId){
 }
 
 // ── COMMENTS ─────────────────────────────
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 function toggleComment(anker){
   ankerCommentOpen[anker]=!ankerCommentOpen[anker];
@@ -8120,7 +8045,6 @@ let spontanCtx = null;
 let endingEntryId = null;
 
 // Time helpers
-function timeToMin(t){ if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; }
 function minToTime(min){ min=((min%1440)+1440)%1440; return `${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}`; }
 function minToHm(min){
   if(min<60) return `${min}min`;
@@ -8594,15 +8518,8 @@ function openModal(id){
   spontanVals={};
   document.getElementById(id).classList.add('open');
 }
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
-}
 
 // ── INIT ──────────────────────────────────
 // Exports
@@ -8670,8 +8587,6 @@ let ankerFotos = { morgen:{}, abend:{} };
 let spontanVals = {};
 let spontanFotoPfad = null; // temp fuer Spontan-Modal
 
-function uid(){return Math.random().toString(36).slice(2,9)}
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 // ── FOTO-HELPER ────────────────────────────
 // Bild komprimieren via Canvas (max 1000px breit, ~300KB)
@@ -8740,24 +8655,6 @@ async function deleteFoto(pfad){
 }
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let regionsLoaded = false;
 async function loadRegions(){
@@ -9401,16 +9298,8 @@ async function delSpontan(id){
 }
 
 // ── MODALS ────────────────────────────────
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
-}
 
 // ── INIT ──────────────────────────────────
 // Exports
@@ -10209,32 +10098,9 @@ let editCtx = null;
 let currentBewertung = 'gut';
 let lpTimer = null, lpFired = false;
 
-function uid(){return Math.random().toString(36).slice(2,9)}
-function nowTime(){
-  const n=new Date();
-  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
-}
 function tagById(id){return tags.find(t=>t.id===id)}
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let stammdatenLoaded = false;
 async function loadStammdaten(){
@@ -10819,16 +10685,8 @@ async function deleteTag(id){
 }
 
 // ── MODALS ────────────────────────────────
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
-}
 // Exports
 window.get_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==undefined)window._lpFired=false;},50);if(typeof openDrinkModal==='function')openDrinkModal(btn.dataset.gid);};
   window.get_deleteEntry = deleteEntry;
@@ -10913,26 +10771,6 @@ let lpTimer = null, lpFired = false;
 let bibliFilter = '';
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  if(!ts) return '';
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  if(!timeStr) return new Date().toISOString();
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let bibliLoaded = false;
 async function loadBibliothek(){
@@ -11151,12 +10989,6 @@ function canDeleteItem(itemId) {
   return usedIn.length === 0 ? null : usedIn.map(g => g.name).join(', ');
 }
 
-function uid(){ return Math.random().toString(36).slice(2,9); }
-function nowTime(){
-  const n=new Date();
-  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
-}
-function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function itemById(id){ return bibliothek.find(x=>x.id===id); }
 
 // ── BEWERTUNG ─────────────────────────────
@@ -11980,16 +11812,8 @@ function updateEditBtn(){
 }
 
 // ── MODALS ────────────────────────────────
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
-}
 // Exports
 window.ern_lpAction=function(btn){setTimeout(function(){if(window._lpFired!==undefined)window._lpFired=false;},50);if(typeof openAddModal==='function')openAddModal(btn.dataset.iid);};
 // ── MAHLZEIT-ZEIT EDITIEREN ──────────────
@@ -12389,32 +12213,8 @@ let spontanVals = {};
 // Wenn nicht gesetzt: derived from data (hat L oder R Werte -> getrennt, sonst zusammen)
 let seitMode = {}; // {anker: {regionId: 'zusammen'|'getrennt'}}
 
-function uid(){return Math.random().toString(36).slice(2,9)}
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function nowTime(){
-  const n=new Date();
-  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
-}
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let regionsLoaded = false;
 async function loadRegions(){
@@ -12562,74 +12362,6 @@ function renderBadge(anker){
 }
 
 
-async function copyFromPrevDay(anker) {
-  if(!window.sbUser || !window.sb){
-    showToast('Nicht eingeloggt');
-    return;
-  }
-  const cur = (typeof activeDate !== 'undefined' && activeDate) ? new Date(activeDate) : new Date();
-  cur.setDate(cur.getDate() - 1);
-  const prevISO = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
-  try {
-    const { data, error } = await window.sb
-      .from('schmerz_anker_werte')
-      .select('region_id, wert, nur_aufstehen, allodynie, seite')
-      .eq('user_id', window.sbUser.id)
-      .eq('tagesdatum', prevISO)
-      .eq('anker', anker);
-    if(error) throw error;
-    if(!data || !data.length){
-      showToast('Keine Vortageswerte vorhanden');
-      return;
-    }
-    // Lokal anwenden
-    const newVals = {};
-    const newAllo = {};
-    data.forEach(r => {
-      const k = r.seite ? `${r.region_id}|${r.seite}` : r.region_id;
-      if(r.wert != null){
-        newVals[k] = { val: parseFloat(r.wert), nurAufstehen: !!r.nur_aufstehen };
-      }
-      if(r.allodynie) newAllo[k] = true;
-    });
-    ankerData[anker] = newVals;
-    allodynie[anker] = newAllo;
-    renderUI();
-    // In DB fuer aktiven Tag uebernehmen - eine pro Eintrag (wegen seite-Differenzierung)
-    const todayISO = getActiveISO();
-    let inserted = 0;
-    for(const r of data){
-      try {
-        // Erst bestehende Zeile loeschen, dann neu einfuegen (vermeidet onConflict-Komplikationen mit COALESCE)
-        let dq = window.sb.from('schmerz_anker_werte').delete()
-          .eq('user_id', window.sbUser.id)
-          .eq('tagesdatum', todayISO)
-          .eq('anker', anker)
-          .eq('region_id', r.region_id);
-        if(r.seite) dq = dq.eq('seite', r.seite);
-        else dq = dq.is('seite', null);
-        await dq;
-        const { error: iErr } = await window.sb
-          .from('schmerz_anker_werte')
-          .insert({
-            user_id: window.sbUser.id,
-            tagesdatum: todayISO,
-            anker,
-            region_id: r.region_id,
-            wert: r.wert,
-            nur_aufstehen: r.nur_aufstehen,
-            allodynie: r.allodynie,
-            seite: r.seite || null
-          });
-        if(!iErr) inserted++;
-      } catch(_){}
-    }
-    showToast(`${inserted} Vortageswerte übernommen ✓`);
-  } catch(err){
-    console.error('copyFromPrevDay-Fehler:', err);
-    showToast('Fehler: ' + err.message);
-  }
-}
 function renderRegions(anker){
   const container=document.getElementById('schmerz-regions-'+anker);
   const regs=regions.filter(r=>r.groups.includes(anker));
@@ -13109,11 +12841,6 @@ function openEditSpontan(id){
 }
 
 // Time helpers ────────────────────────────
-function timeToMin(t){
-  if(!t) return null;
-  const [h,m]=t.split(':').map(Number);
-  return h*60+m;
-}
 function minToTime(min){
   min=((min%1440)+1440)%1440;
   return `${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}`;
@@ -13372,16 +13099,8 @@ async function delSpontan(id){
 }
 
 // ── MODALS ────────────────────────────────
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);
-}
 // Live-update offene Episoden alle 60s
 setInterval(()=>{
   if(spontanList.some(e=>!e.endtime)) renderSpontan();
@@ -13401,7 +13120,6 @@ setInterval(()=>{
   window.schmerz_openSpontan = openSpontan;
   window.schmerz_render = render;
   window.schmerz_toggleAllodynie = toggleAllodynie;
-  window.schmerz_copyFromPrevDay = copyFromPrevDay;
   window.schmerz_saveRegion = saveRegion;
   window.schmerz_saveSpontan = saveSpontan;
   window.schmerz_toggleAnker = toggleAnker;
@@ -13413,7 +13131,6 @@ setInterval(()=>{
   window.schmerz_confirmEnd = confirmEnd;
   window.schmerz_render = render;
   window.schmerz_toggleAllodynie = toggleAllodynie;
-  window.schmerz_copyFromPrevDay = copyFromPrevDay;
 })();
 
 (function() {
@@ -13471,34 +13188,7 @@ let dayComment = '';
 let commentOpen = false;
 let loading = false;
 
-function uid(){ return Math.random().toString(36).slice(2,9); }
-function nowTime(){
-  const n=new Date();
-  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
-}
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
-function getActiveISO(){
-  // activeDate is the global date variable from main app
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  // ts is ISO timestamp e.g. "2026-04-26T19:30:00+00:00"
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  // Combine date + HH:MM into a local timestamp ISO
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 // ── DB SYNC ───────────────────────────────
 async function loadFromDb(){
@@ -13737,16 +13427,8 @@ function openLegend(){
 }
 
 // ── MODALS ────────────────────────────────
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2500);
-}
 // ── ZEIT-EDIT ────────────────────────────
 let timeEditCtx = null;  // entry id
 
@@ -13810,13 +13492,6 @@ let entries = [];   // [{id, typ_id, wert, time, kommentar, erfasst_am}]
 let lastLoadedISO = null;
 let commentOpen = {}; // {entryId: bool}
 
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d=activeDate, y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${dd}`;
-  }
-  return new Date().toISOString().slice(0,10);
-}
 
 async function loadFromDb(){
   if(!window.sb || !window.sbUser) return;
@@ -14088,13 +13763,6 @@ let verlauf = [];           // [{tagesdatum, symptom, wert, anker}] fuer Episode
 let mirror = {verdAvg:null, schmerz:[], temp:null, tempBasal:null};
 let lastLoadedKey = null;
 
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d=activeDate, y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${dd}`;
-  }
-  return new Date().toISOString().slice(0,10);
-}
 
 async function loadFromDb(){
   if(!window.sb || !window.sbUser) return;
@@ -14501,29 +14169,8 @@ let delMode = false, editMode = false;
 let lpTimer = null, lpFired = false;
 let dayComment = '';
 let commentOpen = false;
-function uid(){return Math.random().toString(36).slice(2,9)}
-function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let aktivitaetenLoaded = false;
 async function loadAktivitaeten(){
@@ -14944,11 +14591,7 @@ async function saveNew(){
     showToast('Fehler: ' + err.message);
   }
 }
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
 // modal listeners: global
-let tt;
-function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);}
 // Exports
 window.akt_lpAction=function(card){if(typeof openEditEntry==='function')openEditEntry(card.dataset.eid);};
   window.akt_deleteAkt = deleteAkt;
@@ -14976,29 +14619,8 @@ let entries=[];
 let delMode=false,editMode=false,addCtx=null,editCtx=null;
 let dayComment = '';
 let commentOpen = false;
-function uid(){return Math.random().toString(36).slice(2,9)}
-function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let regenItemsLoaded = false;
 async function loadRegenItems(){
@@ -15372,9 +14994,6 @@ async function saveEdit(){
   }
 }
 
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
-let tt;function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);}
 // Exports
 window.regen_lpAction=function(card){if(typeof entries==='undefined'||!entries)return;var e=entries.find(function(x){return x.id===card.dataset.eid;});if(!e)return;if(typeof addCtx!=='undefined')addCtx={rid:e.rid,editId:e.id};var item=(typeof regenItems!=='undefined'?regenItems:[]).find(function(x){return x.id===e.rid;})||{icon:e.icon||'',name:e.name||''};var t=document.getElementById('regen-m-dauer-title');if(t)t.textContent='Bearbeiten: '+item.icon+' '+item.name;var v=document.getElementById('regen-m-dauer-val');if(v)v.value=e.dauer||'';var tm=document.getElementById('regen-m-dauer-time');if(tm)tm.value=e.time||'';openModal('regen-m-dauer');};
   window.regen_deleteEntry = deleteEntry;
@@ -15405,30 +15024,9 @@ let dayComment = '';
 let commentOpen = false;
 const TEMP_CHIPS=[35.8,35.9,36.0,36.1,36.2,36.3,36.4,36.5];
 
-function uid(){return Math.random().toString(36).slice(2,9)}
-function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
 function fmt1(n){ return n.toFixed(1).replace('.',','); }
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 async function loadFromDb(){
   if(!window.sbUser || !window.sb) return;
@@ -16121,15 +15719,6 @@ let currentKontaktQual = 'gut';
 let famEintragIds = {morgen:null, abend:null};
 
 // Helpers
-function uid(){return Math.random().toString(36).slice(2,9)}
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
 
 // ── DB SYNC ───────────────────────────────
 async function loadFromDb(){
@@ -16411,9 +16000,6 @@ async function deleteKontakt(id){
   }
 }
 
-function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
-let tt;function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2200);}
 
 // Exports
 window.fam_lpAction=function(entry){if(typeof openEditKontakt==='function')openEditKontakt(entry.dataset.kid);};
@@ -16438,7 +16024,6 @@ const STATUS_LABEL = {
   pausiert:    '⏸ Pausiert',
 };
 
-function uid(){ return Math.random().toString(36).slice(2,9); }
 function nowISO(){ return new Date().toISOString().slice(0,10); }
 function formatDate(iso){
   const d=new Date(iso+'T12:00:00');
@@ -16557,7 +16142,6 @@ function renderUI(){
 
 }
 
-function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function toggleHyp(id){
   if(expandedIds.has(id)) expandedIds.delete(id);
@@ -16744,16 +16328,8 @@ async function confirmUpdate(){
 }
 
 // ── MODALS ────────────────────────────────
-function openModal(id){ document.getElementById(id).classList.add('open'); }
-function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 
 // ── TOAST ─────────────────────────────────
-let tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.classList.add('show');
-  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'), 2200);
-}
 // Exports
   window.hyp_deleteHyp = deleteHyp;
   window.hyp_openEdit = openEdit;
@@ -16781,14 +16357,7 @@ let pickedCat = 'beob';
 let editingId = null;
 let loaded = false;
 
-function uid(){return Math.random().toString(36).slice(2,9)}
-function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
 // Build a timestamp from time-only string, anchored to "today"
 // Used when user edits time of an existing note
 function timestampFromTime(timeStr, baseTs){
@@ -17020,10 +16589,6 @@ window.notes_render = render;
 // Tages-Metriken (0-5, Morgen/Mittag/Abend) + Akut-Signale (Episoden mit Zeit)
 // ═══════════════════════════════════════════
 
-function uid(){return Math.random().toString(36).slice(2,9)}
-function nowTime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function timeToMin(t){if(!t)return null;const[h,m]=t.split(':').map(Number);return h*60+m}
 function minToHm(mins){if(mins<0)mins=0;const h=Math.floor(mins/60),m=mins%60;return h?`${h}h ${String(m).padStart(2,'0')}min`:`${m}min`}
 
 // Metriken für Tages-Tracking (0-5, 0 = nicht erfasst = nichts gehabt)
@@ -17047,24 +16612,6 @@ let akutList = [];
 let editingAkutId = null;
 
 // ── DB HELPERS ────────────────────────────
-function getActiveISO(){
-  if(typeof activeDate !== 'undefined' && activeDate){
-    const d = activeDate;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function timeFromTimestamp(ts){
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-function timestampFromTime(timeStr, isoDate){
-  const [h,m] = timeStr.split(':').map(Number);
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
 
 let stammdatenLoaded = false;
 async function loadStammdaten(){
